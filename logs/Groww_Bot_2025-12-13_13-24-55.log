@@ -1,0 +1,21 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-12-13_13-24-55.log
+C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjU2NzIyMDAsImlhdCI6MTc2NTYxMjQ5OCwibmJmIjoxNzY1NjEyNDk4LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCI4MGMyYjlkOS03ZjljLTRlMjctOWM0Zi04NWU3MWY4MjRkMGZcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjgwODA1MjYwLWVlMTQtNGZlNC1iMWQ0LTBjNTVhZTg2YjdjOFwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpcIjE3MS40OS4xNTAuNjgsMTcyLjY5Ljg3LjExOSwzNC44LjI5LjI0NlwiLFwidHdvRmFFeHBpcnlUc1wiOjE3NjU2NzIyMDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.k8jKkwUJeEr7dyxPb11xGSGVdoEw7JuZoA8la0PwzE5twD8IKyV-x29cL4nCIMGqVMb_beFnbyVH5LjZLITCnw
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+⚠️ Error fetching LTP for NIFTY: name 'get_mock_ltp_series' is not defined
+⚠️ Failed to fetch LTP for NIFTY spot
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+🎯 Filtering NIFTY 2025-12-16 instruments between -500–500 (Spot=0)
+✅ Loaded 3 filtered instruments (out of 149250)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1379, in <module>
+    print("Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050\n")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

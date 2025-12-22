@@ -1,0 +1,61 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-12-13_13-30-20.log
+C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjU2NzIyMDAsImlhdCI6MTc2NTYxMjgyMSwibmJmIjoxNzY1NjEyODIxLCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCIyNGJhN2EyMi1kYjMwLTQxZDYtYjIzOS0xNGNkNDE3YTI3YjBcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjgwODA1MjYwLWVlMTQtNGZlNC1iMWQ0LTBjNTVhZTg2YjdjOFwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjU2NzIyMDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.kd7Q4C4lflENbWYeRhUEme5PLYypNyGa6TNAnxDUj9LZhz_JyPE1ZVPtg3-a-vggFQjStSmLkipRFX5jsSUkEA
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+📊 Live NIFTY Spot: 26046.0
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+🎯 Filtering NIFTY 2025-12-16 instruments between 25550–26550 (Spot=26046.0)
+✅ Loaded 316 filtered instruments (out of 149250)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 2025-12-16…
+➡️  Searching CE between 80-130
+⚠️ No instruments for NIFTY 2025-12-16 CE
+⚠️ No instrument found for CE
+➡️  Searching PE between 80-130
+🧩 Finished CE: None, momentum=None
+⚠️ No instruments for NIFTY 2025-12-16 PE
+⚠️ No instrument found for PE
+🧩 Finished PE: None, momentum=None
+🧮 Comparing CE vs PE momentum...
+❌ No momentum data found for CE or PE.
+❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...
+🔍 Detecting best option between CE and PE for NIFTY 2025-12-16…
+➡️  Searching CE between 80-130
+⚠️ No instruments for NIFTY 2025-12-16 CE➡️  Searching PE between 80-130
+
+⚠️ No instrument found for CE⚠️ No instruments for NIFTY 2025-12-16 PE
+
+⚠️ No instrument found for PE🧩 Finished CE: None, momentum=None
+
+🧩 Finished PE: None, momentum=None
+🧮 Comparing CE vs PE momentum...
+❌ No momentum data found for CE or PE.
+❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...
+🔍 Detecting best option between CE and PE for NIFTY 2025-12-16…
+➡️  Searching CE between 80-130
+⚠️ No instruments for NIFTY 2025-12-16 CE➡️  Searching PE between 80-130
+
+⚠️ No instrument found for CE⚠️ No instruments for NIFTY 2025-12-16 PE
+
+⚠️ No instrument found for PE
+🧩 Finished CE: None, momentum=None
+🧩 Finished PE: None, momentum=None
+🧮 Comparing CE vs PE momentum...
+❌ No momentum data found for CE or PE.
+❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1387, in <module>
+    break
+    ^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1333, in auto_mode_runner
+    print("❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...")
+    ^^^^^^^^^^^^^^
+KeyboardInterrupt

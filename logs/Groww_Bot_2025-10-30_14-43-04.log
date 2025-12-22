@@ -1,0 +1,87 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-10-30_14-43-04.log
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjE4NzA2MDAsImlhdCI6MTc2MTgxNTU4NSwibmJmIjoxNzYxODE1NTg1LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCIwMDkyMGQyMS01MmU3LTQxMmYtOGYyZC01NTFmNGM5ODQ1YTNcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcImNlNWM1Y2EyLTk5MWUtNGE5MC05MTAwLWFmYjNhZDI1NmNjMVwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjE4NzA2MDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.j95vJsn18twm2gvNQ_fNz8YrikVjlqc3cAf5eDrysk1kmvq4-Yize3R4JjxH3n9Jrn7VXn64BSsNWmKfdu_KRA
+Ready to Groww!
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+🎯 Filtering NIFTY 04/11/2025 instruments between 25450–26450 (Spot=25950)
+✅ Loaded 316 filtered instruments (out of 105971)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 04/11/2025…
+➡️  Searching CE between 80-130➡️  Searching PE between 80-130
+
+⚙️ Checking momentum for top 3 PE candidates...
+
+🧭 Checking momentum for NIFTY25N0425900PE (3 samples, every 2s):
+
+🧭 Checking momentum for NIFTY25N0425950PE (3 samples, every 2s):
+
+🧭 Checking momentum for NIFTY25N0425850PE (3 samples, every 2s):
+⚙️ Checking momentum for top 2 CE candidates...
+
+🧭 Checking momentum for NIFTY25N0426000CE (3 samples, every 2s):
+
+🧭 Checking momentum for NIFTY25N0425950CE (3 samples, every 2s):
+[NIFTY25N0425900PE] ⏱ Sample 1/3: LTP = ₹100.05
+[NIFTY25N0425950PE] ⏱ Sample 1/3: LTP = ₹123.30
+[NIFTY25N0425850PE] ⏱ Sample 1/3: LTP = ₹80.55
+[NIFTY25N0426000CE] ⏱ Sample 1/3: LTP = ₹98.65
+[NIFTY25N0425950CE] ⏱ Sample 1/3: LTP = ₹122.90
+[NIFTY25N0425900PE] ⏱ Sample 2/3: LTP = ₹99.45
+[NIFTY25N0425950PE] ⏱ Sample 2/3: LTP = ₹122.25
+[NIFTY25N0425850PE] ⏱ Sample 2/3: LTP = ₹79.95
+[NIFTY25N0426000CE] ⏱ Sample 2/3: LTP = ₹99.40
+[NIFTY25N0425950CE] ⏱ Sample 2/3: LTP = ₹122.55
+[NIFTY25N0425900PE] ⏱ Sample 3/3: LTP = ₹99.90
+[NIFTY25N0425950PE] ⏱ Sample 3/3: LTP = ₹122.65
+[NIFTY25N0425850PE] ⏱ Sample 3/3: LTP = ₹79.75
+[NIFTY25N0426000CE] ⏱ Sample 3/3: LTP = ₹99.65
+C:\Users\HITS\eclipse-workspace\AngelOne_Python_Trading_Bot\.venv\Lib\site-packages\numpy\_core\fromnumeric.py:3860: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+C:\Users\HITS\eclipse-workspace\AngelOne_Python_Trading_Bot\.venv\Lib\site-packages\numpy\_core\_methods.py:144: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+C:\Users\HITS\eclipse-workspace\AngelOne_Python_Trading_Bot\.venv\Lib\site-packages\numpy\_core\_methods.py:222: RuntimeWarning: Degrees of freedom <= 0 for slice
+  ret = _var(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+C:\Users\HITS\eclipse-workspace\AngelOne_Python_Trading_Bot\.venv\Lib\site-packages\numpy\_core\_methods.py:180: RuntimeWarning: invalid value encountered in divide
+  arrmean = um.true_divide(arrmean, div, out=arrmean,
+C:\Users\HITS\eclipse-workspace\AngelOne_Python_Trading_Bot\.venv\Lib\site-packages\numpy\_core\_methods.py:214: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+[NIFTY25N0425900PE] ⚠️ Too noisy for reliable momentum reading
+[NIFTY25N0425950CE] ⏱ Sample 3/3: LTP = ₹122.90
+[NIFTY25N0425950PE] ⚠️ Too noisy for reliable momentum reading
+[NIFTY25N0425850PE] ⚠️ Too noisy for reliable momentum reading
+⚠️ No strong momentum found for PE (>0.3%, consistency >70%)
+📊 Running momentum check for PE (NIFTY25N0425900PE)
+
+🧭 Checking momentum for NIFTY25N0425900PE (3 samples, every 2s):
+[NIFTY25N0425900PE] ⏱ Sample 1/3: LTP = ₹99.20
+[NIFTY25N0426000CE] ⚠️ Too noisy for reliable momentum reading
+[NIFTY25N0425950CE] ⚠️ Too noisy for reliable momentum reading
+⚠️ No strong momentum found for CE (>0.25%, consistency >70%)
+📊 Running momentum check for CE (NIFTY25N0426000CE)
+
+🧭 Checking momentum for NIFTY25N0426000CE (3 samples, every 2s):
+[NIFTY25N0426000CE] ⏱ Sample 1/3: LTP = ₹99.60
+[NIFTY25N0425900PE] ⏱ Sample 2/3: LTP = ₹99.40
+[NIFTY25N0426000CE] ⏱ Sample 2/3: LTP = ₹99.30
+[NIFTY25N0425900PE] ⏱ Sample 3/3: LTP = ₹99.60
+[NIFTY25N0426000CE] ⏱ Sample 3/3: LTP = ₹99.10
+[NIFTY25N0425900PE] ⚠️ Too noisy for reliable momentum reading
+✅ Momentum for PE: None
+🧩 Finished PE: NIFTY25N0425900PE, momentum=None
+[NIFTY25N0426000CE] ⚠️ Too noisy for reliable momentum reading
+✅ Momentum for CE: None
+🧩 Finished CE: NIFTY25N0426000CE, momentum=None
+🧮 Comparing CE vs PE momentum...
+❌ No momentum data found for CE or PE.
+❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1067, in <module>
+    auto_mode_runner()
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1026, in auto_mode_runner
+    time.sleep(180)
+KeyboardInterrupt

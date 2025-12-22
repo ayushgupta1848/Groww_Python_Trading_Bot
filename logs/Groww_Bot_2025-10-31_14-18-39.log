@@ -1,0 +1,193 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-10-31_14-18-39.log
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjE5NTcwMDAsImlhdCI6MTc2MTkwMDUxOSwibmJmIjoxNzYxOTAwNTE5LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCJmODhjMTQ4Ny01ODM4LTQzZWMtOWQ0Mi0wZjgwMzVkYmNiOTRcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjFmNzMxYzhiLTNmZDktNDg4MC04NTBjLTI5YmUwOWRiOThkMVwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjE5NTcwMDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.OoL9iaOKlY7h-I__d4R_UD_OAyz5bISEo3akbnzbkRXT_SPw8UCgG6govsu8uLW3SiCneqdEnZG3zQOSzEPAKQ
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+📊 Live NIFTY Spot: 25750.85
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+🎯 Filtering NIFTY 04/11/2025 instruments between 25250–26250 (Spot=25750.85)
+✅ Loaded 316 filtered instruments (out of 105971)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 04/11/2025…
+➡️  Searching CE between 80-130
+➡️  Searching PE between 80-130
+⚙️ Checking momentum for top 2 CE candidates...
+
+🧭 Checking momentum for NIFTY25N0425800CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425750CE (5 samples, every 1s):
+⚙️ Checking momentum for top 2 PE candidates...
+
+🧭 Checking momentum for NIFTY25N0425800PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+[NIFTY25N0425800CE] ⏱ Sample 1/5: LTP = ₹99.00
+[NIFTY25N0425750CE] ⏱ Sample 1/5: LTP = ₹125.20
+[NIFTY25N0425800PE] ⏱ Sample 1/5: LTP = ₹99.60
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹127.60
+[NIFTY25N0425800CE] ⏱ Sample 2/5: LTP = ₹99.20
+[NIFTY25N0425750CE] ⏱ Sample 2/5: LTP = ₹125.75
+[NIFTY25N0425800PE] ⏱ Sample 2/5: LTP = ₹95.75
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹123.30
+[NIFTY25N0425800CE] ⏱ Sample 3/5: LTP = ₹102.00
+[NIFTY25N0425750CE] ⏱ Sample 3/5: LTP = ₹129.50
+[NIFTY25N0425800PE] ⏱ Sample 3/5: LTP = ₹94.60
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹121.75
+[NIFTY25N0425800CE] ⏱ Sample 4/5: LTP = ₹102.50
+[NIFTY25N0425750CE] ⏱ Sample 4/5: LTP = ₹129.95
+[NIFTY25N0425800PE] ⏱ Sample 4/5: LTP = ₹94.00
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹121.65
+[NIFTY25N0425800CE] ⏱ Sample 5/5: LTP = ₹102.70
+[NIFTY25N0425750CE] ⏱ Sample 5/5: LTP = ₹129.70
+[NIFTY25N0425800CE] 📊 Avg Δ = 1.159%, Consistency = 100.0% → UP
+[NIFTY25N0425800CE] 📈 Range ₹99.00 → ₹102.70
+
+[NIFTY25N0425800PE] ⏱ Sample 5/5: LTP = ₹93.80
+[NIFTY25N0425750CE] 📊 Avg Δ = 1.137%, Consistency = 100.0% → UP
+[NIFTY25N0425750CE] 📈 Range ₹125.20 → ₹129.70
+
+🏆 Selected CE: NIFTY25N0425800CE (UP | 1.16% | Consistency 100.0%)
+📊 Running momentum check for CE (NIFTY25N0425800CE)
+
+🧭 Checking momentum for NIFTY25N0425800CE (5 samples, every 1s):
+[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹121.70
+[NIFTY25N0425800PE] 📊 Avg Δ = -1.309%, Consistency = 100.0% → DOWN
+[NIFTY25N0425800PE] 📈 Range ₹99.60 → ₹93.80
+
+[NIFTY25N0425800CE] ⏱ Sample 1/5: LTP = ₹102.45
+[NIFTY25N0425850PE] 📊 Avg Δ = -1.016%, Consistency = 100.0% → DOWN
+[NIFTY25N0425850PE] 📈 Range ₹127.60 → ₹121.70
+
+🏆 Selected PE: NIFTY25N0425850PE (DOWN | -1.02% | Consistency 100.0%)
+📊 Running momentum check for PE (NIFTY25N0425850PE)
+
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹121.75
+[NIFTY25N0425800CE] ⏱ Sample 2/5: LTP = ₹102.05
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹122.35
+[NIFTY25N0425800CE] ⏱ Sample 3/5: LTP = ₹102.20
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹122.40
+[NIFTY25N0425800CE] ⏱ Sample 4/5: LTP = ₹102.40
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹122.20
+[NIFTY25N0425800CE] ⏱ Sample 5/5: LTP = ₹102.55
+[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹121.05
+[NIFTY25N0425800CE] 📊 Avg Δ = 0.073%, Consistency = 50.0% → FLAT
+[NIFTY25N0425800CE] 📈 Range ₹102.45 → ₹102.55
+
+✅ Momentum for CE: {'symbol': 'NIFTY25N0425800CE', 'avg_change': np.float64(0.073), 'consistency': np.float64(50.0), 'direction': 'FLAT'}
+🧩 Finished CE: NIFTY25N0425800CE, momentum={'symbol': 'NIFTY25N0425800CE', 'avg_change': np.float64(0.073), 'consistency': np.float64(50.0), 'direction': 'FLAT'}
+[NIFTY25N0425850PE] 📊 Avg Δ = -0.116%, Consistency = 50.0% → FLAT
+[NIFTY25N0425850PE] 📈 Range ₹121.75 → ₹121.05
+
+✅ Momentum for PE: {'symbol': 'NIFTY25N0425850PE', 'avg_change': np.float64(-0.116), 'consistency': np.float64(50.0), 'direction': 'FLAT'}
+🧩 Finished PE: NIFTY25N0425850PE, momentum={'symbol': 'NIFTY25N0425850PE', 'avg_change': np.float64(-0.116), 'consistency': np.float64(50.0), 'direction': 'FLAT'}
+🧮 Comparing CE vs PE momentum...
+📈 CE momentum: 0.073% (FLAT, 50.0%)
+📉 PE momentum: -0.116% (FLAT, 50.0%)
+⚖️  Momentum similar — choosing CE fallback
+✅ Selected: NIFTY25N0425800CE (CE) | LTP=98.45 | lot_size=75 | groww_symbol=NSE-NIFTY-04Nov25-25800-CE
+
+🌀 Generated cURL for Groww Candle API:
+curl --location 'https://api.groww.in/v1/historical/candles?exchange=NSE&segment=FNO&groww_symbol=NSE-NIFTY-04Nov25-25800-CE&start_time=2025-10-31%2014:14:38&end_time=2025-10-31%2014:19:38&candle_interval=1minute' \
+  --header 'Accept: application/json' \
+  --header 'Authorization: Bearer <ACCESS_TOKEN>' \
+  --header 'X-API-VERSION: 1.0'
+
+⚠️ Error fetching recent market direction: 'NoneType' object has no attribute 'get'
+Market Direction: None
+❌ Skipping trade — market direction conflicts with momentum.
+🔍 Detecting best option between CE and PE for NIFTY 04/11/2025…
+➡️  Searching CE between 80-130
+➡️  Searching PE between 80-130
+⚙️ Checking momentum for top 2 CE candidates...
+
+🧭 Checking momentum for NIFTY25N0425800CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425750CE (5 samples, every 1s):
+⚙️ Checking momentum for top 2 PE candidates...
+
+🧭 Checking momentum for NIFTY25N0425800PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+[NIFTY25N0425800CE] ⏱ Sample 1/5: LTP = ₹102.45
+[NIFTY25N0425750CE] ⏱ Sample 1/5: LTP = ₹129.45
+[NIFTY25N0425800PE] ⏱ Sample 1/5: LTP = ₹94.90
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹122.35
+[NIFTY25N0425800CE] ⏱ Sample 2/5: LTP = ₹103.00
+[NIFTY25N0425750CE] ⏱ Sample 2/5: LTP = ₹130.35
+[NIFTY25N0425800PE] ⏱ Sample 2/5: LTP = ₹94.40
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹122.15
+[NIFTY25N0425800CE] ⏱ Sample 3/5: LTP = ₹102.40
+[NIFTY25N0425750CE] ⏱ Sample 3/5: LTP = ₹129.00
+[NIFTY25N0425800PE] ⏱ Sample 3/5: LTP = ₹95.75
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹123.00
+[NIFTY25N0425800CE] ⏱ Sample 4/5: LTP = ₹101.55
+[NIFTY25N0425750CE] ⏱ Sample 4/5: LTP = ₹128.45
+[NIFTY25N0425800PE] ⏱ Sample 4/5: LTP = ₹96.75
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹125.00
+[NIFTY25N0425800CE] ⏱ Sample 5/5: LTP = ₹100.70
+[NIFTY25N0425750CE] ⏱ Sample 5/5: LTP = ₹127.45
+[NIFTY25N0425800CE] 📊 Avg Δ = -0.521%, Consistency = 100.0% → DOWN
+[NIFTY25N0425800CE] 📈 Range ₹102.45 → ₹100.70
+
+[NIFTY25N0425800PE] ⏱ Sample 5/5: LTP = ₹97.10
+[NIFTY25N0425750CE] 📊 Avg Δ = -0.503%, Consistency = 100.0% → DOWN[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹124.65
+
+[NIFTY25N0425750CE] 📈 Range ₹129.45 → ₹127.45
+
+🏆 Selected CE: NIFTY25N0425750CE (DOWN | -0.50% | Consistency 100.0%)
+📊 Running momentum check for CE (NIFTY25N0425750CE)
+
+🧭 Checking momentum for NIFTY25N0425750CE (5 samples, every 1s):
+[NIFTY25N0425800PE] 📊 Avg Δ = 0.795%, Consistency = 100.0% → UP
+[NIFTY25N0425800PE] 📈 Range ₹94.90 → ₹97.10
+
+[NIFTY25N0425850PE] 📊 Avg Δ = 0.698%, Consistency = 100.0% → UP
+[NIFTY25N0425850PE] 📈 Range ₹122.35 → ₹124.65
+
+[NIFTY25N0425750CE] ⏱ Sample 1/5: LTP = ₹127.50
+🏆 Selected PE: NIFTY25N0425800PE (UP | 0.80% | Consistency 100.0%)
+📊 Running momentum check for PE (NIFTY25N0425800PE)
+
+🧭 Checking momentum for NIFTY25N0425800PE (5 samples, every 1s):
+[NIFTY25N0425800PE] ⏱ Sample 1/5: LTP = ₹97.00
+[NIFTY25N0425750CE] ⏱ Sample 2/5: LTP = ₹127.25
+[NIFTY25N0425800PE] ⏱ Sample 2/5: LTP = ₹97.55
+[NIFTY25N0425750CE] ⏱ Sample 3/5: LTP = ₹127.50
+[NIFTY25N0425800PE] ⏱ Sample 3/5: LTP = ₹96.80
+[NIFTY25N0425750CE] ⏱ Sample 4/5: LTP = ₹128.85
+[NIFTY25N0425800PE] ⏱ Sample 4/5: LTP = ₹95.75
+[NIFTY25N0425750CE] ⏱ Sample 5/5: LTP = ₹128.70
+[NIFTY25N0425800PE] ⏱ Sample 5/5: LTP = ₹96.45
+[NIFTY25N0425750CE] 📊 Avg Δ = 0.366%, Consistency = 100.0% → UP
+[NIFTY25N0425750CE] 📈 Range ₹127.50 → ₹128.70
+
+✅ Momentum for CE: {'symbol': 'NIFTY25N0425750CE', 'avg_change': np.float64(0.366), 'consistency': np.float64(100.0), 'direction': 'UP'}
+[NIFTY25N0425800PE] 📊 Avg Δ = -0.404%, Consistency = 100.0% → DOWN
+[NIFTY25N0425800PE] 📈 Range ₹97.00 → ₹96.45
+
+✅ Momentum for PE: {'symbol': 'NIFTY25N0425800PE', 'avg_change': np.float64(-0.404), 'consistency': np.float64(100.0), 'direction': 'DOWN'}
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1193, in <module>
+    if mode in ["m", "manual"]:
+        ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1137, in auto_mode_runner
+    print("❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 836, in detect_option_type_parallel
+    results[opt_type] = {"instrument": inst, "ltp": ltp, "lot_size": lot_size, "momentum": mom}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 243, in as_completed
+    waiter.event.wait(wait_timeout)
+  File "C:\Program Files\Python312\Lib\threading.py", line 655, in wait
+    signaled = self._cond.wait(timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\threading.py", line 355, in wait
+    waiter.acquire()
+KeyboardInterrupt

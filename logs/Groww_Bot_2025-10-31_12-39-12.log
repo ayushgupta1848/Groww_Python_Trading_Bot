@@ -1,0 +1,19 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-10-31_12-39-12.log
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjE5NTcwMDAsImlhdCI6MTc2MTg5NDU1MiwibmJmIjoxNzYxODk0NTUyLCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCI3NTg0ZjBmMy0xZTZhLTRlYTgtYTNmNy05NDg0ZGExMzAyMjFcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjFmNzMxYzhiLTNmZDktNDg4MC04NTBjLTI5YmUwOWRiOThkMVwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjE5NTcwMDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.C4zRDZJWwDMXgzyUCwZI9UikjGBhpKY0w7Ll4BPgS61ssLxm4GJHrHVWbGmKgbJG3ui8DytNfE1uYJOUFJE_WA
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+📊 Live NIFTY Spot: 25794.8
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+🎯 Filtering NIFTY 04/11/2025 instruments between 25300–26300 (Spot=25794.8)
+✅ Loaded 316 filtered instruments (out of 105971)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1168, in <module>
+    while True:
+               ^
+KeyboardInterrupt

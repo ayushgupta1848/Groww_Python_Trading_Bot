@@ -1,0 +1,115 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-10-30_15-39-39.log
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjE4NzA2MDAsImlhdCI6MTc2MTgxODk3OSwibmJmIjoxNzYxODE4OTc5LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCI3MzBjODI4ZC03OGVlLTQ2MTAtYjczZi02ODdmMDRlMWU2YWNcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcImNlNWM1Y2EyLTk5MWUtNGE5MC05MTAwLWFmYjNhZDI1NmNjMVwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjE4NzA2MDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.DMXNogSPtZdaq_tT3M8aMm0Hy_1jMFemb8c_qQS3O-5i2O7x4SjqNS-Sw_ic9E_dUw8vwXn30mjLHhVgYuRNzg
+Ready to Groww!
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+🎯 Filtering NIFTY 04/11/2025 instruments between 25450–26450 (Spot=25950)
+✅ Loaded 316 filtered instruments (out of 105971)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 04/11/2025…
+➡️  Searching CE between 80-130
+➡️  Searching PE between 80-130
+⚙️ Checking momentum for top 3 PE candidates...
+
+🧭 Checking momentum for NIFTY25N0425900PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425950PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+[NIFTY25N0425900PE] ⏱ Sample 1/5: LTP = ₹100.60
+[NIFTY25N0425950PE] ⏱ Sample 1/5: LTP = ₹124.00
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹80.40
+⚙️ Checking momentum for top 2 CE candidates...
+
+🧭 Checking momentum for NIFTY25N0425950CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0426000CE (5 samples, every 1s):
+[NIFTY25N0425900PE] ⏱ Sample 2/5: LTP = ₹100.60
+[NIFTY25N0425950PE] ⏱ Sample 2/5: LTP = ₹124.00
+[NIFTY25N0425950CE] ⏱ Sample 1/5: LTP = ₹114.20
+[NIFTY25N0426000CE] ⏱ Sample 1/5: LTP = ₹91.60
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹80.40
+[NIFTY25N0425900PE] ⏱ Sample 3/5: LTP = ₹100.60
+[NIFTY25N0425950CE] ⏱ Sample 2/5: LTP = ₹114.20
+[NIFTY25N0425950PE] ⏱ Sample 3/5: LTP = ₹124.00
+[NIFTY25N0426000CE] ⏱ Sample 2/5: LTP = ₹91.60
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹80.40
+[NIFTY25N0425900PE] ⏱ Sample 4/5: LTP = ₹100.60
+[NIFTY25N0425950CE] ⏱ Sample 3/5: LTP = ₹114.20
+[NIFTY25N0425950PE] ⏱ Sample 4/5: LTP = ₹124.00
+[NIFTY25N0426000CE] ⏱ Sample 3/5: LTP = ₹91.60
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹80.40
+[NIFTY25N0425900PE] ⏱ Sample 5/5: LTP = ₹100.60
+[NIFTY25N0425950CE] ⏱ Sample 4/5: LTP = ₹114.20
+[NIFTY25N0425900PE] ⚠️ Too noisy for reliable momentum reading
+[NIFTY25N0425950PE] ⏱ Sample 5/5: LTP = ₹124.00
+[NIFTY25N0426000CE] ⏱ Sample 4/5: LTP = ₹91.60
+[NIFTY25N0425950PE] ⚠️ Too noisy for reliable momentum reading
+[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹80.40
+[NIFTY25N0425950CE] ⏱ Sample 5/5: LTP = ₹114.20
+[NIFTY25N0425850PE] ⚠️ Too noisy for reliable momentum reading
+⚠️ No strong momentum found for PE (>0.3%, consistency >70%)
+📊 Running momentum check for PE (NIFTY25N0425900PE)
+
+🧭 Checking momentum for NIFTY25N0425900PE (5 samples, every 1s):
+[NIFTY25N0426000CE] ⏱ Sample 5/5: LTP = ₹91.60
+[NIFTY25N0425950CE] ⚠️ Too noisy for reliable momentum reading
+[NIFTY25N0425900PE] ⏱ Sample 1/5: LTP = ₹100.60
+[NIFTY25N0426000CE] ⚠️ Too noisy for reliable momentum reading
+⚠️ No strong momentum found for CE (>0.25%, consistency >70%)
+📊 Running momentum check for CE (NIFTY25N0425950CE)
+
+🧭 Checking momentum for NIFTY25N0425950CE (5 samples, every 1s):
+[NIFTY25N0425950CE] ⏱ Sample 1/5: LTP = ₹114.20
+[NIFTY25N0425900PE] ⏱ Sample 2/5: LTP = ₹100.60
+[NIFTY25N0425950CE] ⏱ Sample 2/5: LTP = ₹114.20
+[NIFTY25N0425900PE] ⏱ Sample 3/5: LTP = ₹100.60
+[NIFTY25N0425950CE] ⏱ Sample 3/5: LTP = ₹114.20
+[NIFTY25N0425900PE] ⏱ Sample 4/5: LTP = ₹100.60
+[NIFTY25N0425950CE] ⏱ Sample 4/5: LTP = ₹114.20
+[NIFTY25N0425900PE] ⏱ Sample 5/5: LTP = ₹100.60
+[NIFTY25N0425900PE] ⚠️ Too noisy for reliable momentum reading
+✅ Momentum for PE: None
+[NIFTY25N0425950CE] ⏱ Sample 5/5: LTP = ₹114.20
+[NIFTY25N0425950CE] ⚠️ Too noisy for reliable momentum reading
+✅ Momentum for CE: None
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 725, in detect_option_type_parallel
+    opt_type, inst, ltp, lot_size, mom = future.result()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 243, in as_completed
+    waiter.event.wait(wait_timeout)
+  File "C:\Program Files\Python312\Lib\threading.py", line 655, in wait
+    signaled = self._cond.wait(timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\threading.py", line 355, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1069, in <module>
+    continue
+    ^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 1024, in auto_mode_runner
+    if not opt_result:
+                 ^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 723, in detect_option_type_parallel
+    futures = {ex.submit(worker, t): t for t in ["CE", "PE"]}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "C:\Program Files\Python312\Lib\concurrent\futures\thread.py", line 238, in shutdown
+    t.join()
+  File "C:\Program Files\Python312\Lib\threading.py", line 1147, in join
+    self._wait_for_tstate_lock()
+  File "C:\Program Files\Python312\Lib\threading.py", line 1167, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

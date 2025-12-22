@@ -1,0 +1,194 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-10-30_13-54-33.log
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjE4NzA2MDAsImlhdCI6MTc2MTgxMjY3MywibmJmIjoxNzYxODEyNjczLCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCI1NTFkZGJjYS05MTMzLTQwNzYtYjJlMi02OTA1ODk5ZmMxYTVcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcImNlNWM1Y2EyLTk5MWUtNGE5MC05MTAwLWFmYjNhZDI1NmNjMVwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjE4NzA2MDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.hSmj5pn5PkAzwS3AIxCAYXfE8A1Hsgak0SKnGV6JbotlXCAZXtRSUksAlXhXCwxE7XeINdMH_pMDhDKWRDNLaA
+Ready to Groww!
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+🎯 Filtering NIFTY 04/11/2025 instruments between 25450–26450 (Spot=25950)
+✅ Loaded 316 filtered instruments (out of 105971)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 04/11/2025…
+➡️  Searching CE between 80-130
+➡️  Searching PE between 80-130
+
+🧭 Checking momentum for NIFTY25N0425950CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0426000CE (5 samples, every 1s):
+[NIFTY25N0425950CE] ⏱ Sample 1/5: LTP = ₹113.70
+[NIFTY25N0426000CE] ⏱ Sample 1/5: LTP = ₹92.55
+
+🧭 Checking momentum for NIFTY25N0425900PE (5 samples, every 1s):
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+
+[NIFTY25N0425950CE] ⏱ Sample 2/5: LTP = ₹113.80
+[NIFTY25N0425900PE] ⏱ Sample 1/5: LTP = ₹112.70
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹91.50
+[NIFTY25N0426000CE] ⏱ Sample 2/5: LTP = ₹92.35
+[NIFTY25N0425950CE] ⏱ Sample 3/5: LTP = ₹113.70
+[NIFTY25N0425900PE] ⏱ Sample 2/5: LTP = ₹112.50
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹91.55
+[NIFTY25N0426000CE] ⏱ Sample 3/5: LTP = ₹92.15
+[NIFTY25N0425950CE] ⏱ Sample 4/5: LTP = ₹113.40
+[NIFTY25N0425900PE] ⏱ Sample 3/5: LTP = ₹112.80
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹91.30
+[NIFTY25N0426000CE] ⏱ Sample 4/5: LTP = ₹92.00
+[NIFTY25N0425950CE] ⏱ Sample 5/5: LTP = ₹113.55
+[NIFTY25N0425900PE] ⏱ Sample 4/5: LTP = ₹113.10
+[NIFTY25N0425950CE] 📈 Momentum Result: -0.13% change (₹113.70 → ₹113.55)
+
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹91.40
+[NIFTY25N0426000CE] ⏱ Sample 5/5: LTP = ₹92.05
+[NIFTY25N0425900PE] ⏱ Sample 5/5: LTP = ₹111.90
+[NIFTY25N0426000CE] 📈 Momentum Result: -0.54% change (₹92.55 → ₹92.05)
+
+📊 Running momentum check for CE (NIFTY25N0425950CE)
+
+🧭 Checking momentum for NIFTY25N0425950CE (5 samples, every 1s):
+[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹91.00
+[NIFTY25N0425900PE] 📈 Momentum Result: -0.71% change (₹112.70 → ₹111.90)
+
+[NIFTY25N0425950CE] ⏱ Sample 1/5: LTP = ₹114.20
+[NIFTY25N0425850PE] 📈 Momentum Result: -0.55% change (₹91.50 → ₹91.00)
+
+📊 Running momentum check for PE (NIFTY25N0425850PE)
+
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹91.05
+[NIFTY25N0425950CE] ⏱ Sample 2/5: LTP = ₹114.05
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹92.00
+[NIFTY25N0425950CE] ⏱ Sample 3/5: LTP = ₹113.50
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹91.60
+[NIFTY25N0425950CE] ⏱ Sample 4/5: LTP = ₹113.55
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹91.85
+[NIFTY25N0425950CE] ⏱ Sample 5/5: LTP = ₹113.45
+[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹91.30
+[NIFTY25N0425950CE] 📈 Momentum Result: -0.66% change (₹114.20 → ₹113.45)
+
+✅ Momentum for CE: -0.6567425569176882
+🧩 Finished CE: NIFTY25N0425950CE, momentum=-0.6567425569176882
+[NIFTY25N0425850PE] 📈 Momentum Result: 0.27% change (₹91.05 → ₹91.30)
+
+✅ Momentum for PE: 0.2745744096650192
+🧩 Finished PE: NIFTY25N0425850PE, momentum=0.2745744096650192
+🧮 Comparing CE vs PE momentum...
+✅ Selected PE (stronger momentum)
+✅ Selected: NIFTY25N0425850PE | LTP=91.8 | lot_size=75
+➡️ Placing auto order: {'symbol': 'NIFTY25N0425850PE', 'ltp': 91.8, 'lots': 1, 'book_profit': 75.0, 'lot_size': 75, 'side': 'BUY'}
+🔹 Auto order => NIFTY25N0425850PE, qty=75, book@75.0
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.3
+✅ Auto Buy placed: {'groww_order_id': 'GMKFO251030135534W7WDKSR3TA4Y', 'order_status': 'NEW', 'order_reference_id': '67749484', 'remark': None}
+✅ Auto Target SELL @ 92.3 placed: {'groww_order_id': 'GLTFO251030135534L66UJA3JOUGC', 'order_status': 'NEW', 'order_reference_id': '79206425', 'remark': None}
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.25
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.4
+💰 LTP for NSE_NIFTY25N0425850PE: ₹90.9
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.35
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.7
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.4
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.55
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.95
+💰 LTP for NSE_NIFTY25N0425850PE: ₹92.15
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.9
+💰 LTP for NSE_NIFTY25N0425850PE: ₹91.95
+💰 LTP for NSE_NIFTY25N0425850PE: ₹92.45
+💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰
+🔍 Detecting best option between CE and PE for NIFTY 04/11/2025…
+➡️  Searching CE between 80-130
+➡️  Searching PE between 80-130
+
+🧭 Checking momentum for NIFTY25N0425950CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0426000CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425900PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25N0425850PE (5 samples, every 1s):
+[NIFTY25N0425950CE] ⏱ Sample 1/5: LTP = ₹113.45
+[NIFTY25N0426000CE] ⏱ Sample 1/5: LTP = ₹91.90
+[NIFTY25N0425900PE] ⏱ Sample 1/5: LTP = ₹113.05
+[NIFTY25N0425850PE] ⏱ Sample 1/5: LTP = ₹92.00
+[NIFTY25N0425950CE] ⏱ Sample 2/5: LTP = ₹113.00
+[NIFTY25N0426000CE] ⏱ Sample 2/5: LTP = ₹91.65
+[NIFTY25N0425900PE] ⏱ Sample 2/5: LTP = ₹113.45
+[NIFTY25N0425850PE] ⏱ Sample 2/5: LTP = ₹91.80
+[NIFTY25N0425950CE] ⏱ Sample 3/5: LTP = ₹113.35
+[NIFTY25N0426000CE] ⏱ Sample 3/5: LTP = ₹92.00
+[NIFTY25N0425900PE] ⏱ Sample 3/5: LTP = ₹113.00
+[NIFTY25N0425850PE] ⏱ Sample 3/5: LTP = ₹91.60
+[NIFTY25N0425950CE] ⏱ Sample 4/5: LTP = ₹113.35
+[NIFTY25N0426000CE] ⏱ Sample 4/5: LTP = ₹92.00
+[NIFTY25N0425900PE] ⏱ Sample 4/5: LTP = ₹112.90
+[NIFTY25N0425850PE] ⏱ Sample 4/5: LTP = ₹91.55
+[NIFTY25N0425950CE] ⏱ Sample 5/5: LTP = ₹113.35
+[NIFTY25N0426000CE] ⏱ Sample 5/5: LTP = ₹91.80
+[NIFTY25N0425950CE] 📈 Momentum Result: -0.09% change (₹113.45 → ₹113.35)
+
+[NIFTY25N0425900PE] ⏱ Sample 5/5: LTP = ₹113.25
+[NIFTY25N0426000CE] 📈 Momentum Result: -0.11% change (₹91.90 → ₹91.80)
+
+📊 Running momentum check for CE (NIFTY25N0425950CE)
+
+🧭 Checking momentum for NIFTY25N0425950CE (5 samples, every 1s):
+[NIFTY25N0425850PE] ⏱ Sample 5/5: LTP = ₹92.00
+[NIFTY25N0425900PE] 📈 Momentum Result: 0.18% change (₹113.05 → ₹113.25)
+
+[NIFTY25N0425950CE] ⏱ Sample 1/5: LTP = ₹113.25
+[NIFTY25N0425850PE] 📈 Momentum Result: 0.00% change (₹92.00 → ₹92.00)
+
+📊 Running momentum check for PE (NIFTY25N0425900PE)
+
+🧭 Checking momentum for NIFTY25N0425900PE (5 samples, every 1s):
+[NIFTY25N0425900PE] ⏱ Sample 1/5: LTP = ₹112.80
+[NIFTY25N0425950CE] ⏱ Sample 2/5: LTP = ₹113.50
+[NIFTY25N0425900PE] ⏱ Sample 2/5: LTP = ₹112.90
+[NIFTY25N0425950CE] ⏱ Sample 3/5: LTP = ₹113.05
+[NIFTY25N0425900PE] ⏱ Sample 3/5: LTP = ₹112.90
+[NIFTY25N0425950CE] ⏱ Sample 4/5: LTP = ₹113.10
+[NIFTY25N0425900PE] ⏱ Sample 4/5: LTP = ₹113.00
+[NIFTY25N0425950CE] ⏱ Sample 5/5: LTP = ₹113.15
+[NIFTY25N0425900PE] ⏱ Sample 5/5: LTP = ₹112.75
+[NIFTY25N0425950CE] 📈 Momentum Result: -0.09% change (₹113.25 → ₹113.15)
+
+✅ Momentum for CE: -0.08830022075054686
+🧩 Finished CE: NIFTY25N0425950CE, momentum=-0.08830022075054686
+[NIFTY25N0425900PE] 📈 Momentum Result: -0.04% change (₹112.80 → ₹112.75)
+
+✅ Momentum for PE: -0.044326241134749256
+🧩 Finished PE: NIFTY25N0425900PE, momentum=-0.044326241134749256
+🧮 Comparing CE vs PE momentum...
+⚖️  Momentum similar — choosing PE fallback
+✅ Selected: NIFTY25N0425900PE | LTP=113.05 | lot_size=75
+➡️ Placing auto order: {'symbol': 'NIFTY25N0425900PE', 'ltp': 113.05, 'lots': 1, 'book_profit': 75.0, 'lot_size': 75, 'side': 'BUY'}
+🔹 Auto order => NIFTY25N0425900PE, qty=75, book@75.0
+💰 LTP for NSE_NIFTY25N0425900PE: ₹112.95
+✅ Auto Buy placed: {'groww_order_id': 'GMKFO251030135740F10VDFQB50DA', 'order_status': 'NEW', 'order_reference_id': '98759778', 'remark': None}
+✅ Auto Target SELL @ 113.95 placed: {'groww_order_id': 'GLTFO2510301357408EZCW0OZWTU3', 'order_status': 'NEW', 'order_reference_id': '35998851', 'remark': None}
+💰 LTP for NSE_NIFTY25N0425900PE: ₹113.05
+💰 LTP for NSE_NIFTY25N0425900PE: ₹112.9
+💰 LTP for NSE_NIFTY25N0425900PE: ₹112.55
+💰 LTP for NSE_NIFTY25N0425900PE: ₹112.8
+💰 LTP for NSE_NIFTY25N0425900PE: ₹111.7
+💰 LTP for NSE_NIFTY25N0425900PE: ₹111.1
+💰 LTP for NSE_NIFTY25N0425900PE: ₹111.1
+💰 LTP for NSE_NIFTY25N0425900PE: ₹108.6
+💰 LTP for NSE_NIFTY25N0425900PE: ₹107.6
+💰 LTP for NSE_NIFTY25N0425900PE: ₹106.2
+💰 LTP for NSE_NIFTY25N0425900PE: ₹106.25
+💰 LTP for NSE_NIFTY25N0425900PE: ₹105.9
+💰 LTP for NSE_NIFTY25N0425900PE: ₹104.65
+💰 LTP for NSE_NIFTY25N0425900PE: ₹103.75
+💰 LTP for NSE_NIFTY25N0425900PE: ₹103.3
+💰 LTP for NSE_NIFTY25N0425900PE: ₹102.35
+💰 LTP for NSE_NIFTY25N0425900PE: ₹104.0
+💰 LTP for NSE_NIFTY25N0425900PE: ₹104.1
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 987, in <module>
+    auto_mode_runner()
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 972, in auto_mode_runner
+    place_cp_order(order_details, is_auto=True)
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 803, in place_cp_order
+    time.sleep(5)
+KeyboardInterrupt

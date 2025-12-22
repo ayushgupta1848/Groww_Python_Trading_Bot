@@ -1,0 +1,27 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-12-11_18-49-04.log
+C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjU0OTk0MDAsImlhdCI6MTc2NTQ1OTE0NCwibmJmIjoxNzY1NDU5MTQ0LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCJiY2M1ZmMzZi1iYjVlLTRiYmYtOGIyNC04NjdjYzdjZjI0OTFcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjlhNzM4MTg1LTgzZjMtNDczMC1hZGJhLThmZDBkZjYzMzcyN1wiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjU0OTk0MDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.MRoCJ87mGUzKK0e6L4HQxxV3CVu_BPaStllg-8TUG8Shd9V0t3zGLQcxE8JAKCrfr9BTAypEKN14TMskhO35UA
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+📊 Live NIFTY Spot: 25898.55
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+🎯 Filtering NIFTY 2025-12-16 instruments between 25400–26400 (Spot=25898.55)
+✅ Loaded 316 filtered instruments (out of 149250)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+Enter command (or press Enter for status, type 'back' to menu): 💰 LTP for NSE_NIFTY26JAN25950CE: ₹491.6 ====== [2025-12-11 18:49:33]
+entry price: 491.6
+✅ Buy Order placed: {'groww_order_id': 'GMKFO251211184935MHV9OCB4SD4K', 'order_status': 'ACKED', 'order_reference_id': '88698342', 'remark': None}
+✅ Target SELL placed @ 492.75. Response: {'groww_order_id': 'GLTFO2512111849355PAGHFBSXQM1', 'order_status': 'ACKED', 'order_reference_id': '28964869', 'remark': None}
+💰 LTP for NSE_NIFTY26JAN25950CE: ₹491.6 ====== [2025-12-11 18:49:37]
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\test_groww_option_trading_final_bot.py", line 1261, in <module>
+    place_cp_order(user_input)
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\test_groww_option_trading_final_bot.py", line 1157, in place_cp_order
+    time.sleep(5)
+KeyboardInterrupt

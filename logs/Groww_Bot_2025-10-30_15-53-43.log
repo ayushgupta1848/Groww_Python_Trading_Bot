@@ -1,0 +1,11 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-10-30_15-53-43.log
+Ready to Groww!
+✅ Groww API Initialized Successfully
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 256, in <module>
+    instruments_data = load_instruments_from_json()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\groww_option_trading_final_bot.py", line 206, in load_instruments_from_json
+    config = CONFIG
+             ^^^^^^
+NameError: name 'CONFIG' is not defined

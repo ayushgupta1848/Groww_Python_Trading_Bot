@@ -1,0 +1,355 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-12-13_13-43-05.log
+C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjU2NzIyMDAsImlhdCI6MTc2NTYxMzU4NiwibmJmIjoxNzY1NjEzNTg2LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCI2Y2FhZWRiZC03ZWU3LTRmZmItODA2MS0xMGRkNDUyNDIzZTdcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjgwODA1MjYwLWVlMTQtNGZlNC1iMWQ0LTBjNTVhZTg2YjdjOFwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjU2NzIyMDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.iTHc2PqMrVMvvPzqfafziDWAAFdUDsD6s1aX-hDoDdFN0cRF4MMLNLmoevngOh2ee3ZjZcZ_dvFjZItMulEy8A
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+📊 Live NIFTY Spot: 26046.0
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+🎯 Filtering NIFTY 2025-12-16 instruments between 25550–26550 (Spot=26046.0)
+✅ Loaded 316 filtered instruments (out of 149250)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 2025-12-16…
+➡️  Searching CE between 80-130
+➡️  Searching PE between 80-130
+⚙️ Checking momentum for top 12 PE candidates...⚙️ Checking momentum for top 12 CE candidates...
+
+
+🧭 Checking momentum for NIFTY25D1625650CE (5 samples, every 1s):
+[NIFTY25D1625650CE] ⏱ Sample 1/5: LTP = ₹108.37
+🧭 Checking momentum for NIFTY25D1625800CE (5 samples, every 1s):
+
+
+🧭 Checking momentum for NIFTY25D1626300CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1626500CE (5 samples, every 1s):[NIFTY25D1625800CE] ⏱ Sample 1/5: LTP = ₹99.80
+[NIFTY25D1626300CE] ⏱ Sample 1/5: LTP = ₹98.67
+🧭 Checking momentum for NIFTY25D1625700CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1626550CE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1626200CE (5 samples, every 1s):
+[NIFTY25D1626500CE] ⏱ Sample 1/5: LTP = ₹98.41
+🧭 Checking momentum for NIFTY25D1625900CE (5 samples, every 1s):[NIFTY25D1625700CE] ⏱ Sample 1/5: LTP = ₹112.55
+
+
+🧭 Checking momentum for NIFTY25D1625550PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1625700PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1625850PE (5 samples, every 1s):[NIFTY25D1626550CE] ⏱ Sample 1/5: LTP = ₹112.87[NIFTY25D1626200CE] ⏱ Sample 1/5: LTP = ₹113.41
+🧭 Checking momentum for NIFTY25D1626450PE (5 samples, every 1s):[NIFTY25D1625900CE] ⏱ Sample 1/5: LTP = ₹97.45
+
+🧭 Checking momentum for NIFTY25D1626200PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1626150PE (5 samples, every 1s):
+
+
+
+
+
+🧭 Checking momentum for NIFTY25D1626500PE (5 samples, every 1s):
+
+[NIFTY25D1625550PE] ⏱ Sample 1/5: LTP = ₹104.63
+
+[NIFTY25D1625700PE] ⏱ Sample 1/5: LTP = ₹108.28
+
+🧭 Checking momentum for NIFTY25D1626400PE (5 samples, every 1s):[NIFTY25D1625850PE] ⏱ Sample 1/5: LTP = ₹109.27[NIFTY25D1626450PE] ⏱ Sample 1/5: LTP = ₹109.74[NIFTY25D1626200PE] ⏱ Sample 1/5: LTP = ₹100.44
+[NIFTY25D1626150PE] ⏱ Sample 1/5: LTP = ₹111.39[NIFTY25D1626500PE] ⏱ Sample 1/5: LTP = ₹99.88
+
+
+
+
+
+[NIFTY25D1626400PE] ⏱ Sample 1/5: LTP = ₹99.46
+[NIFTY25D1625650CE] ⏱ Sample 2/5: LTP = ₹108.79
+[NIFTY25D1625800CE] ⏱ Sample 2/5: LTP = ₹100.15
+[NIFTY25D1626300CE] ⏱ Sample 2/5: LTP = ₹99.32
+[NIFTY25D1626500CE] ⏱ Sample 2/5: LTP = ₹98.72
+[NIFTY25D1625900CE] ⏱ Sample 2/5: LTP = ₹98.10[NIFTY25D1626200CE] ⏱ Sample 2/5: LTP = ₹114.09[NIFTY25D1626550CE] ⏱ Sample 2/5: LTP = ₹113.56[NIFTY25D1625700CE] ⏱ Sample 2/5: LTP = ₹112.97
+
+
+
+[NIFTY25D1625700PE] ⏱ Sample 2/5: LTP = ₹108.83[NIFTY25D1625550PE] ⏱ Sample 2/5: LTP = ₹105.19
+
+[NIFTY25D1626400PE] ⏱ Sample 2/5: LTP = ₹99.99[NIFTY25D1626150PE] ⏱ Sample 2/5: LTP = ₹111.93[NIFTY25D1626450PE] ⏱ Sample 2/5: LTP = ₹110.30[NIFTY25D1626500PE] ⏱ Sample 2/5: LTP = ₹100.54[NIFTY25D1626200PE] ⏱ Sample 2/5: LTP = ₹100.86[NIFTY25D1625850PE] ⏱ Sample 2/5: LTP = ₹109.78
+
+
+
+
+
+[NIFTY25D1625650CE] ⏱ Sample 3/5: LTP = ₹109.11
+[NIFTY25D1625800CE] ⏱ Sample 3/5: LTP = ₹100.51
+[NIFTY25D1626300CE] ⏱ Sample 3/5: LTP = ₹99.81
+[NIFTY25D1626500CE] ⏱ Sample 3/5: LTP = ₹99.36
+[NIFTY25D1625900CE] ⏱ Sample 3/5: LTP = ₹98.69
+[NIFTY25D1625550PE] ⏱ Sample 3/5: LTP = ₹105.57[NIFTY25D1625700PE] ⏱ Sample 3/5: LTP = ₹109.19[NIFTY25D1626150PE] ⏱ Sample 3/5: LTP = ₹112.49[NIFTY25D1626400PE] ⏱ Sample 3/5: LTP = ₹100.62[NIFTY25D1626500PE] ⏱ Sample 3/5: LTP = ₹101.15[NIFTY25D1625700CE] ⏱ Sample 3/5: LTP = ₹113.50[NIFTY25D1626550CE] ⏱ Sample 3/5: LTP = ₹114.10[NIFTY25D1626200PE] ⏱ Sample 3/5: LTP = ₹101.26[NIFTY25D1625850PE] ⏱ Sample 3/5: LTP = ₹110.13[NIFTY25D1626200CE] ⏱ Sample 3/5: LTP = ₹114.43
+
+
+[NIFTY25D1626450PE] ⏱ Sample 3/5: LTP = ₹110.92
+
+
+
+
+
+
+
+[NIFTY25D1625800CE] ⏱ Sample 4/5: LTP = ₹101.08[NIFTY25D1625650CE] ⏱ Sample 4/5: LTP = ₹109.51
+
+[NIFTY25D1626300CE] ⏱ Sample 4/5: LTP = ₹100.42
+[NIFTY25D1626500CE] ⏱ Sample 4/5: LTP = ₹99.90
+[NIFTY25D1625900CE] ⏱ Sample 4/5: LTP = ₹99.19
+[NIFTY25D1626150PE] ⏱ Sample 4/5: LTP = ₹113.05[NIFTY25D1626400PE] ⏱ Sample 4/5: LTP = ₹101.08[NIFTY25D1625550PE] ⏱ Sample 4/5: LTP = ₹105.91[NIFTY25D1625700PE] ⏱ Sample 4/5: LTP = ₹109.64
+[NIFTY25D1625700CE] ⏱ Sample 4/5: LTP = ₹113.98[NIFTY25D1626500PE] ⏱ Sample 4/5: LTP = ₹101.74[NIFTY25D1626200CE] ⏱ Sample 4/5: LTP = ₹115.05
+[NIFTY25D1626200PE] ⏱ Sample 4/5: LTP = ₹101.70[NIFTY25D1625850PE] ⏱ Sample 4/5: LTP = ₹110.55[NIFTY25D1626450PE] ⏱ Sample 4/5: LTP = ₹111.51
+[NIFTY25D1626550CE] ⏱ Sample 4/5: LTP = ₹114.75
+
+
+
+
+
+
+
+[NIFTY25D1625650CE] ⏱ Sample 5/5: LTP = ₹110.00[NIFTY25D1625800CE] ⏱ Sample 5/5: LTP = ₹101.60
+
+[NIFTY25D1626300CE] ⏱ Sample 5/5: LTP = ₹101.07
+[NIFTY25D1626500CE] ⏱ Sample 5/5: LTP = ₹100.57
+[NIFTY25D1625900CE] ⏱ Sample 5/5: LTP = ₹99.81
+[NIFTY25D1626400PE] ⏱ Sample 5/5: LTP = ₹101.53[NIFTY25D1625700PE] ⏱ Sample 5/5: LTP = ₹110.01[NIFTY25D1625550PE] ⏱ Sample 5/5: LTP = ₹106.54[NIFTY25D1626150PE] ⏱ Sample 5/5: LTP = ₹113.65
+
+[NIFTY25D1626550CE] ⏱ Sample 5/5: LTP = ₹115.12[NIFTY25D1626500PE] ⏱ Sample 5/5: LTP = ₹102.08[NIFTY25D1625850PE] ⏱ Sample 5/5: LTP = ₹111.19[NIFTY25D1626200CE] ⏱ Sample 5/5: LTP = ₹115.53[NIFTY25D1626200PE] ⏱ Sample 5/5: LTP = ₹102.38[NIFTY25D1626450PE] ⏱ Sample 5/5: LTP = ₹111.98
+[NIFTY25D1625700CE] ⏱ Sample 5/5: LTP = ₹114.45
+
+
+
+
+
+
+
+[NIFTY25D1625800CE] 📊 Avg Δ = 0.453%, Consistency = 100.0% → UP[NIFTY25D1625650CE] 📊 Avg Δ = 0.359%, Consistency = 100.0% → UP[NIFTY25D1626300CE] 📊 Avg Δ = 0.586%, Consistency = 100.0% → UP
+
+
+[NIFTY25D1626300CE] 📈 Range ₹98.67 → ₹101.07
+[NIFTY25D1625650CE] 📈 Range ₹108.37 → ₹110.00
+[NIFTY25D1625800CE] 📈 Range ₹99.80 → ₹101.60
+
+[NIFTY25D1626500CE] 📊 Avg Δ = 0.562%, Consistency = 100.0% → UP
+
+
+
+🧭 Checking momentum for NIFTY25D1625550CE (5 samples, every 1s):
+🧭 Checking momentum for NIFTY25D1626050CE (5 samples, every 1s):[NIFTY25D1626500CE] 📈 Range ₹98.41 → ₹100.57
+
+🧭 Checking momentum for NIFTY25D1625850CE (5 samples, every 1s):
+
+
+
+[NIFTY25D1625550CE] ⏱ Sample 1/5: LTP = ₹114.00[NIFTY25D1626050CE] ⏱ Sample 1/5: LTP = ₹114.49[NIFTY25D1625850CE] ⏱ Sample 1/5: LTP = ₹114.75
+🧭 Checking momentum for NIFTY25D1626150CE (5 samples, every 1s):
+
+
+
+[NIFTY25D1625900CE] 📊 Avg Δ = 0.585%, Consistency = 100.0% → UP[NIFTY25D1626150CE] ⏱ Sample 1/5: LTP = ₹116.21
+
+[NIFTY25D1625900CE] 📈 Range ₹97.45 → ₹99.81
+
+[NIFTY25D1626400PE] 📊 Avg Δ = 0.525%, Consistency = 100.0% → UP[NIFTY25D1625550PE] 📊 Avg Δ = 0.416%, Consistency = 100.0% → UP[NIFTY25D1625700PE] 📊 Avg Δ = 0.388%, Consistency = 100.0% → UP[NIFTY25D1625700CE] 📊 Avg Δ = 0.428%, Consistency = 100.0% → UP[NIFTY25D1626550CE] 📊 Avg Δ = 0.504%, Consistency = 100.0% → UP[NIFTY25D1626450PE] 📊 Avg Δ = 0.520%, Consistency = 100.0% → UP[NIFTY25D1626150PE] 📊 Avg Δ = 0.502%, Consistency = 100.0% → UP[NIFTY25D1626500PE] 📊 Avg Δ = 0.562%, Consistency = 100.0% → UP[NIFTY25D1625850PE] 📊 Avg Δ = 0.408%, Consistency = 100.0% → UP[NIFTY25D1626200PE] 📊 Avg Δ = 0.458%, Consistency = 100.0% → UP[NIFTY25D1626200CE] 📊 Avg Δ = 0.449%, Consistency = 100.0% → UP
+
+
+
+
+
+
+
+[NIFTY25D1625550PE] 📈 Range ₹104.63 → ₹106.54
+
+
+[NIFTY25D1625700PE] 📈 Range ₹108.28 → ₹110.01
+[NIFTY25D1625700CE] 📈 Range ₹112.55 → ₹114.45
+[NIFTY25D1626400PE] 📈 Range ₹99.46 → ₹101.53
+[NIFTY25D1626550CE] 📈 Range ₹112.87 → ₹115.12
+[NIFTY25D1625850PE] 📈 Range ₹109.27 → ₹111.19
+[NIFTY25D1626450PE] 📈 Range ₹109.74 → ₹111.98
+
+[NIFTY25D1626150PE] 📈 Range ₹111.39 → ₹113.65
+
+[NIFTY25D1626500PE] 📈 Range ₹99.88 → ₹102.08
+[NIFTY25D1626200CE] 📈 Range ₹113.41 → ₹115.53
+
+
+
+
+
+
+🧭 Checking momentum for NIFTY25D1626350PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1626250PE (5 samples, every 1s):[NIFTY25D1626200PE] 📈 Range ₹100.44 → ₹102.38
+
+
+
+
+🧭 Checking momentum for NIFTY25D1626000PE (5 samples, every 1s):
+
+🧭 Checking momentum for NIFTY25D1626550PE (5 samples, every 1s):
+
+
+[NIFTY25D1626250PE] ⏱ Sample 1/5: LTP = ₹111.72[NIFTY25D1626350PE] ⏱ Sample 1/5: LTP = ₹99.39
+[NIFTY25D1626000PE] ⏱ Sample 1/5: LTP = ₹99.15
+[NIFTY25D1626550PE] ⏱ Sample 1/5: LTP = ₹113.46
+
+
+[NIFTY25D1626050CE] ⏱ Sample 2/5: LTP = ₹114.92[NIFTY25D1625550CE] ⏱ Sample 2/5: LTP = ₹114.39[NIFTY25D1625850CE] ⏱ Sample 2/5: LTP = ₹115.33
+[NIFTY25D1626150CE] ⏱ Sample 2/5: LTP = ₹116.65
+
+
+[NIFTY25D1626350PE] ⏱ Sample 2/5: LTP = ₹100.03[NIFTY25D1626250PE] ⏱ Sample 2/5: LTP = ₹112.35[NIFTY25D1626000PE] ⏱ Sample 2/5: LTP = ₹99.61[NIFTY25D1626550PE] ⏱ Sample 2/5: LTP = ₹114.02
+
+
+
+[NIFTY25D1625550CE] ⏱ Sample 3/5: LTP = ₹114.76[NIFTY25D1626150CE] ⏱ Sample 3/5: LTP = ₹116.95[NIFTY25D1625850CE] ⏱ Sample 3/5: LTP = ₹115.71[NIFTY25D1626050CE] ⏱ Sample 3/5: LTP = ₹115.61
+
+
+
+[NIFTY25D1626250PE] ⏱ Sample 3/5: LTP = ₹112.66[NIFTY25D1626550PE] ⏱ Sample 3/5: LTP = ₹114.72[NIFTY25D1626000PE] ⏱ Sample 3/5: LTP = ₹100.31[NIFTY25D1626350PE] ⏱ Sample 3/5: LTP = ₹100.40
+
+
+
+[NIFTY25D1625850CE] ⏱ Sample 4/5: LTP = ₹116.26
+[NIFTY25D1626150CE] ⏱ Sample 4/5: LTP = ₹117.29[NIFTY25D1626050CE] ⏱ Sample 4/5: LTP = ₹116.09[NIFTY25D1625550CE] ⏱ Sample 4/5: LTP = ₹115.42
+
+
+[NIFTY25D1626550PE] ⏱ Sample 4/5: LTP = ₹115.22[NIFTY25D1626350PE] ⏱ Sample 4/5: LTP = ₹100.78
+
+[NIFTY25D1626250PE] ⏱ Sample 4/5: LTP = ₹113.04[NIFTY25D1626000PE] ⏱ Sample 4/5: LTP = ₹100.98
+
+[NIFTY25D1625850CE] ⏱ Sample 5/5: LTP = ₹116.85
+[NIFTY25D1625550CE] ⏱ Sample 5/5: LTP = ₹115.94[NIFTY25D1626050CE] ⏱ Sample 5/5: LTP = ₹116.54
+[NIFTY25D1626150CE] ⏱ Sample 5/5: LTP = ₹117.80
+
+[NIFTY25D1626350PE] ⏱ Sample 5/5: LTP = ₹101.35[NIFTY25D1626550PE] ⏱ Sample 5/5: LTP = ₹115.57[NIFTY25D1626250PE] ⏱ Sample 5/5: LTP = ₹113.35[NIFTY25D1626000PE] ⏱ Sample 5/5: LTP = ₹101.49
+
+
+
+[NIFTY25D1625850CE] 📊 Avg Δ = 0.437%, Consistency = 100.0% → UP
+[NIFTY25D1625850CE] 📈 Range ₹114.75 → ₹116.85
+
+[NIFTY25D1625550CE] 📊 Avg Δ = 0.432%, Consistency = 100.0% → UP[NIFTY25D1626150CE] 📊 Avg Δ = 0.318%, Consistency = 100.0% → UP[NIFTY25D1626050CE] 📊 Avg Δ = 0.466%, Consistency = 100.0% → UP
+
+
+[NIFTY25D1626150CE] 📈 Range ₹116.21 → ₹117.80
+[NIFTY25D1626050CE] 📈 Range ₹114.49 → ₹116.54
+[NIFTY25D1625550CE] 📈 Range ₹114.00 → ₹115.94
+
+
+
+🏆 Selected CE: NIFTY25D1626300CE (UP | 0.59% | Consistency 100.0%)
+📊 Running momentum check for CE (NIFTY25D1626300CE)
+
+🧭 Checking momentum for NIFTY25D1626300CE (5 samples, every 1s):
+[NIFTY25D1626300CE] ⏱ Sample 1/5: LTP = ₹101.42
+[NIFTY25D1626550PE] 📊 Avg Δ = 0.482%, Consistency = 100.0% → UP[NIFTY25D1626000PE] 📊 Avg Δ = 0.618%, Consistency = 100.0% → UP[NIFTY25D1626350PE] 📊 Avg Δ = 0.451%, Consistency = 100.0% → UP[NIFTY25D1626250PE] 📊 Avg Δ = 0.344%, Consistency = 100.0% → UP
+
+
+
+[NIFTY25D1626000PE] 📈 Range ₹99.15 → ₹101.49
+[NIFTY25D1626550PE] 📈 Range ₹113.46 → ₹115.57
+
+[NIFTY25D1626250PE] 📈 Range ₹111.72 → ₹113.35
+[NIFTY25D1626350PE] 📈 Range ₹99.39 → ₹101.35
+
+
+
+🏆 Selected PE: NIFTY25D1626000PE (UP | 0.62% | Consistency 100.0%)
+📊 Running momentum check for PE (NIFTY25D1626000PE)
+
+🧭 Checking momentum for NIFTY25D1626000PE (5 samples, every 1s):
+[NIFTY25D1626000PE] ⏱ Sample 1/5: LTP = ₹101.89
+[NIFTY25D1626300CE] ⏱ Sample 2/5: LTP = ₹101.74
+[NIFTY25D1626000PE] ⏱ Sample 2/5: LTP = ₹102.42
+[NIFTY25D1626300CE] ⏱ Sample 3/5: LTP = ₹102.19
+[NIFTY25D1626000PE] ⏱ Sample 3/5: LTP = ₹102.84
+[NIFTY25D1626300CE] ⏱ Sample 4/5: LTP = ₹102.58
+[NIFTY25D1626000PE] ⏱ Sample 4/5: LTP = ₹103.21
+[NIFTY25D1626300CE] ⏱ Sample 5/5: LTP = ₹102.26
+[NIFTY25D1626000PE] ⏱ Sample 5/5: LTP = ₹102.64
+[NIFTY25D1626300CE] 📊 Avg Δ = 0.275%, Consistency = 100.0% → UP
+[NIFTY25D1626300CE] 📈 Range ₹101.42 → ₹102.26
+
+✅ Momentum for CE: {'symbol': 'NIFTY25D1626300CE', 'avg_change': np.float64(0.275), 'consistency': np.float64(100.0), 'direction': 'UP'}
+🧩 Finished CE: NIFTY25D1626300CE, momentum={'symbol': 'NIFTY25D1626300CE', 'avg_change': np.float64(0.275), 'consistency': np.float64(100.0), 'direction': 'UP'}
+[NIFTY25D1626000PE] 📊 Avg Δ = 0.251%, Consistency = 100.0% → UP
+[NIFTY25D1626000PE] 📈 Range ₹101.89 → ₹102.64
+
+✅ Momentum for PE: {'symbol': 'NIFTY25D1626000PE', 'avg_change': np.float64(0.251), 'consistency': np.float64(100.0), 'direction': 'UP'}
+🧩 Finished PE: NIFTY25D1626000PE, momentum={'symbol': 'NIFTY25D1626000PE', 'avg_change': np.float64(0.251), 'consistency': np.float64(100.0), 'direction': 'UP'}
+🧮 Comparing CE vs PE momentum...
+📈 CE momentum: 0.275% (UP, 100.0%)
+📉 PE momentum: 0.251% (UP, 100.0%)
+⚖️  Momentum similar — choosing CE fallback
+✅ Selected: NIFTY25D1626300CE (CE) | LTP=98.02 | lot_size=75 | groww_symbol=NSE-NIFTY-16Dec25-26300-CE
+Market Direction: CE
+✅ Market direction CONFIRMS momentum → proceeding with order.
+➡️ Placing auto order: {'symbol': 'NIFTY25D1626300CE', 'ltp': 98.02, 'lots': 3, 'book_profit': 300.0, 'lot_size': 75, 'side': 'BUY'} ====== [2025-12-13 13:43:34]
+🔹 Auto order => NIFTY25D1626300CE, qty=225 ====== [2025-12-13 13:43:35]
+🧪 [PAPER LTP] NIFTY25D1626300CE: ₹101.94
+✅ Auto Buy placed: {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'order_reference_id': '62921905', 'remark': None}
+🔎 Waiting for BUY order (GMKFO251213134336MY32HRETK5YL) to finish...
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+🔍 Order status response: {'status': 'SUCCESS', 'payload': {'groww_order_id': 'GMKFO251213134336MY32HRETK5YL', 'order_status': 'ACKED', 'remark': None, 'filled_quantity': None}}
+🕒 BUY status: ACKED
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1406, in <module>
+    auto_mode_runner()
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1386, in auto_mode_runner
+    place_cp_order(order_details, is_auto=True)
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1192, in place_cp_order
+    #     buy_status = wait_for_order_status(order_id, access_token, "BUY")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 1099, in wait_for_order_status
+    time.sleep(2)
+KeyboardInterrupt

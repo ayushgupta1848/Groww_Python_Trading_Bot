@@ -1,0 +1,26 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-12-17_13-21-06.log
+C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjYwMTc4MDAsImlhdCI6MTc2NTk1Nzg2NiwibmJmIjoxNzY1OTU3ODY2LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCIyMzZhNzIzMC00OTFlLTRmMjAtODY1MS0zOTljNGY2NGJhNjNcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjZlYzMwODRjLThiMDQtNGNlNS05ODllLTMzYWQwZmVmYWVkZFwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjYwMTc4MDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.qIm8KOkBk9BKL509p6afFzgJB6SeDoe91ff2mpHm6SfVnr5gZ2Z4wovf31whEp524zjkc6DteT7-hAeQ6wmpXA
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.csv' → 'C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\instrument.json'
+📊 Live NIFTY Spot: 25801.25
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 369, in <module>
+    instruments_data = load_instruments_from_json()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 328, in load_instruments_from_json
+    instruments = csv_to_json(csv_path, json_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\QA_env_sample_test_groww_option_trading_final_bot.py", line 197, in csv_to_json
+    json.dump(data, json_file, indent=4, ensure_ascii=False)
+  File "C:\Program Files\Python312\Lib\json\__init__.py", line 179, in dump
+    for chunk in iterable:
+  File "C:\Program Files\Python312\Lib\json\encoder.py", line 430, in _iterencode
+    yield from _iterencode_list(o, _current_indent_level)
+  File "C:\Program Files\Python312\Lib\json\encoder.py", line 326, in _iterencode_list
+    yield from chunks
+  File "C:\Program Files\Python312\Lib\json\encoder.py", line 386, in _iterencode_dict
+    yield _encoder(value)
+          ^^^^^^^^^^^^^^^
+KeyboardInterrupt

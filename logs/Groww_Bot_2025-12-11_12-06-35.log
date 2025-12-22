@@ -1,0 +1,34 @@
+📝 Logging started. Log file: C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\logs\Groww_Bot_2025-12-11_12-06-35.log
+Ready to Groww!
+eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3NjU0OTk0MDAsImlhdCI6MTc2NTQzNDk5NywibmJmIjoxNzY1NDM0OTk3LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCJlZTdiNWYyZi1jNzk1LTQ3N2EtODg1MS0zNjRjMzk1ODY3ZDVcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjlhNzM4MTg1LTgzZjMtNDczMC1hZGJhLThmZDBkZjYzMzcyN1wiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcIm9yZGVyLWJhc2ljLGxpdmVfZGF0YS1iYXNpYyxub25fdHJhZGluZy1iYXNpYyxvcmRlcl9yZWFkX29ubHktYmFzaWMsYmFja190ZXN0XCIsXCJzb3VyY2VJcEFkZHJlc3NcIjpudWxsLFwidHdvRmFFeHBpcnlUc1wiOjE3NjU0OTk0MDAwMDB9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.ccn6o9apukjuce_Mf_LLgtFcVIa9hU58hh3lZDIJNvwFINw5qLNxp5i6eHhbKpwmB5DqIluxNFOcRguHljajEw
+✅ Groww API Initialized Successfully
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+📊 Live NIFTY Spot: 25883.85
+✅ Converted 'C:\Users\HITS\Downloads\instrument (1).csv' → 'C:\Users\HITS\Downloads\instrument (1).json'
+🎯 Filtering NIFTY 2025-12-16 instruments between 25400–26400 (Spot=25883.85)
+✅ Loaded 316 filtered instruments (out of 105971)
+
+✨ Groww NIFTY CP Bot Ready (Groww backend)
+You can run in MANUAL or AUTO mode.
+Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+
+Choose mode: (m)anual / (a)uto / (q)uit: 
+--- AUTO MODE (momentum + premium) ---
+🔍 Detecting best option between CE and PE for NIFTY 2025-12-16…
+➡️  Searching CE between 80-130
+⚠️ No instruments for NIFTY 2025-12-16 CE➡️  Searching PE between 80-130
+
+⚠️ No instruments for NIFTY 2025-12-16 PE
+⚠️ No instrument found for CE
+⚠️ No instrument found for PE
+🧩 Finished CE: None, momentum=None
+🧩 Finished PE: None, momentum=None
+🧮 Comparing CE vs PE momentum...
+❌ No momentum data found for CE or PE.
+❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...
+Traceback (most recent call last):
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\test_groww_option_trading_final_bot.py", line 1246, in <module>
+    auto_mode_runner()
+  File "C:\Users\HITS\eclipse-workspace\Groww_Python_Trading_Bot\test_groww_option_trading_final_bot.py", line 1192, in auto_mode_runner
+    time.sleep(180)
+KeyboardInterrupt
