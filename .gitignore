@@ -6,3 +6,4 @@ env/
 .vscode/
 .idea/
 echo instrument.json >> .gitignore
+instrument.json
