@@ -5,3 +5,4 @@ env/
 *.pyc
 .vscode/
 .idea/
+echo instrument.json >> .gitignore
