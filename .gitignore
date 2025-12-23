@@ -7,3 +7,4 @@ env/
 .idea/
 echo instrument.json >> .gitignore
 instrument.json
+*.log
