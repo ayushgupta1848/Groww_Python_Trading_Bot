@@ -26,6 +26,9 @@ import os
 import sys
 from datetime import datetime
 
+# ENHANCEMENT: Use a session for persistent HTTP connections (faster polling)
+session = requests.Session()
+
 MOMENTUM_SAMPLES = 5
 MOMENTUM_DELAY = 1
 
@@ -142,12 +145,17 @@ BOT_TOKEN = "8226223419:AAGX5fKG21CfceF_0_WjPIrOMx6ON17pZMw"
 CHAT_ID = "6012308856"
 
 def send_telegram(message: str):
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": message}
-        requests.post(url, data=payload)
-    except Exception as e:
-        print(f"⚠️ Telegram Error: {e}")
+    """Sends a telegram message asynchronously to avoid blocking the main thread."""
+    def _send():
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            payload = {"chat_id": CHAT_ID, "text": message}
+            requests.post(url, data=payload)
+        except Exception as e:
+            print(f"⚠️ Telegram Error: {e}")
+
+    # Fire and forget thread
+    threading.Thread(target=_send, daemon=True).start()
 
 def play_sound_async(filename):
     try:
@@ -158,13 +166,13 @@ def play_sound_async(filename):
     except Exception as e:
         print(f"🔇 Sound error: {e}")
 
-def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit):
+def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit , volume , oi):
     file_name = "Lakshmi1.xlsx"
     if not os.path.exists(file_name):
         wb = Workbook()
         ws = wb.active
         ws.title = "Trades"
-        ws.append(["DateTime", "Symbol", "Buy Price", "Sell Price", "Quantity", "Profit"])
+        ws.append(["DateTime", "Symbol", "Buy Price", "Sell Price", "Quantity", "Profit", "Volume" , "oi"])
         wb.save(file_name)
 
     # Load existing workbook
@@ -181,6 +189,8 @@ def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit):
     ws.cell(row=next_row, column=4).value = sell_price
     ws.cell(row=next_row, column=5).value = quantity
     ws.cell(row=next_row, column=6).value = round(profit, 2)
+    ws.cell(row=next_row, column=7).value = volume
+    ws.cell(row=next_row, column=8).value = oi
     wb.save(file_name)
 
 
@@ -201,10 +211,11 @@ def csv_to_json(csv_file_path, json_file_path=None):
 
 ltp_lock = threading.Lock()
 
-def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO"):
+def get_ltp_for_instrument(instrument, access_token, verbose=True, segment="FNO", delay=0.1):
     """
     Fetches the latest traded price (LTP) for a given F&O instrument using Groww's authenticated API.
     Thread-safe with a global lock to prevent too-frequent API calls.
+    Added 'delay' parameter to control sleep time (default 0.1s). Set to 0 for instant return.
     """
 
     try:
@@ -223,8 +234,10 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO
 
         # 🔒 Lock ensures one API call at a time
         with ltp_lock:
-            resp = requests.get(url, headers=headers, timeout=10)
-            time.sleep(0.5)  # ⏳ short delay to respect Groww API rate limits
+            # Use session for faster connection reuse
+            resp = session.get(url, headers=headers, timeout=10)
+            if delay > 0:
+                time.sleep(delay)  # ⏳ delay to respect Groww API rate limits
 
         if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} error fetching LTP: {resp.text}")
@@ -302,7 +315,7 @@ CONFIG = {
     "spot":get_nifty_spot_price(access_token),
     "TRAIL_START_PROFIT": 1.25,  # Start trailing after this profit per unit (in points) #NEWCHANGE
     "TRAIL_STEP": .75,  # Trailing step (in points) #NEWCHANGE
-    "POLL_INTERVAL": 1,  # Poll interval in seconds
+    "POLL_INTERVAL": 0.2,  # Poll interval in seconds (Reduced for faster SL hit)
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "user_confirmation_needed": False,   # or False
@@ -496,7 +509,8 @@ def get_order_status(order_id, access_token):
     }
 
     try:
-        resp = requests.get(url, headers=headers, timeout=8)
+        # Use session for faster connection reuse
+        resp = session.get(url, headers=headers, timeout=8)
         resp.raise_for_status()  # raises for non-200 responses
 
         data = resp.json()  # Proper JSON response from Groww
@@ -583,6 +597,160 @@ def get_recent_market_direction(symbol, groww):
         return None
 
 
+import numpy as np
+
+def calculate_sma(prices, period):
+    if len(prices) < period:
+        return None
+    return np.mean(prices[-period:])
+
+def calculate_ema(prices, period):
+    if len(prices) < period:
+        return None
+    # Initial SMA
+    ema = np.mean(prices[:period])
+    multiplier = 2 / (period + 1)
+    for price in prices[period:]:
+        ema = (price - ema) * multiplier + ema
+    return ema
+
+# ----------------- Advanced Technicals (RSI, ADX, VWAP) -----------------
+def calculate_rsi(prices, period=14):
+    prices = np.array(prices)
+    if len(prices) < period + 1:
+        return 50 # Default neutral
+    
+    deltas = np.diff(prices)
+    gains = np.maximum(deltas, 0)
+    losses = -np.minimum(deltas, 0)
+    
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
+    
+    if avg_loss == 0:
+        return 100
+        
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    # Wilder's Smoothing
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        
+        if avg_loss == 0:
+            rsi = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            
+    return rsi
+
+def calculate_adx(highs, lows, closes, period=14):
+    if len(highs) < period * 2:
+        return 25 # Default
+        
+    highs = np.array(highs)
+    lows = np.array(lows)
+    closes = np.array(closes)
+    
+    tr = np.zeros(len(highs))
+    plus_dm = np.zeros(len(highs))
+    minus_dm = np.zeros(len(highs))
+    
+    for i in range(1, len(highs)):
+        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+        
+        up_move = highs[i] - highs[i-1]
+        down_move = lows[i-1] - lows[i]
+        
+        if up_move > down_move and up_move > 0:
+            plus_dm[i] = up_move
+        else:
+            plus_dm[i] = 0
+            
+        if down_move > up_move and down_move > 0:
+            minus_dm[i] = down_move
+        else:
+            minus_dm[i] = 0
+            
+    # Smoothing
+    def smooth(data, period):
+        smoothed = np.zeros_like(data)
+        if len(data) > period:
+            smoothed[period] = np.mean(data[1:period+1]) # Initial SMA
+            for i in range(period+1, len(data)):
+                smoothed[i] = (smoothed[i-1] * (period - 1) + data[i]) / period
+        return smoothed
+
+    atr = smooth(tr, period)
+    plus_di = 100 * smooth(plus_dm, period) / (atr + 1e-9) # Avoid div by zero
+    minus_di = 100 * smooth(minus_dm, period) / (atr + 1e-9)
+    
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
+    adx = smooth(dx, period)
+    
+    return adx[-1]
+
+def calculate_vwap(prices, volumes):
+    prices = np.array(prices)
+    volumes = np.array(volumes)
+    if len(prices) == 0 or len(volumes) == 0:
+        return prices[-1] if len(prices) > 0 else 0
+    
+    vwap = np.cumsum(prices * volumes) / np.cumsum(volumes)
+    return vwap[-1]
+
+def get_technicals(symbol, groww_client, interval="1minute"):
+    try:
+        # Fetch enough data for EMA 20/SMA 20/RSI 14/ADX 14. 
+        # Increased to 120 mins for better ADX smoothing
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=120) 
+        
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        historical = groww_client.get_historical_candles(
+            groww_symbol=symbol,
+            exchange=groww_client.EXCHANGE_NSE,
+            segment=groww_client.SEGMENT_FNO,
+            start_time=start_str,
+            end_time=end_str,
+            candle_interval=interval
+        )
+        
+        candles = historical.get("candles", [])
+        if not candles or len(candles) < 30:
+            return None
+            
+        # Groww candles: [timestamp, open, high, low, close, volume]
+        opens = [c[1] for c in candles]
+        highs = [c[2] for c in candles]
+        lows = [c[3] for c in candles]
+        close_prices = [c[4] for c in candles]
+        volumes = [c[5] for c in candles]
+        
+        sma_20 = calculate_sma(close_prices, 20)
+        ema_9 = calculate_ema(close_prices, 9)
+        rsi_14 = calculate_rsi(close_prices, 14)
+        adx_14 = calculate_adx(highs, lows, close_prices, 14)
+        vwap = calculate_vwap(close_prices, volumes)
+        
+        current_price = close_prices[-1]
+        
+        return {
+            "sma_20": sma_20,
+            "ema_9": ema_9,
+            "rsi": rsi_14,
+            "adx": adx_14,
+            "vwap": vwap,
+            "ltp": current_price
+        }
+    except Exception as e:
+        print(f"⚠️ Error fetching technicals: {e}")
+        return None
+
 #NEWCHANGE
 def get_option_data_from_trading_symbol(
     trading_symbol: str,
@@ -606,7 +774,8 @@ def get_option_data_from_trading_symbol(
         "X-API-VERSION": "1.0"
     }
 
-    resp = requests.get(url, headers=headers, timeout=5)
+    # Use session for faster connection reuse
+    resp = session.get(url, headers=headers, timeout=5)
     resp.raise_for_status()
     data = resp.json()
 
@@ -1106,7 +1275,8 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
         }
 
         print(f"\n📦 Fetching trade details for order: {order_id}")
-        response = requests.get(url, headers=headers)
+        # Use session for faster connection reuse
+        response = session.get(url, headers=headers)
         data = response.json()
 
         if data.get("status") != "SUCCESS":
@@ -1143,6 +1313,8 @@ def place_cp_order(command, is_auto=False):
         symbol = order["symbol"]
         qty = order["lots"] * order["lot_size"]
         book_profit = order["book_profit"]
+        volume = order.get("volume")
+        oi = order.get("oi")
 
         # get instrument info directly from master
         instrument = next((inst for inst in instruments_data if inst["internal_trading_symbol"] == symbol), None)
@@ -1203,9 +1375,12 @@ def place_cp_order(command, is_auto=False):
         send_telegram("📈 Trailing started")
 
         while True:
-            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False)
+            # ENHANCEMENT: Zero delay in get_ltp to process immediately
+            start_poll = time.time()
+            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+            
             if ltp is None:
-                time.sleep(poll)
+                time.sleep(0.2)
                 continue
 
             ltp = float(ltp)
@@ -1214,12 +1389,29 @@ def place_cp_order(command, is_auto=False):
             if ltp <= hard_sl:
                 print(f"🛑 HARD SL HIT @ {ltp}")
                 send_telegram(f"🛑 HARD SL HIT @ {ltp}")
-                place_market_order_groww(instrument, qty, "SELL", "MIS")
-                play_sound_async(SOUND_SL)
+                
+                # Retry logic for SL order
+                order_placed = False
+                for attempt in range(3):
+                    try:
+                        place_market_order_groww(instrument, qty, "SELL", "MIS")
+                        order_placed = True
+                        print(f"✅ SL Order placed (Attempt {attempt+1})")
+                        break
+                    except Exception as e:
+                        print(f"❌ SL Order failed (Attempt {attempt+1}): {e}")
+                        time.sleep(0.1)
+                
+                if not order_placed:
+                     send_telegram("🚨 CRITICAL: SL Order FAILED 3 times! Check manually!")
+                     play_sound_async(SOUND_SL)
+                else:
+                     play_sound_async(SOUND_SL)
+                
                 profit = (ltp - entry_price) * qty
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, qty, profit
+                    entry_price, ltp, qty, profit, volume , oi
                 )
                 break
 
@@ -1239,17 +1431,28 @@ def place_cp_order(command, is_auto=False):
                 # send_telegram("Waiting for 8 sec to have momentum")
                 # time.sleep(8)
                 #NEWCHANGE
-                ltp = get_ltp_for_instrument(instrument, access_token, verbose=False)
-                if ltp <= trail_exit:
+                # Check again immediately
+                ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+                if ltp and float(ltp) <= trail_exit:
                     print(f"🔻 Trailing HIT @ {ltp}")
                     send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    place_market_order_groww(instrument, qty, "SELL", "MIS")
+                    
+                    # Retry logic for Target order
+                    for attempt in range(3):
+                        try:
+                            place_market_order_groww(instrument, qty, "SELL", "MIS")
+                            print(f"✅ Target Order placed (Attempt {attempt+1})")
+                            break
+                        except Exception as e:
+                            print(f"❌ Target Order failed (Attempt {attempt+1}): {e}")
+                            time.sleep(0.1)
+                    
                     play_sound_async(SOUND_PROFIT)
 
-                    profit = (ltp - entry_price) * qty
+                    profit = (float(ltp) - entry_price) * qty
                     log_trade_to_excel(
                         instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, qty, profit
+                        entry_price, float(ltp), qty, profit, volume , oi
                     )
                     break
 
@@ -1257,18 +1460,31 @@ def place_cp_order(command, is_auto=False):
             if time.time() - start_time >= max_time:
                 print("⏰ Max trail time reached — exiting")
                 send_telegram("⏰ Max trail time reached — exiting")
-                place_market_order_groww(instrument, qty, "SELL", "MIS")
+                
+                # Retry logic for Time Exit
+                for attempt in range(3):
+                    try:
+                        place_market_order_groww(instrument, qty, "SELL", "MIS")
+                        print(f"✅ Time Exit Order placed (Attempt {attempt+1})")
+                        break
+                    except Exception as e:
+                        print(f"❌ Time Exit Order failed (Attempt {attempt+1}): {e}")
+                        time.sleep(0.1)
+                        
                 play_sound_async(SOUND_PROFIT)
 
                 ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
                 profit = (ltp_now - entry_price) * qty
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
-                    entry_price, ltp_now, qty, profit
+                    entry_price, ltp_now, qty, profit , volume , oi
                 )
                 break
 
-            time.sleep(poll)
+            # Manual sleep to respect poll interval
+            elapsed = time.time() - start_poll
+            if elapsed < poll:
+                time.sleep(poll - elapsed)
 
         print("Waiting for 1 min to get another data.")
         time.sleep(60)
@@ -1276,6 +1492,12 @@ def place_cp_order(command, is_auto=False):
 
     else:
         parsed = parse_cp_command(command)
+        order = command  # dict form
+        symbol = order["symbol"]
+        qty = order["lots"] * order["lot_size"]
+        book_profit = order["book_profit"]
+        volume = order.get("volume")
+        oi = order.get("oi")
         if not parsed:
             print("❌ Could not parse command.")
             return
@@ -1336,9 +1558,12 @@ def place_cp_order(command, is_auto=False):
         send_telegram("📈 Trailing started")
 
         while True:
-            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False)
+            # ENHANCEMENT: Zero delay in get_ltp to process immediately
+            start_poll = time.time()
+            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+            
             if ltp is None:
-                time.sleep(poll)
+                time.sleep(0.2)
                 continue
 
             ltp = float(ltp)
@@ -1347,12 +1572,29 @@ def place_cp_order(command, is_auto=False):
             if ltp <= hard_sl:
                 print(f"🛑 HARD SL HIT @ {ltp}")
                 send_telegram(f"🛑 HARD SL HIT @ {ltp}")
-                place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                play_sound_async(SOUND_SL)
+                
+                # Retry logic for SL order
+                order_placed = False
+                for attempt in range(3):
+                    try:
+                        place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                        order_placed = True
+                        print(f"✅ SL Order placed (Attempt {attempt+1})")
+                        break
+                    except Exception as e:
+                        print(f"❌ SL Order failed (Attempt {attempt+1}): {e}")
+                        time.sleep(0.1)
+                
+                if not order_placed:
+                     send_telegram("🚨 CRITICAL: SL Order FAILED 3 times! Check manually!")
+                     play_sound_async(SOUND_SL)
+                else:
+                     play_sound_async(SOUND_SL)
+                
                 profit = (ltp - entry_price) * quantity
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, quantity, profit
+                    entry_price, ltp, quantity, profit, volume , oi
                 )
                 break
 
@@ -1369,7 +1611,17 @@ def place_cp_order(command, is_auto=False):
                 if ltp <= trail_exit:
                     print(f"🔻 Trailing HIT @ {ltp}")
                     send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                    
+                    # Retry logic for Target order
+                    for attempt in range(3):
+                        try:
+                            place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                            print(f"✅ Target Order placed (Attempt {attempt+1})")
+                            break
+                        except Exception as e:
+                            print(f"❌ Target Order failed (Attempt {attempt+1}): {e}")
+                            time.sleep(0.1)
+                    
                     print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
                     send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
                     play_sound_async(SOUND_PROFIT)
@@ -1377,7 +1629,7 @@ def place_cp_order(command, is_auto=False):
                     profit = (ltp - entry_price) * quantity
                     log_trade_to_excel(
                         instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, quantity, profit
+                        entry_price, ltp, quantity, profit , volume, oi
                     )
                     break
 
@@ -1385,18 +1637,31 @@ def place_cp_order(command, is_auto=False):
             if time.time() - start_time >= max_time:
                 print("⏰ Max trail time reached — exiting")
                 send_telegram("⏰ Max trail time reached — exiting")
-                place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                
+                # Retry logic for Time Exit
+                for attempt in range(3):
+                    try:
+                        place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                        print(f"✅ Time Exit Order placed (Attempt {attempt+1})")
+                        break
+                    except Exception as e:
+                        print(f"❌ Time Exit Order failed (Attempt {attempt+1}): {e}")
+                        time.sleep(0.1)
+                        
                 play_sound_async(SOUND_PROFIT)
 
                 ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
                 profit = (ltp_now - entry_price) * quantity
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
-                    entry_price, ltp_now, quantity, profit
+                    entry_price, ltp_now, quantity, profit , volume , oi
                 )
                 break
 
-            time.sleep(poll)
+            # Manual sleep to respect poll interval
+            elapsed = time.time() - start_poll
+            if elapsed < poll:
+                time.sleep(poll - elapsed)
 
         print("Waiting for 1 min to get another data.")
         time.sleep(60)
@@ -1489,6 +1754,56 @@ def auto_mode_runner():
 
         print(f"✅ Market confirms {instrument_type}")
 
+        # Check Technicals (EMA/SMA/RSI/ADX/VWAP)
+        print(f"📊 Checking Technicals for {symbol}...")
+        techs = get_technicals(groww_symbol, groww)
+        if techs:
+            ema_9 = techs["ema_9"]
+            sma_20 = techs["sma_20"]
+            curr_ltp = techs["ltp"]
+            rsi = techs["rsi"]
+            adx = techs["adx"]
+            vwap = techs["vwap"]
+            
+            print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f}")
+            
+            # 1. EMA Check
+            if ema_9 and curr_ltp < ema_9:
+                print(f"❌ Technical Filter: Price {curr_ltp} is below EMA 9 {ema_9:.2f}. Skipping.")
+                send_telegram(f"❌ Technical Filter: Price below EMA 9. Skipping.")
+                time.sleep(5)
+                continue
+                
+            # 2. ADX Check (Trend Strength)
+            if adx < 20:
+                print(f"❌ Technical Filter: ADX {adx:.2f} is too low (Choppy Market). Skipping.")
+                send_telegram(f"❌ Technical Filter: ADX too low ({adx:.2f}). Skipping.")
+                time.sleep(5)
+                continue
+                
+            # 3. RSI Check (Overbought/Momentum)
+            if rsi > 75:
+                print(f"❌ Technical Filter: RSI {rsi:.2f} is Overbought (>75). Skipping.")
+                send_telegram(f"❌ Technical Filter: RSI Overbought ({rsi:.2f}). Skipping.")
+                time.sleep(5)
+                continue
+            
+            if rsi < 45:
+                print(f"❌ Technical Filter: RSI {rsi:.2f} is too weak (<45). Skipping.")
+                send_telegram(f"❌ Technical Filter: RSI Weak ({rsi:.2f}). Skipping.")
+                time.sleep(5)
+                continue
+                
+            # 4. VWAP Check (Trend Confirmation)
+            if vwap and curr_ltp < vwap:
+                print(f"❌ Technical Filter: Price {curr_ltp} is below VWAP {vwap:.2f}. Skipping.")
+                send_telegram(f"❌ Technical Filter: Price below VWAP. Skipping.")
+                time.sleep(5)
+                continue
+
+        else:
+            print("⚠️ Could not calculate technicals. Proceeding with caution.")
+
         opt = get_option_data_from_trading_symbol(selected_order["symbol"])
         print(f"Checking delta/theta/OI for selected option === {selected_order["symbol"]}")
 
@@ -1498,12 +1813,49 @@ def auto_mode_runner():
         volume = opt.get("volume", 0)
         gamma = opt.get("gamma", 0)
 
+        # add volume here 👇
+        selected_order["volume"] = volume
+        selected_order["delta"] = delta
+        selected_order["iv"] = iv
+        selected_order["oi"] = oi
+        selected_order["gamma"] = gamma
+
         # ✅ Correct logical conditions
-        if iv > 12 or abs(delta) < 0.45 or oi < 25000 or volume < 30000 or volume < 0.4 * oi or gamma < 0.0018:
+        if iv > 12 or abs(delta) < 0.45 or oi < 25000 or volume < 35000 or volume < 0.4 * oi or gamma < 0.0018:
             print(
                 f"delta = {opt["delta"]}, volume = {opt["volume"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
             print("❌ Option conditions not satisfied, skipping...")
-            continue
+            failed_reasons = []
+
+            if iv > 12:
+                failed_reasons.append(f"IV too high ({iv:.2f})")
+
+            if abs(delta) < 0.45:
+                failed_reasons.append(f"Delta too low ({delta:.3f})")
+
+            if oi < 25000:
+                failed_reasons.append(f"OI too low ({oi})")
+
+            if volume < 35000:
+                failed_reasons.append(f"Volume too low ({volume})")
+
+            if volume < 0.4 * oi:
+                failed_reasons.append(f"Volume/OI weak ({volume}/{oi})")
+
+            if gamma < 0.0018:
+                failed_reasons.append(f"Gamma too low ({gamma:.5f})")
+
+            if failed_reasons:
+                print(
+                    f"❌ Skipping {opt['trading_symbol']} | "
+                    f"LTP={opt['ltp']} | "
+                    f"IV={iv:.2f}, Δ={delta:.3f}, Γ={gamma:.5f}, OI={oi}, Vol={volume}"
+                )
+                print("   Reasons:")
+                for r in failed_reasons:
+                    print(f"   • {r}")
+                continue
+
         else:
             print(f"delta = {opt["delta"]}, volume = {opt["volume"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
 
@@ -1538,12 +1890,48 @@ def auto_mode_runner():
                     volume = opt.get("volume", 0)
                     gamma = opt.get("gamma", 0)
 
+                    selected_order["volume"] = volume
+                    selected_order["delta"] = delta
+                    selected_order["iv"] = iv
+                    selected_order["oi"] = oi
+                    selected_order["gamma"] = gamma
+
                     # ✅ Correct logical conditions
-                    if iv > 8 or abs(delta) < 0.45 or oi < 25000 or volume < 30000 or volume < 0.4 * oi or gamma < 0.0018:
+                    if iv > 8 or abs(delta) < 0.45 or oi < 25000 or volume < 35000 or volume < 0.4 * oi or gamma < 0.0018:
                         print(
                             f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
                         print("❌ Option conditions not satisfied, skipping...")
-                        continue
+                        failed_reasons = []
+
+                        if iv > 12:
+                            failed_reasons.append(f"IV too high ({iv:.2f})")
+
+                        if abs(delta) < 0.45:
+                            failed_reasons.append(f"Delta too low ({delta:.3f})")
+
+                        if oi < 25000:
+                            failed_reasons.append(f"OI too low ({oi})")
+
+                        if volume < 35000:
+                            failed_reasons.append(f"Volume too low ({volume})")
+
+                        if volume < 0.4 * oi:
+                            failed_reasons.append(f"Volume/OI weak ({volume}/{oi})")
+
+                        if gamma < 0.0018:
+                            failed_reasons.append(f"Gamma too low ({gamma:.5f})")
+
+                        if failed_reasons:
+                            print(
+                                f"❌ Skipping {opt['trading_symbol']} | "
+                                f"LTP={opt['ltp']} | "
+                                f"IV={iv:.2f}, Δ={delta:.3f}, Γ={gamma:.5f}, OI={oi}, Vol={volume}"
+                            )
+                            print("   Reasons:")
+                            for r in failed_reasons:
+                                print(f"   • {r}")
+                            continue
+
                     else:
                         print(
                             f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
@@ -1559,6 +1947,21 @@ def auto_mode_runner():
                     continue
 
             else:
+                opt = get_option_data_from_trading_symbol(selected_order["symbol"])
+                print(f"Checking delta/theta/OI for selected option === {selected_order["symbol"]}")
+
+                iv = opt.get("iv", 0)
+                delta = opt.get("delta", 0)
+                oi = opt.get("open_interest", 0)
+                volume = opt.get("volume", 0)
+                gamma = opt.get("gamma", 0)
+
+                selected_order["volume"] = volume
+                selected_order["delta"] = delta
+                selected_order["iv"] = iv
+                selected_order["oi"] = oi
+                selected_order["gamma"] = gamma
+
                 print(f"➡️ Placing SELECTED order ({selected['type']})")
                 send_telegram(f"➡️ Placing SELECTED order ({selected['type']})")
                 place_cp_order(selected_order, is_auto=True)

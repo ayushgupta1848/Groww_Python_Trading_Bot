@@ -10,7 +10,7 @@ URL = "https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi"
 PARAMS = {
     "functionName": "getOptionChainData",
     "symbol": "NIFTY",
-    "params": "expiryDate=23-Dec-2025"
+    "params": "expiryDate=30-Dec-2025"
 }
 
 HEADERS = {
