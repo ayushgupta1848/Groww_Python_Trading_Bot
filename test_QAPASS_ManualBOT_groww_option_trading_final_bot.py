@@ -1047,7 +1047,6 @@ def place_cp_order(command, is_auto=False):
 
         while True:
             ltp_now = get_ltp_for_instrument(instrument, access_token)
-            time.sleep(5)
             if ltp_now is None:
                 continue
 
@@ -1060,8 +1059,6 @@ def place_cp_order(command, is_auto=False):
                     instrument.get("internal_trading_symbol"),
                     entry_price, target_price, quantity, total_profit
                 )
-                print("Waiting for 1 min to get another data.")
-                time.sleep(60)
                 break
 
 
@@ -1135,7 +1132,7 @@ def auto_mode_runner():
 if __name__ == "__main__":
     print("\n✨ Groww NIFTY CP Bot Ready (Groww backend)")
     print("You can run in MANUAL or AUTO mode.")
-    print("Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050\n")
+    print("Manual example: Buy 14 NIFTY30DEC2525950CE at CP and Book at 1050\n")
     while True:
         mode = input("Choose mode: (m)anual / (a)uto / (q)uit: ").strip().lower()
         if mode in ["q", "quit", "exit"]:

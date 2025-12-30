@@ -293,10 +293,10 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2025-12-30",  # Updated to DD/MM/YYYY to match instruments JSON
+    "expiry": "2026-01-06",  # Updated to DD/MM/YYYY to match instruments JSON
     "min_premium": 80,
     "max_premium": 130,
-    "lots": 14,
+    "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot":get_nifty_spot_price(access_token),
@@ -1091,8 +1091,6 @@ def place_cp_order(command, is_auto=False):
 
             time.sleep(poll)
 
-        print("Waiting for 1 min to get another data.")
-        time.sleep(60)
         return  # ✅ end of auto mode execution
 
     else:

@@ -306,9 +306,9 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2025-12-30",  # Updated to DD/MM/YYYY to match instruments JSON
-    "min_premium": 80,
-    "max_premium": 130,
+    "expiry": "2026-01-06",  # Updated to DD/MM/YYYY to match instruments JSON
+    "min_premium": 75,
+    "max_premium": 135,
     "lots": 14,
     "book_profit": 1050,
     "target_pnl": 6000,
@@ -881,7 +881,7 @@ def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOM
     print(f"\n🧭 Checking momentum for {trading_symbol} ({MOMENTUM_SAMPLES} samples, every {MOMENTUM_DELAY}s):")
     #NEWCHANGE
     opt = get_option_data_from_trading_symbol(trading_symbol)
-    print(f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
+    print(f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]} , volume = {opt["volume"]}")
 
     for i in range(MOMENTUM_SAMPLES):
         p = get_ltp_for_instrument(instrument, access_token, verbose=False)
@@ -1684,6 +1684,7 @@ def auto_mode_runner():
 
     while True:
         opt = detect_option_type_parallel(index, expiry, min_p, max_p, lots)
+        print(f"opt {opt}")
 
         if not opt:
             print("❌ Could not determine CE/PE. Retrying in 60s...")
@@ -1693,6 +1694,9 @@ def auto_mode_runner():
 
         selected = opt["selected"]
         rejected = opt["rejected"]
+
+        print(f"\n<UNK> Selected options: {selected["instrument"]} ")
+        print(f"\n<UNK> Rejected options: {rejected["instrument"]} ")
 
         sel_inst = selected["instrument"]
         rej_inst = rejected["instrument"]
