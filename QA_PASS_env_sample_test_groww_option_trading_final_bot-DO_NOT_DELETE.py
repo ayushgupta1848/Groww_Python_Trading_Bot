@@ -25,7 +25,7 @@ import time
 import os
 import sys
 from datetime import datetime
-
+session = requests.Session()
 MOMENTUM_SAMPLES = 5
 MOMENTUM_DELAY = 1
 
@@ -138,7 +138,7 @@ groww ,access_token = groww_init(api_key)
 # ----------------- Utilities: Telegram, Sound, Excel Logging -----------------
 
 # === TELEGRAM CONFIG ===
-BOT_TOKEN = "8226223419:AAGX5fKG21CfceF_0_WjPIrOMx6ON17pZMw"
+BOT_TOKEN = "8258031977:AAGWH-fkj-Ks7BORiS5LokzAi8Dh3F10Gvg"
 CHAT_ID = "6012308856"
 
 def send_telegram(message: str):
@@ -223,8 +223,10 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO
 
         # 🔒 Lock ensures one API call at a time
         with ltp_lock:
-            resp = requests.get(url, headers=headers, timeout=10)
-            time.sleep(0.5)  # ⏳ short delay to respect Groww API rate limits
+            # Use session for faster connection reuse
+            resp = session.get(url, headers=headers, timeout=10)
+            if delay > 0:
+                time.sleep(delay)  # ⏳ delay to respect Groww API rate limits
 
         if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} error fetching LTP: {resp.text}")
@@ -302,7 +304,7 @@ CONFIG = {
     "spot":get_nifty_spot_price(access_token),
     "TRAIL_START_PROFIT": 1,  # Start trailing after this profit per unit (in points) #NEWCHANGE
     "TRAIL_STEP": .75,  # Trailing step (in points) #NEWCHANGE
-    "POLL_INTERVAL": 1,  # Poll interval in seconds
+    "POLL_INTERVAL": .2,  # Poll interval in seconds
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "user_confirmation_needed": False,   # or False
