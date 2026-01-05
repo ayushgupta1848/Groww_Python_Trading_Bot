@@ -1125,6 +1125,8 @@ def place_cp_order(command, is_auto=False):
                 else:
                     print("⚠️ No SELL order ID received. Cannot verify status or log trade accurately.")
 
+                print("Waiting for new moment now for 1 min")
+                time.sleep(60)
                 break # Exit the while loop after processing the sell
 
             time.sleep(poll)

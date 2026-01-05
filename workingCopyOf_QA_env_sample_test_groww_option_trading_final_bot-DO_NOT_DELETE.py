@@ -78,6 +78,8 @@ def setup_persistent_logger():
 # --- Initialize persistent logging ---
 LOG_FILE_PATH = setup_persistent_logger()
 
+EXCEL_FILE = "technical_logs.xlsx"
+
 # Replace with your Groww API key (or leave and use TOTP to fetch access_token)
 api_key = "eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjI1NTAwNDY3MzksImlhdCI6MTc2MTY0NjczOSwibmJmIjoxNzYxNjQ2NzM5LCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCI2MmEwMTc4YS0wOTk3LTQ0ZDAtOWRiNC0wZDAzOWM5MzY3YmZcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNWQwYzdjODgtMGI1OS01MDU0LTk5ZTYtYWU5MzY5OTc2ZmRiXCIsXCJzZXNzaW9uSWRcIjpcIjY1NzBiNDUwLWE2YzYtNDMyYi1hYTJmLTA4MjExZjk0YzRiOVwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcImF1dGgtdG90cFwiLFwic291cmNlSXBBZGRyZXNzXCI6XCIxNzEuNjAuMTY5LjI1MiwxNzIuNjkuOTUuOTMsMzUuMjQxLjIzLjEyM1wiLFwidHdvRmFFeHBpcnlUc1wiOjI1NTAwNDY3Mzk5MTV9IiwiaXNzIjoiYXBleC1hdXRoLXByb2QtYXBwIn0.EKERC7OzG-lblhaOSQPyb44mafdNFpErGbcELiTiLnRk4WEW9p7aBBf6iq-3LGagY4ORdOCnrXbRhyGzbscxSw"
 totp_gen = pyotp.TOTP('WI4M7KCAMH5CGN2I6SVB6MN2QDKUXRJF')
@@ -165,6 +167,34 @@ def play_sound_async(filename):
         threading.Thread(target=playsound, args=(filename,), daemon=True).start()
     except Exception as e:
         print(f"🔇 Sound error: {e}")
+
+def log_technical_to_excel(symbol, ltp, ema_9, rsi, adx, vwap, sma_20):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Create file if not exists
+    if not os.path.exists(EXCEL_FILE):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Technicals"
+        ws.append([
+            "Time", "Symbol", "LTP",
+            "EMA_9", "SMA_20", "RSI", "ADX", "VWAP"
+        ])
+        wb.save(EXCEL_FILE)
+
+    wb = load_workbook(EXCEL_FILE)
+    ws = wb["Technicals"]
+
+    ws.append([
+        now, symbol, ltp,
+        round(ema_9, 2),
+        round(sma_20, 2),
+        round(rsi, 2),
+        round(adx, 2),
+        round(vwap, 2)
+    ])
+
+    wb.save(EXCEL_FILE)
 
 def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit , volume , oi):
     file_name = "Lakshmi1.xlsx"
@@ -1769,8 +1799,17 @@ def auto_mode_runner():
             adx = techs["adx"]
             vwap = techs["vwap"]
             
-            print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f}")
-            
+            print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f} , SMA(20): {sma_20:.2f}")
+
+            log_technical_to_excel(
+                symbol=symbol,
+                ltp=curr_ltp,
+                ema_9=ema_9,
+                sma_20=sma_20,
+                rsi=rsi,
+                adx=adx,
+                vwap=vwap
+            )
             # 1. EMA Check
             if ema_9 and curr_ltp < ema_9:
                 print(f"❌ Technical Filter: Price {curr_ltp} is below EMA 9 {ema_9:.2f}. Skipping.")

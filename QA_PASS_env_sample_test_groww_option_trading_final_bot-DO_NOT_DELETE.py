@@ -1074,6 +1074,8 @@ def place_cp_order(command, is_auto=False):
                         instrument.get("internal_trading_symbol"),
                         entry_price, ltp, qty, profit
                     )
+                    print("Waiting for new moment now for 1 min")
+                    time.sleep(60)
                     break
 
             # ⏰ SAFETY TIME EXIT
