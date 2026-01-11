@@ -911,9 +911,6 @@ def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOM
     print(f"\n🧭 Checking momentum for {trading_symbol} ({MOMENTUM_SAMPLES} samples, every {MOMENTUM_DELAY}s):")
     #NEWCHANGE
     opt = get_option_data_from_trading_symbol(trading_symbol)
-<<<<<<< HEAD
-    print(f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]} , volume = {opt["volume"]}")
-=======
     print(
         f"delta = {opt['delta']}, "
         f"theta = {opt['theta']}, "
@@ -925,7 +922,6 @@ def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOM
         f"ltp = {opt['ltp']}, "
         f"volume = {opt['volume']}"
     )
->>>>>>> b8f5374 (new changes)
 
     for i in range(MOMENTUM_SAMPLES):
         p = get_ltp_for_instrument(instrument, access_token, verbose=False)

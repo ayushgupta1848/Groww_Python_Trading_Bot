@@ -141,7 +141,7 @@ groww ,access_token = groww_init(api_key)
 # ----------------- Utilities: Telegram, Sound, Excel Logging -----------------
 
 # === TELEGRAM CONFIG ===
-BOT_TOKEN = "8226223419:AAGX5fKG21CfceF_0_WjPIrOMx6ON17pZMw"
+BOT_TOKEN = "8482701378:AAG7Jtfw0ZW_K9mFiX21LpsyUAV4oOcDiAQ"
 CHAT_ID = "6012308856"
 
 def send_telegram(message: str):
@@ -301,10 +301,10 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-01-06",  # Updated to DD/MM/YYYY to match instruments JSON
+    "expiry": "2026-01-13",  # Updated to DD/MM/YYYY to match instruments JSON
     "min_premium": 80,
     "max_premium": 130,
-    "lots": 7,
+    "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot":get_nifty_spot_price(access_token),
