@@ -301,9 +301,9 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-01-13",  # Updated to DD/MM/YYYY to match instruments JSON
-    "min_premium": 80,
-    "max_premium": 130,
+    "expiry": "2026-01-20",  # Updated to DD/MM/YYYY to match instruments JSON
+    "min_premium": 90,
+    "max_premium": 135,
     "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
@@ -314,6 +314,11 @@ CONFIG = {
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "user_confirmation_needed": False,   # or False
+    "ENABLE_EMA_CHECK": True,
+    "ENABLE_ADX_CHECK": True,
+    "ENABLE_RSI_CHECK": True,
+    "ENABLE_VWAP_CHECK": True,
+    "ENABLE_LOGICAL_CONDITIONS_CHECK": True,
 }
 
 # Load instruments_data
@@ -590,6 +595,228 @@ def get_recent_market_direction(symbol, groww):
         print("⚠️ Error fetching recent market direction:", e)
         return None
 
+
+def calculate_sma(prices, period):
+    if len(prices) < period:
+        return None
+    return np.mean(prices[-period:])
+
+
+def calculate_ema(prices, period):
+    if len(prices) < period:
+        return None
+    # Initial SMA
+    ema = np.mean(prices[:period])
+    multiplier = 2 / (period + 1)
+    for price in prices[period:]:
+        ema = (price - ema) * multiplier + ema
+    return ema
+
+
+# ----------------- Advanced Technicals (RSI, ADX, VWAP) -----------------
+def calculate_rsi(prices, period=14):
+    prices = np.array(prices)
+    if len(prices) < period + 1:
+        return 50  # Default neutral
+
+    deltas = np.diff(prices)
+    gains = np.maximum(deltas, 0)
+    losses = -np.minimum(deltas, 0)
+
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
+
+    if avg_loss == 0:
+        return 100
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+
+    # Wilder's Smoothing
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+        if avg_loss == 0:
+            rsi = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+def calculate_adx(highs, lows, closes, period=14):
+    if len(highs) < period * 2:
+        return 25  # Default
+
+    highs = np.array(highs)
+    lows = np.array(lows)
+    closes = np.array(closes)
+
+    tr = np.zeros(len(highs))
+    plus_dm = np.zeros(len(highs))
+    minus_dm = np.zeros(len(highs))
+
+    for i in range(1, len(highs)):
+        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+
+        up_move = highs[i] - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
+
+        if up_move > down_move and up_move > 0:
+            plus_dm[i] = up_move
+        else:
+            plus_dm[i] = 0
+
+        if down_move > up_move and down_move > 0:
+            minus_dm[i] = down_move
+        else:
+            minus_dm[i] = 0
+
+    # Smoothing
+    def smooth(data, period):
+        smoothed = np.zeros_like(data)
+        if len(data) > period:
+            smoothed[period] = np.mean(data[1:period + 1])  # Initial SMA
+            for i in range(period + 1, len(data)):
+                smoothed[i] = (smoothed[i - 1] * (period - 1) + data[i]) / period
+        return smoothed
+
+    atr = smooth(tr, period)
+    plus_di = 100 * smooth(plus_dm, period) / (atr + 1e-9)  # Avoid div by zero
+    minus_di = 100 * smooth(minus_dm, period) / (atr + 1e-9)
+
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
+    adx = smooth(dx, period)
+
+    return adx[-1]
+
+
+def calculate_vwap(prices, volumes):
+    prices = np.array(prices)
+    volumes = np.array(volumes)
+    if len(prices) == 0 or len(volumes) == 0:
+        return prices[-1] if len(prices) > 0 else 0
+
+    vwap = np.cumsum(prices * volumes) / np.cumsum(volumes)
+    return vwap[-1]
+
+
+def get_technicals(symbol, groww_client, interval="1minute"):
+    try:
+        # Fetch enough data for EMA 20/SMA 20/RSI 14/ADX 14.
+        # Increased to 120 mins for better ADX smoothing
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=120)
+
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
+        historical = groww_client.get_historical_candles(
+            groww_symbol=symbol,
+            exchange=groww_client.EXCHANGE_NSE,
+            segment=groww_client.SEGMENT_FNO,
+            start_time=start_str,
+            end_time=end_str,
+            candle_interval=interval
+        )
+
+        candles = historical.get("candles", [])
+        if not candles or len(candles) < 30:
+            return None
+
+        # Groww candles: [timestamp, open, high, low, close, volume]
+        opens = [c[1] for c in candles]
+        highs = [c[2] for c in candles]
+        lows = [c[3] for c in candles]
+        close_prices = [c[4] for c in candles]
+        volumes = [c[5] for c in candles]
+
+        sma_20 = calculate_sma(close_prices, 20)
+        ema_9 = calculate_ema(close_prices, 9)
+        rsi_14 = calculate_rsi(close_prices, 14)
+        adx_14 = calculate_adx(highs, lows, close_prices, 14)
+        vwap = calculate_vwap(close_prices, volumes)
+
+        current_price = close_prices[-1]
+
+        return {
+            "sma_20": sma_20,
+            "ema_9": ema_9,
+            "rsi": rsi_14,
+            "adx": adx_14,
+            "vwap": vwap,
+            "ltp": current_price
+        }
+    except Exception as e:
+        print(f"⚠️ Error fetching technicals: {e}")
+        return None
+
+
+#NEWCHANGE
+def get_option_data_from_trading_symbol(
+    trading_symbol: str,
+    exchange: str = "NSE",
+    underlying: str = "NIFTY"
+):
+    """
+    Fetch delta, theta, OI, LTP, IV, volume etc. for a given trading_symbol
+    using Groww Option Chain API
+    """
+    expiry_date = CONFIG["expiry"].strip()
+
+    url = (
+        f"https://api.groww.in/v1/option-chain/exchange/{exchange}"
+        f"/underlying/{underlying}?expiry_date={expiry_date}"
+    )
+
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0"
+    }
+
+    # Use session for faster connection reuse
+    resp = session.get(url, headers=headers, timeout=5)
+    resp.raise_for_status()
+    data = resp.json()
+
+    if data.get("status") != "SUCCESS":
+        raise Exception("Failed to fetch option chain")
+
+    payload = data["payload"]
+    strikes = payload["strikes"]
+    underlying_ltp = payload["underlying_ltp"]
+
+    # 🔍 Find this trading_symbol in option chain
+    for strike_str, opt_data in strikes.items():
+        for opt_type in ("CE", "PE"):
+            opt = opt_data.get(opt_type)
+            if not opt:
+                continue
+
+            if opt.get("trading_symbol") == trading_symbol:
+                greeks = opt.get("greeks", {})
+
+                return {
+                    "trading_symbol": trading_symbol,
+                    "option_type": opt_type,
+                    "strike": int(strike_str),
+                    "expiry": expiry_date,
+                    "ltp": opt.get("ltp"),
+                    "open_interest": opt.get("open_interest"),
+                    "volume": opt.get("volume"),
+                    "delta": greeks.get("delta"),
+                    "theta": greeks.get("theta"),
+                    "iv": greeks.get("iv"),
+                    "gamma": greeks.get("gamma"),
+                    "vega": greeks.get("vega"),
+                    "rho": greeks.get("rho"),
+                    "underlying_ltp": underlying_ltp
+                }
+
+    raise ValueError(f"{trading_symbol} not found in option chain")
 
 # ----------------- Place orders with Groww -----------------
 def place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS"):
@@ -1190,6 +1417,120 @@ def auto_mode_runner():
 
         if market_direction == instrument_type:
             print(f"✅ Market direction CONFIRMS momentum {market_direction} → proceeding with order.")
+
+            # Check Technicals (EMA/SMA/RSI/ADX/VWAP)
+            print(f"📊 Checking Technicals for {symbol}...")
+            techs = get_technicals(groww_symbol, groww)
+            if techs:
+                ema_9 = techs["ema_9"]
+                sma_20 = techs["sma_20"]
+                curr_ltp = techs["ltp"]
+                rsi = techs["rsi"]
+                adx = techs["adx"]
+                vwap = techs["vwap"]
+
+                print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f}, SMA20: {sma_20:.2f}")
+
+                # 1. EMA Check
+                if cfg.get("ENABLE_EMA_CHECK") and ema_9 and curr_ltp < ema_9:
+                    print(f"❌ Technical Filter: Price {curr_ltp} is below EMA 9 {ema_9:.2f}. Skipping.")
+                    send_telegram(f"❌ Technical Filter: Price below EMA 9. Skipping.")
+                    time.sleep(5)
+                    continue
+
+                # 2. ADX Check (Trend Strength)
+                if cfg.get("ENABLE_ADX_CHECK") and adx < 20:
+                    print(f"❌ Technical Filter: ADX {adx:.2f} is too low (Choppy Market). Skipping.")
+                    send_telegram(f"❌ Technical Filter: ADX too low ({adx:.2f}). Skipping.")
+                    time.sleep(5)
+                    continue
+
+                # 3. RSI Check (Overbought/Momentum)
+                if cfg.get("ENABLE_RSI_CHECK"):
+                    if rsi > 75:
+                        print(f"❌ Technical Filter: RSI {rsi:.2f} is Overbought (>75). Skipping.")
+                        send_telegram(f"❌ Technical Filter: RSI Overbought ({rsi:.2f}). Skipping.")
+                        time.sleep(5)
+                        continue
+
+                    if rsi < 45:
+                        print(f"❌ Technical Filter: RSI {rsi:.2f} is too weak (<45). Skipping.")
+                        send_telegram(f"❌ Technical Filter: RSI Weak ({rsi:.2f}). Skipping.")
+                        time.sleep(5)
+                        continue
+
+                # 4. VWAP Check (Trend Confirmation)
+                if cfg.get("ENABLE_VWAP_CHECK") and vwap and curr_ltp < vwap:
+                    print(f"❌ Technical Filter: Price {curr_ltp} is below VWAP {vwap:.2f}. Skipping.")
+                    send_telegram(f"❌ Technical Filter: Price below VWAP. Skipping.")
+                    time.sleep(5)
+                    continue
+
+            else:
+                print("⚠️ Could not calculate technicals. Proceeding with caution.")
+
+            opt = get_option_data_from_trading_symbol(order_details["symbol"])
+            print(f"Checking delta/theta/OI for selected option === {order_details['symbol']}")
+
+            iv = opt.get("iv", 0)
+            delta = opt.get("delta", 0)
+            oi = opt.get("open_interest", 0)
+            volume = opt.get("volume", 0)
+            gamma = opt.get("gamma", 0)
+
+            # add volume here 👇
+            order_details["volume"] = volume
+            order_details["delta"] = delta
+            order_details["iv"] = iv
+            order_details["oi"] = oi
+            order_details["gamma"] = gamma
+
+            # ✅ Correct logical conditions
+            if cfg.get("ENABLE_LOGICAL_CONDITIONS_CHECK") and (iv > 12 or abs(delta) < 0.45 or oi < 25000 or volume < 35000 or volume < 0.4 * oi or gamma < 0.0018):
+                print(
+                    f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                    f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                    f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+                )
+
+                print("❌ Option conditions not satisfied, skipping...")
+                failed_reasons = []
+
+                if iv > 12:
+                    failed_reasons.append(f"IV too high ({iv:.2f})")
+
+                if abs(delta) < 0.45:
+                    failed_reasons.append(f"Delta too low ({delta:.3f})")
+
+                if oi < 25000:
+                    failed_reasons.append(f"OI too low ({oi})")
+
+                if volume < 35000:
+                    failed_reasons.append(f"Volume too low ({volume})")
+
+                if volume < 0.4 * oi:
+                    failed_reasons.append(f"Volume/OI weak ({volume}/{oi})")
+
+                if gamma < 0.0018:
+                    failed_reasons.append(f"Gamma too low ({gamma:.5f})")
+
+                if failed_reasons:
+                    print(
+                        f"❌ Skipping {opt['trading_symbol']} | "
+                        f"LTP={opt['ltp']} | "
+                        f"IV={iv:.2f}, Δ={delta:.3f}, Γ={gamma:.5f}, OI={oi}, Vol={volume}"
+                    )
+                    print("   Reasons:")
+                    for r in failed_reasons:
+                        print(f"   • {r}")
+                    continue
+
+            else:
+                print(
+                    f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                    f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                    f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+                )
 
             # 👇 Manual confirmation
 

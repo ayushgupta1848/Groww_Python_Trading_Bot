@@ -143,7 +143,7 @@ groww ,access_token = groww_init(api_key)
 # ----------------- Utilities: Telegram, Sound, Excel Logging -----------------
 
 # === TELEGRAM CONFIG ===
-BOT_TOKEN = "8226223419:AAGX5fKG21CfceF_0_WjPIrOMx6ON17pZMw"
+BOT_TOKEN = "8482701378:AAG7Jtfw0ZW_K9mFiX21LpsyUAV4oOcDiAQ"
 CHAT_ID = "6012308856"
 
 def send_telegram(message: str):
@@ -336,10 +336,10 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-01-06",  # Updated to DD/MM/YYYY to match instruments JSON
+    "expiry": "2026-01-20",  # Updated to DD/MM/YYYY to match instruments JSON
     "min_premium": 75,
     "max_premium": 135,
-    "lots": 14,
+    "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot":get_nifty_spot_price(access_token),
@@ -1735,8 +1735,8 @@ def auto_mode_runner():
         selected = opt["selected"]
         rejected = opt["rejected"]
 
-        print(f"\n<UNK> Selected options: {selected["instrument"]} ")
-        print(f"\n<UNK> Rejected options: {rejected["instrument"]} ")
+        print(f"\n<UNK> Selected options: {selected['instrument']} ")
+        print(f"\n<UNK> Rejected options: {rejected['instrument']} ")
 
         sel_inst = selected["instrument"]
         rej_inst = rejected["instrument"]
@@ -1858,7 +1858,7 @@ def auto_mode_runner():
             print("⚠️ Could not calculate technicals. Proceeding with caution.")
 
         opt = get_option_data_from_trading_symbol(selected_order["symbol"])
-        print(f"Checking delta/theta/OI for selected option === {selected_order["symbol"]}")
+        print(f"Checking delta/theta/OI for selected option === {selected_order['symbol']}")
 
         iv = opt.get("iv", 0)
         delta = opt.get("delta", 0)
@@ -1876,7 +1876,10 @@ def auto_mode_runner():
         # ✅ Correct logical conditions
         if iv > 12 or abs(delta) < 0.45 or oi < 25000 or volume < 35000 or volume < 0.4 * oi or gamma < 0.0018:
             print(
-                f"delta = {opt["delta"]}, volume = {opt["volume"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
+                f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+            )
             print("❌ Option conditions not satisfied, skipping...")
             failed_reasons = []
 
@@ -1910,7 +1913,11 @@ def auto_mode_runner():
                 continue
 
         else:
-            print(f"delta = {opt["delta"]}, volume = {opt["volume"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
+            print(
+                f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+            )
 
             user_confirmation_needed = cfg.get("user_confirmation_needed", False)
             print(f"user_confirmation_needed : {user_confirmation_needed}")
@@ -1935,7 +1942,7 @@ def auto_mode_runner():
 
                 elif user_input == "o":
                     opt = get_option_data_from_trading_symbol(rejected_order["symbol"])
-                    print(f"Checking delta/theta/OI for rejected option === {rejected_order["symbol"]}")
+                    print(f"Checking delta/theta/OI for rejected option === {rejected_order['symbol']}")
 
                     iv = opt.get("iv", 0)
                     delta = opt.get("delta", 0)
@@ -1952,7 +1959,10 @@ def auto_mode_runner():
                     # ✅ Correct logical conditions
                     if iv > 8 or abs(delta) < 0.45 or oi < 25000 or volume < 35000 or volume < 0.4 * oi or gamma < 0.0018:
                         print(
-                            f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
+                            f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                            f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                            f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+                        )
                         print("❌ Option conditions not satisfied, skipping...")
                         failed_reasons = []
 
@@ -1987,7 +1997,10 @@ def auto_mode_runner():
 
                     else:
                         print(
-                            f"delta = {opt["delta"]}, theta = {opt["theta"]},  iv = {opt["iv"]},  gamma = {opt["gamma"]},  vega = {opt["vega"]},  rho = {opt["rho"]}, open_interest = {opt["open_interest"]}, ltp = {opt["ltp"]}")
+                            f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                            f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                            f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+                        )
                         print(f"🔁 Placing OPPOSITE order ({rejected['type']})")
                         send_telegram(f"🔁 Placing OPPOSITE order ({rejected['type']})")
                         place_cp_order(rejected_order, is_auto=True)
@@ -2001,7 +2014,7 @@ def auto_mode_runner():
 
             else:
                 opt = get_option_data_from_trading_symbol(selected_order["symbol"])
-                print(f"Checking delta/theta/OI for selected option === {selected_order["symbol"]}")
+                print(f"Checking delta/theta/OI for selected option === {selected_order['symbol']}")
 
                 iv = opt.get("iv", 0)
                 delta = opt.get("delta", 0)
