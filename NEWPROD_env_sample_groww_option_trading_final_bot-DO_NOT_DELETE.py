@@ -25,6 +25,7 @@ import time
 import os
 import sys
 from datetime import datetime
+import numpy as np
 
 # ENHANCEMENT: Use a session for persistent HTTP connections (faster polling)
 session = requests.Session()
@@ -696,14 +697,14 @@ def calculate_adx(highs, lows, closes, period=14):
 def calculate_vwap(prices, volumes):
     prices = np.array(prices)
     volumes = np.array(volumes)
-    if len(prices) == 0 or len(volumes) == 0:
-        return prices[-1] if len(prices) > 0 else 0
+    if len(prices) == 0 or len(volumes) == 0 or None in volumes:
+        return None
 
     vwap = np.cumsum(prices * volumes) / np.cumsum(volumes)
     return vwap[-1]
 
 
-def get_technicals(symbol, groww_client, interval="1minute"):
+def get_technicals(symbol, groww_client, interval="1minute", segment="FNO"):
     try:
         # Fetch enough data for EMA 20/SMA 20/RSI 14/ADX 14.
         # Increased to 120 mins for better ADX smoothing
@@ -716,7 +717,7 @@ def get_technicals(symbol, groww_client, interval="1minute"):
         historical = groww_client.get_historical_candles(
             groww_symbol=symbol,
             exchange=groww_client.EXCHANGE_NSE,
-            segment=groww_client.SEGMENT_FNO,
+            segment=segment,
             start_time=start_str,
             end_time=end_str,
             candle_interval=interval
@@ -731,13 +732,23 @@ def get_technicals(symbol, groww_client, interval="1minute"):
         highs = [c[2] for c in candles]
         lows = [c[3] for c in candles]
         close_prices = [c[4] for c in candles]
-        volumes = [c[5] for c in candles]
+        
+        vwap = None
+        # VWAP is only applicable for instruments with volume
+        if segment == "FNO":
+            volumes = [c[5] for c in candles]
+            vwap = calculate_vwap(close_prices, volumes)
+
+        # If VWAP couldn't be calculated, use last price as a fallback
+        if vwap is None:
+            vwap = close_prices[-1]
 
         sma_20 = calculate_sma(close_prices, 20)
         ema_9 = calculate_ema(close_prices, 9)
         rsi_14 = calculate_rsi(close_prices, 14)
         adx_14 = calculate_adx(highs, lows, close_prices, 14)
-        vwap = calculate_vwap(close_prices, volumes)
+        atr = calculate_atr(highs, lows, close_prices)
+
 
         current_price = close_prices[-1]
 
@@ -747,7 +758,8 @@ def get_technicals(symbol, groww_client, interval="1minute"):
             "rsi": rsi_14,
             "adx": adx_14,
             "vwap": vwap,
-            "ltp": current_price
+            "ltp": current_price,
+            "atr": atr
         }
     except Exception as e:
         print(f"⚠️ Error fetching technicals: {e}")
@@ -1215,6 +1227,7 @@ def place_cp_order(command, is_auto=False):
         symbol = order["symbol"]
         qty = order["lots"] * order["lot_size"]
         book_profit = order["book_profit"]
+        atr = order.get("atr", CONFIG["HARD_SL_POINTS"])  # Use ATR if available
 
         # get instrument info directly from master
         instrument = next((inst for inst in instruments_data if inst["internal_trading_symbol"] == symbol), None)
@@ -1272,10 +1285,11 @@ def place_cp_order(command, is_auto=False):
         trail_step = CONFIG["TRAIL_STEP"]
         poll = CONFIG["POLL_INTERVAL"]
         max_time = CONFIG["MAX_TRAIL_TIME"]
-        hard_sl = entry_price - CONFIG.get("HARD_SL_POINTS")
+        hard_sl = entry_price - (1.5 * atr)  # Dynamic SL based on 1.5 * ATR
 
-        print("📈 Trailing started...")
-        send_telegram("📈 Trailing started")
+        print(f"📈 Trailing started... Dynamic SL: {hard_sl:.2f} (based on ATR: {atr:.2f})")
+        send_telegram(f"📈 Trailing started... Dynamic SL: {hard_sl:.2f}")
+
 
         while True:
             ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
@@ -1288,7 +1302,7 @@ def place_cp_order(command, is_auto=False):
 
             # 1. Check exit conditions
             if ltp <= hard_sl:
-                sell_reason = f"🛑 HARD SL HIT @ {ltp}"
+                sell_reason = f"🛑 DYNAMIC SL HIT @ {ltp}"
             elif time.time() - start_time >= max_time:
                 sell_reason = "⏰ Max trail time reached — exiting"
             else:
@@ -1365,6 +1379,57 @@ def place_cp_order(command, is_auto=False):
         time.sleep(60)
         return
 
+def get_underlying_trend(groww_client):
+    """
+    Analyzes the underlying NIFTY index to determine the market trend.
+    Returns 'UP' for bullish, 'DOWN' for bearish, or 'SIDEWAYS'.
+    """
+    print("📊 Analyzing underlying NIFTY trend...")
+    nifty_instrument = next(
+        (item for item in instruments1 if item.get("trading_symbol") == "NIFTY"), None
+    )
+    if not nifty_instrument:
+        print("⚠️ NIFTY instrument not found for trend analysis.")
+        return "SIDEWAYS"
+
+    techs = get_technicals(nifty_instrument['groww_symbol'], groww_client, segment="CASH")
+    if not techs:
+        print("⚠️ Could not get technicals for NIFTY trend analysis.")
+        return "SIDEWAYS"
+
+    ltp = techs['ltp']
+    ema_9 = techs['ema_9']
+    adx = techs['adx']
+    rsi = techs['rsi']
+
+    print(f"   NIFTY Spot: {ltp}, EMA(9): {ema_9:.2f}, ADX: {adx:.2f}, RSI: {rsi:.2f}")
+
+    if adx > 25:
+        if ltp > ema_9 and rsi > 55:
+            print("   📈 NIFTY Trend: UP")
+            return "UP"
+        elif ltp < ema_9 and rsi < 45:
+            print("   📉 NIFTY Trend: DOWN")
+            return "DOWN"
+
+    print("   ↔️ NIFTY Trend: SIDEWAYS")
+    return "SIDEWAYS"
+
+def calculate_atr(high, low, close, period=14):
+    """Calculates the Average True Range (ATR)."""
+    if len(high) < period:
+        return 0
+    high = np.array(high)
+    low = np.array(low)
+    close = np.array(close)
+    tr1 = high - low
+    tr2 = np.abs(high - np.roll(close, 1))
+    tr3 = np.abs(low - np.roll(close, 1))
+    tr = np.amax((tr1, tr2, tr3), axis=0)
+    atr = calculate_ema(tr, period)  # Use EMA for smoothing ATR
+    return atr if atr is not None else 0
+
+
 # ----------------- Auto mode runner (momentum + premium) -----------------
 
 def auto_mode_runner():
@@ -1381,17 +1446,23 @@ def auto_mode_runner():
     target_pnl = cfg["target_pnl"]
 
     while True:
-        opt_result = detect_option_type_parallel(index, expiry, min_p, max_p, lots)
-        if not opt_result:
-            print("❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...")
-            send_telegram("❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...")
+        underlying_trend = get_underlying_trend(groww)
+
+        if underlying_trend == "SIDEWAYS":
+            print("❌ Underlying trend is sideways. Waiting for a clear trend...")
+            send_telegram("❌ Underlying trend is sideways. Waiting...")
             time.sleep(180)
             continue
 
-        opt_type, instrument, ltp, lot_size = opt_result
+        opt_type_to_trade = "CE" if underlying_trend == "UP" else "PE"
+        
+        instrument, ltp, lot_size = find_option_by_premium_parallel(
+            opt_type_to_trade, min_p, max_p, lots
+        )
+
         if not instrument:
-            print("❌ No matching/affordable option found. Retrying...")
-            send_telegram("❌ No matching/affordable option found. Retrying...")
+            print(f"❌ No matching/affordable {opt_type_to_trade} option found. Retrying...")
+            send_telegram(f"❌ No matching {opt_type_to_trade} option found. Retrying...")
             time.sleep(60)
             continue
 
@@ -1428,8 +1499,10 @@ def auto_mode_runner():
                 rsi = techs["rsi"]
                 adx = techs["adx"]
                 vwap = techs["vwap"]
+                atr = techs["atr"]
+                order_details["atr"] = atr # Add ATR to order details for dynamic SL
 
-                print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f}, SMA20: {sma_20:.2f}")
+                print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f}, SMA20: {sma_20:.2f}, ATR: {atr:.2f}")
 
                 # 1. EMA Check
                 if cfg.get("ENABLE_EMA_CHECK") and ema_9 and curr_ltp < ema_9:

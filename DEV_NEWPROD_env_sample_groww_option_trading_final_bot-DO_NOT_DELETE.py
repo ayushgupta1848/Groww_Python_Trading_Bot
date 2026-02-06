@@ -25,7 +25,10 @@ import time
 import os
 import sys
 from datetime import datetime
+
+# ENHANCEMENT: Use a session for persistent HTTP connections (faster polling)
 session = requests.Session()
+
 MOMENTUM_SAMPLES = 5
 MOMENTUM_DELAY = 1
 
@@ -137,20 +140,22 @@ groww ,access_token = groww_init(api_key)
 
 # ----------------- Utilities: Telegram, Sound, Excel Logging -----------------
 
-
-#test
-
 # === TELEGRAM CONFIG ===
-BOT_TOKEN = "8482701378:AAG7Jtfw0ZW_K9mFiX21LpsyUAV4oOcDiAQ"
+BOT_TOKEN = "8472717363:AAFfai_2vZispQoYwrM6JK4Qs5a9nYaMUkI"
 CHAT_ID = "6012308856"
 
 def send_telegram(message: str):
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": message}
-        requests.post(url, data=payload)
-    except Exception as e:
-        print(f"⚠️ Telegram Error: {e}")
+    """Sends a telegram message asynchronously to avoid blocking the main thread."""
+    def _send():
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            payload = {"chat_id": CHAT_ID, "text": message}
+            requests.post(url, data=payload)
+        except Exception as e:
+            print(f"⚠️ Telegram Error: {e}")
+
+    # Fire and forget thread
+    threading.Thread(target=_send, daemon=True).start()
 
 def play_sound_async(filename):
     try:
@@ -226,10 +231,8 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO
 
         # 🔒 Lock ensures one API call at a time
         with ltp_lock:
-            # Use session for faster connection reuse
-            resp = session.get(url, headers=headers, timeout=10)
-            if delay > 0:
-                time.sleep(delay)  # ⏳ delay to respect Groww API rate limits
+            resp = requests.get(url, headers=headers, timeout=10)
+            time.sleep(delay)  # ⏳ short delay to respect Groww API rate limits
 
         if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} error fetching LTP: {resp.text}")
@@ -298,19 +301,24 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-02-03",  # Updated to DD/MM/YYYY to match instruments JSON
-    "min_premium": 95,
-    "max_premium": 160,
-    "lots": 25,
+    "expiry": "2026-01-27",  # Updated to DD/MM/YYYY to match instruments JSON
+    "min_premium": 90,
+    "max_premium": 135,
+    "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot":get_nifty_spot_price(access_token),
     "TRAIL_START_PROFIT": 1,  # Start trailing after this profit per unit (in points) #NEWCHANGE
     "TRAIL_STEP": .75,  # Trailing step (in points) #NEWCHANGE
-    "POLL_INTERVAL": .2,  # Poll interval in seconds
+    "POLL_INTERVAL": 1,  # Poll interval in seconds
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "user_confirmation_needed": False,   # or False
+    "ENABLE_EMA_CHECK": True,
+    "ENABLE_ADX_CHECK": True,
+    "ENABLE_RSI_CHECK": True,
+    "ENABLE_VWAP_CHECK": True,
+    "ENABLE_LOGICAL_CONDITIONS_CHECK": True,
 }
 
 # Load instruments_data
@@ -588,6 +596,228 @@ def get_recent_market_direction(symbol, groww):
         return None
 
 
+def calculate_sma(prices, period):
+    if len(prices) < period:
+        return None
+    return np.mean(prices[-period:])
+
+
+def calculate_ema(prices, period):
+    if len(prices) < period:
+        return None
+    # Initial SMA
+    ema = np.mean(prices[:period])
+    multiplier = 2 / (period + 1)
+    for price in prices[period:]:
+        ema = (price - ema) * multiplier + ema
+    return ema
+
+
+# ----------------- Advanced Technicals (RSI, ADX, VWAP) -----------------
+def calculate_rsi(prices, period=14):
+    prices = np.array(prices)
+    if len(prices) < period + 1:
+        return 50  # Default neutral
+
+    deltas = np.diff(prices)
+    gains = np.maximum(deltas, 0)
+    losses = -np.minimum(deltas, 0)
+
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
+
+    if avg_loss == 0:
+        return 100
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+
+    # Wilder's Smoothing
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+        if avg_loss == 0:
+            rsi = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+def calculate_adx(highs, lows, closes, period=14):
+    if len(highs) < period * 2:
+        return 25  # Default
+
+    highs = np.array(highs)
+    lows = np.array(lows)
+    closes = np.array(closes)
+
+    tr = np.zeros(len(highs))
+    plus_dm = np.zeros(len(highs))
+    minus_dm = np.zeros(len(highs))
+
+    for i in range(1, len(highs)):
+        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+
+        up_move = highs[i] - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
+
+        if up_move > down_move and up_move > 0:
+            plus_dm[i] = up_move
+        else:
+            plus_dm[i] = 0
+
+        if down_move > up_move and down_move > 0:
+            minus_dm[i] = down_move
+        else:
+            minus_dm[i] = 0
+
+    # Smoothing
+    def smooth(data, period):
+        smoothed = np.zeros_like(data)
+        if len(data) > period:
+            smoothed[period] = np.mean(data[1:period + 1])  # Initial SMA
+            for i in range(period + 1, len(data)):
+                smoothed[i] = (smoothed[i - 1] * (period - 1) + data[i]) / period
+        return smoothed
+
+    atr = smooth(tr, period)
+    plus_di = 100 * smooth(plus_dm, period) / (atr + 1e-9)  # Avoid div by zero
+    minus_di = 100 * smooth(minus_dm, period) / (atr + 1e-9)
+
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
+    adx = smooth(dx, period)
+
+    return adx[-1]
+
+
+def calculate_vwap(prices, volumes):
+    prices = np.array(prices)
+    volumes = np.array(volumes)
+    if len(prices) == 0 or len(volumes) == 0:
+        return prices[-1] if len(prices) > 0 else 0
+
+    vwap = np.cumsum(prices * volumes) / np.cumsum(volumes)
+    return vwap[-1]
+
+
+def get_technicals(symbol, groww_client, interval="1minute"):
+    try:
+        # Fetch enough data for EMA 20/SMA 20/RSI 14/ADX 14.
+        # Increased to 120 mins for better ADX smoothing
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=120)
+
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
+        historical = groww_client.get_historical_candles(
+            groww_symbol=symbol,
+            exchange=groww_client.EXCHANGE_NSE,
+            segment=groww_client.SEGMENT_FNO,
+            start_time=start_str,
+            end_time=end_str,
+            candle_interval=interval
+        )
+
+        candles = historical.get("candles", [])
+        if not candles or len(candles) < 30:
+            return None
+
+        # Groww candles: [timestamp, open, high, low, close, volume]
+        opens = [c[1] for c in candles]
+        highs = [c[2] for c in candles]
+        lows = [c[3] for c in candles]
+        close_prices = [c[4] for c in candles]
+        volumes = [c[5] for c in candles]
+
+        sma_20 = calculate_sma(close_prices, 20)
+        ema_9 = calculate_ema(close_prices, 9)
+        rsi_14 = calculate_rsi(close_prices, 14)
+        adx_14 = calculate_adx(highs, lows, close_prices, 14)
+        vwap = calculate_vwap(close_prices, volumes)
+
+        current_price = close_prices[-1]
+
+        return {
+            "sma_20": sma_20,
+            "ema_9": ema_9,
+            "rsi": rsi_14,
+            "adx": adx_14,
+            "vwap": vwap,
+            "ltp": current_price
+        }
+    except Exception as e:
+        print(f"⚠️ Error fetching technicals: {e}")
+        return None
+
+
+#NEWCHANGE
+def get_option_data_from_trading_symbol(
+    trading_symbol: str,
+    exchange: str = "NSE",
+    underlying: str = "NIFTY"
+):
+    """
+    Fetch delta, theta, OI, LTP, IV, volume etc. for a given trading_symbol
+    using Groww Option Chain API
+    """
+    expiry_date = CONFIG["expiry"].strip()
+
+    url = (
+        f"https://api.groww.in/v1/option-chain/exchange/{exchange}"
+        f"/underlying/{underlying}?expiry_date={expiry_date}"
+    )
+
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0"
+    }
+
+    # Use session for faster connection reuse
+    resp = session.get(url, headers=headers, timeout=5)
+    resp.raise_for_status()
+    data = resp.json()
+
+    if data.get("status") != "SUCCESS":
+        raise Exception("Failed to fetch option chain")
+
+    payload = data["payload"]
+    strikes = payload["strikes"]
+    underlying_ltp = payload["underlying_ltp"]
+
+    # 🔍 Find this trading_symbol in option chain
+    for strike_str, opt_data in strikes.items():
+        for opt_type in ("CE", "PE"):
+            opt = opt_data.get(opt_type)
+            if not opt:
+                continue
+
+            if opt.get("trading_symbol") == trading_symbol:
+                greeks = opt.get("greeks", {})
+
+                return {
+                    "trading_symbol": trading_symbol,
+                    "option_type": opt_type,
+                    "strike": int(strike_str),
+                    "expiry": expiry_date,
+                    "ltp": opt.get("ltp"),
+                    "open_interest": opt.get("open_interest"),
+                    "volume": opt.get("volume"),
+                    "delta": greeks.get("delta"),
+                    "theta": greeks.get("theta"),
+                    "iv": greeks.get("iv"),
+                    "gamma": greeks.get("gamma"),
+                    "vega": greeks.get("vega"),
+                    "rho": greeks.get("rho"),
+                    "underlying_ltp": underlying_ltp
+                }
+
+    raise ValueError(f"{trading_symbol} not found in option chain")
+
 # ----------------- Place orders with Groww -----------------
 def place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS"):
     """
@@ -637,7 +867,7 @@ def round_to_nearest_5_paise(price):
 import numpy as np
 import time
 
-def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOMENTUM_DELAY=MOMENTUM_DELAY, threshold=0.30):
+def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOMENTUM_DELAY=MOMENTUM_DELAY, threshold=0.25):
     """
     Improved short-term momentum check for Nifty options.
     - Uses multiple intermediate samples
@@ -764,8 +994,8 @@ def find_option_by_premium_parallel(option_type, min_premium, max_premium,
 
     # ✅ Funds check (fallback = 1.2L if not available)
     try:
-        margins = getattr(groww, "get_margins", lambda: {"availablecash": 270000})()
-        available_cash = float(margins.get("availablecash", 270000))
+        margins = getattr(groww, "get_margins", lambda: {"availablecash": 130000})()
+        available_cash = float(margins.get("availablecash", 130000))
     except Exception:
         available_cash = 130000
 
@@ -1009,132 +1239,33 @@ def place_cp_order(command, is_auto=False):
             order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
             print(f"✅ Auto Buy placed: :{order_resp} ======= [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
             send_telegram(f"✅ Auto Buy placed: :{order_resp} ======= [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+            print(f"Order id ======= {order_id}")
+            send_telegram(f"Order id ======= {order_id}")
         except Exception as e:
             print(f"❌ Auto BUY failed: {e}")
             send_telegram(f"❌ Auto BUY failed: {e}")
             return
 
-
-        highest_price = entry_price
-
-        start_time = time.time()
-
-        trail_start = CONFIG["TRAIL_START_PROFIT"]
-        trail_step = CONFIG["TRAIL_STEP"]
-        poll = CONFIG["POLL_INTERVAL"]
-        max_time = CONFIG["MAX_TRAIL_TIME"]
-        hard_sl = entry_price - CONFIG.get("HARD_SL_POINTS")
-
-        print(print("📈 Trailing started..."))
-        send_telegram("📈 Trailing started")
-
-        while True:
-            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False ,delay = 0)
-            if ltp is None:
-                time.sleep(poll)
-                continue
-
-            ltp = float(ltp)
-
-            # 🔴 HARD STOP LOSS
-            if ltp <= hard_sl:
-                print(f"🛑 HARD SL HIT @ {ltp}")
-                send_telegram(f"🛑 HARD SL HIT @ {ltp}")
-                place_market_order_groww(instrument, qty, "SELL", "MIS")
-                play_sound_async(SOUND_SL)
-                profit = (ltp - entry_price) * qty
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, qty, profit
-                )
-                break
-
-            # 🔼 Update highest price
-            if ltp > highest_price:
-                highest_price = ltp
-                print(f"🔼 New High: ₹{highest_price}")
-                send_telegram(f"🔼 New High: ₹{highest_price}")
-            # 🟢 Start trailing after ₹1 profit
-            if highest_price >= entry_price + trail_start:
-                trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
-                print(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
-                send_telegram(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
-
-                #NEWCHANGE
-                # print("Waiting for 8 sec to have momentum")
-                # send_telegram("Waiting for 8 sec to have momentum")
-                # time.sleep(8)
-                #NEWCHANGE
-                ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay = 0)
-                if ltp <= trail_exit:
-                    print(f"🔻 Trailing HIT @ {ltp}")
-                    send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    place_market_order_groww(instrument, qty, "SELL", "MIS")
-                    play_sound_async(SOUND_PROFIT)
-
-                    profit = (ltp - entry_price) * qty
-                    log_trade_to_excel(
-                        instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, qty, profit
-                    )
-                    print("Waiting for new moment now for 1 min")
-                    time.sleep(60)
-                    break
-
-            # ⏰ SAFETY TIME EXIT
-            if time.time() - start_time >= max_time:
-                print("⏰ Max trail time reached — exiting")
-                send_telegram("⏰ Max trail time reached — exiting")
-                place_market_order_groww(instrument, qty, "SELL", "MIS")
-                play_sound_async(SOUND_PROFIT)
-
-                ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
-                profit = (ltp_now - entry_price) * qty
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp_now, qty, profit
-                )
-                break
-
-            time.sleep(poll)
-
-        return  # ✅ end of auto mode execution
-
-    else:
-        parsed = parse_cp_command(command)
-        if not parsed:
-            print("❌ Could not parse command.")
+        # STATUS VALIDATION
+        # --- Wait until BUY order is EXECUTED or COMPLETED ---
+        if order_id:
+            buy_status = wait_for_order_status(order_id, access_token, "BUY")
+            if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
+                return
+        else:
+            print("❌ No BUY order ID received. Aborting trade.")
             return
 
-        instrument = find_instrument_from_command(command, instruments_data)
-        if not instrument:
-            print("❌ Instrument not found in instrument master.")
+        avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+        if not avg_price or not executed_qty:
+            print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
             return
+        qty = executed_qty # Use the actual executed quantity
+        print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {qty}")
+        send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={qty}")
 
-        lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
-        quantity = parsed["lots"] * lot_size
-
-        ltp_before = get_ltp_for_instrument(instrument, access_token)
-        if ltp_before is None:
-            print("❌ Could not fetch LTP before placing order.")
-            return
-
-        entry_price = round(float(ltp_before), 2)
-        send_telegram(f"entry price: {entry_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
-        print(f"entry price: {entry_price}")
-
-        # Place BUY @ MARKET
-        try:
-            order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
-            order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
-            print("✅ Buy Order placed:", order_resp)
-        except Exception as e:
-            print(f"❌ Buy order failed: {e}")
-            send_telegram(f"❌ Buy order failed: {e}")
-            return
-
-        # ================= TRAILING LOGIC =================
-        highest_price = entry_price+1
+        highest_price = avg_price
         start_time = time.time()
 
         trail_start = CONFIG["TRAIL_START_PROFIT"]
@@ -1147,77 +1278,94 @@ def place_cp_order(command, is_auto=False):
         send_telegram("📈 Trailing started")
 
         while True:
-            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False)
+            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
             if ltp is None:
                 time.sleep(poll)
                 continue
 
             ltp = float(ltp)
+            sell_reason = None
 
-            # 🔴 HARD STOP LOSS
+            # 1. Check exit conditions
             if ltp <= hard_sl:
-                print(f"🛑 HARD SL HIT @ {ltp}")
-                send_telegram(f"🛑 HARD SL HIT @ {ltp}")
-                place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                play_sound_async(SOUND_SL)
-                profit = (ltp - entry_price) * quantity
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, quantity, profit
-                )
-                break
+                sell_reason = f"🛑 HARD SL HIT @ {ltp}"
+            elif time.time() - start_time >= max_time:
+                sell_reason = "⏰ Max trail time reached — exiting"
+            else:
+                if ltp > highest_price:
+                    highest_price = ltp
+                    print(f"🔼 New High: ₹{highest_price}")
+                    send_telegram(f"🔼 New High: ₹{highest_price}")
 
-            # 🔼 Update highest price
-            if ltp > highest_price:
-                highest_price = ltp
-                print(f"🔼 New High: ₹{highest_price}")
+                if highest_price >= avg_price + trail_start:
+                    trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
+                    print(f"📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                    send_telegram(f"📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                    if ltp <= trail_exit:
+                        sell_reason = f"🔻 Trailing HIT @ {ltp}"
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
 
-            # 🟢 Start trailing after ₹1 profit
-            if highest_price >= entry_price + trail_start:
-                trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
-                print(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
+            # 2. If an exit condition is met, place and verify sell order
+            if sell_reason:
+                print(sell_reason)
+                send_telegram(sell_reason)
 
-                if ltp <= trail_exit:
-                    print(f"🔻 Trailing HIT @ {ltp}")
-                    send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                    print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-                    send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-                    play_sound_async(SOUND_PROFIT)
+                try:
+                    order_resp = place_market_order_groww(instrument, qty, "SELL", "MIS")
+                    sell_order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
+                    print(f"SELL Order placed: {order_resp}")
+                    print(f"SELL Order id: {sell_order_id} == [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                    send_telegram(f"SELL Order placed: {sell_order_id}")
+                except Exception as e:
+                    print(f"❌ Critical: SELL order placement failed: {e}")
+                    send_telegram(f"❌ Critical: SELL order placement failed: {e}")
+                    break # Exit loop on failure
 
-                    profit = (ltp - entry_price) * quantity
-                    log_trade_to_excel(
-                        instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, quantity, profit
-                    )
-                    break
+                # Verify SELL order
+                if sell_order_id:
+                    sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
+                    if sell_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                        print(f"⚠️ SELL order did not execute successfully. Status: {sell_status}")
+                        send_telegram(f"⚠️ SELL order failed. Status: {sell_status}")
+                        break # Exit loop
 
-            # ⏰ SAFETY TIME EXIT
-            if time.time() - start_time >= max_time:
-                print("⏰ Max trail time reached — exiting")
-                send_telegram("⏰ Max trail time reached — exiting")
-                place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                play_sound_async(SOUND_PROFIT)
+                    sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                    if sell_price and sold_qty:
+                        print(f"🎯 SELL EXECUTED @ ₹{sell_price} | Qty={sold_qty}")
+                        send_telegram(f"🎯 SELL EXECUTED @ ₹{sell_price} | Qty={sold_qty}")
+                        profit = (sell_price - avg_price) * sold_qty
+                        print(f"🔻 Trailing HIT @ sell_price = {sell_price}")
+                        print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
+                        send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
+                        play_sound_async(SOUND_PROFIT)
+                        log_trade_to_excel(
+                            instrument.get("internal_trading_symbol"),
+                            avg_price, sell_price, sold_qty, profit
+                        )
+                    else:
+                        print("⚠️ Could not get executed price for SELL order. Logging with LTP.")
+                        profit = (ltp - avg_price) * qty
+                        log_trade_to_excel(
+                            instrument.get("internal_trading_symbol"),
+                            avg_price, ltp, qty, profit
+                        )
+                else:
+                    print("⚠️ No SELL order ID received. Cannot verify status or log trade accurately.")
 
-                ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
-                profit = (ltp_now - entry_price) * quantity
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp_now, quantity, profit
-                )
-                break
+                print("Waiting for new moment now for 1 min")
+                time.sleep(60)
+                break # Exit the while loop after processing the sell
 
             time.sleep(poll)
 
-        print("Waiting for 1 min to get another data.")
+        return  # ✅ end of auto mode execution
+
+    else:
+        print("Not supporting Manual Trades, Switch to Manual Mode")
         time.sleep(60)
         return
 
-
-
-
 # ----------------- Auto mode runner (momentum + premium) -----------------
-
 
 def auto_mode_runner():
     cfg = CONFIG
@@ -1269,6 +1417,120 @@ def auto_mode_runner():
 
         if market_direction == instrument_type:
             print(f"✅ Market direction CONFIRMS momentum {market_direction} → proceeding with order.")
+
+            # Check Technicals (EMA/SMA/RSI/ADX/VWAP)
+            print(f"📊 Checking Technicals for {symbol}...")
+            techs = get_technicals(groww_symbol, groww)
+            if techs:
+                ema_9 = techs["ema_9"]
+                sma_20 = techs["sma_20"]
+                curr_ltp = techs["ltp"]
+                rsi = techs["rsi"]
+                adx = techs["adx"]
+                vwap = techs["vwap"]
+
+                print(f"   LTP: {curr_ltp}, EMA(9): {ema_9:.2f}, RSI: {rsi:.2f}, ADX: {adx:.2f}, VWAP: {vwap:.2f}, SMA20: {sma_20:.2f}")
+
+                # 1. EMA Check
+                if cfg.get("ENABLE_EMA_CHECK") and ema_9 and curr_ltp < ema_9:
+                    print(f"❌ Technical Filter: Price {curr_ltp} is below EMA 9 {ema_9:.2f}. Skipping.")
+                    send_telegram(f"❌ Technical Filter: Price below EMA 9. Skipping.")
+                    time.sleep(5)
+                    continue
+
+                # 2. ADX Check (Trend Strength)
+                if cfg.get("ENABLE_ADX_CHECK") and adx < 20:
+                    print(f"❌ Technical Filter: ADX {adx:.2f} is too low (Choppy Market). Skipping.")
+                    send_telegram(f"❌ Technical Filter: ADX too low ({adx:.2f}). Skipping.")
+                    time.sleep(5)
+                    continue
+
+                # 3. RSI Check (Overbought/Momentum)
+                if cfg.get("ENABLE_RSI_CHECK"):
+                    if rsi > 75:
+                        print(f"❌ Technical Filter: RSI {rsi:.2f} is Overbought (>75). Skipping.")
+                        send_telegram(f"❌ Technical Filter: RSI Overbought ({rsi:.2f}). Skipping.")
+                        time.sleep(5)
+                        continue
+
+                    if rsi < 45:
+                        print(f"❌ Technical Filter: RSI {rsi:.2f} is too weak (<45). Skipping.")
+                        send_telegram(f"❌ Technical Filter: RSI Weak ({rsi:.2f}). Skipping.")
+                        time.sleep(5)
+                        continue
+
+                # 4. VWAP Check (Trend Confirmation)
+                if cfg.get("ENABLE_VWAP_CHECK") and vwap and curr_ltp < vwap:
+                    print(f"❌ Technical Filter: Price {curr_ltp} is below VWAP {vwap:.2f}. Skipping.")
+                    send_telegram(f"❌ Technical Filter: Price below VWAP. Skipping.")
+                    time.sleep(5)
+                    continue
+
+            else:
+                print("⚠️ Could not calculate technicals. Proceeding with caution.")
+
+            opt = get_option_data_from_trading_symbol(order_details["symbol"])
+            print(f"Checking delta/theta/OI for selected option === {order_details['symbol']}")
+
+            iv = opt.get("iv", 0)
+            delta = opt.get("delta", 0)
+            oi = opt.get("open_interest", 0)
+            volume = opt.get("volume", 0)
+            gamma = opt.get("gamma", 0)
+
+            # add volume here 👇
+            order_details["volume"] = volume
+            order_details["delta"] = delta
+            order_details["iv"] = iv
+            order_details["oi"] = oi
+            order_details["gamma"] = gamma
+
+            # ✅ Correct logical conditions
+            if cfg.get("ENABLE_LOGICAL_CONDITIONS_CHECK") and (iv > 12 or abs(delta) < 0.45 or oi < 25000 or volume < 35000 or volume < 0.4 * oi or gamma < 0.0018):
+                print(
+                    f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                    f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                    f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+                )
+
+                print("❌ Option conditions not satisfied, skipping...")
+                failed_reasons = []
+
+                if iv > 12:
+                    failed_reasons.append(f"IV too high ({iv:.2f})")
+
+                if abs(delta) < 0.45:
+                    failed_reasons.append(f"Delta too low ({delta:.3f})")
+
+                if oi < 25000:
+                    failed_reasons.append(f"OI too low ({oi})")
+
+                if volume < 35000:
+                    failed_reasons.append(f"Volume too low ({volume})")
+
+                if volume < 0.4 * oi:
+                    failed_reasons.append(f"Volume/OI weak ({volume}/{oi})")
+
+                if gamma < 0.0018:
+                    failed_reasons.append(f"Gamma too low ({gamma:.5f})")
+
+                if failed_reasons:
+                    print(
+                        f"❌ Skipping {opt['trading_symbol']} | "
+                        f"LTP={opt['ltp']} | "
+                        f"IV={iv:.2f}, Δ={delta:.3f}, Γ={gamma:.5f}, OI={oi}, Vol={volume}"
+                    )
+                    print("   Reasons:")
+                    for r in failed_reasons:
+                        print(f"   • {r}")
+                    continue
+
+            else:
+                print(
+                    f"delta = {opt.get('delta')}, volume = {opt.get('volume')}, iv = {opt.get('iv')}, "
+                    f"gamma = {opt.get('gamma')}, vega = {opt.get('vega')}, rho = {opt.get('rho')}, "
+                    f"open_interest = {opt.get('open_interest')}, ltp = {opt.get('ltp')}"
+                )
 
             # 👇 Manual confirmation
 

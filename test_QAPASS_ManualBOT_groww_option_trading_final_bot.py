@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pyotp
 from openpyxl import Workbook, load_workbook
 from playsound3 import playsound
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Lock
 import requests
 import sys
@@ -25,9 +25,13 @@ import time
 import os
 import sys
 from datetime import datetime
+import numpy as np
 
-MOMENTUM_SAMPLES = 5
-MOMENTUM_DELAY = 1
+# ENHANCEMENT: Use a session for persistent HTTP connections (faster polling)
+session = requests.Session()
+
+MOMENTUM_SAMPLES = 3  # Reduced from 5 for faster execution
+MOMENTUM_DELAY = 0.5  # Reduced from 1 second
 
 def setup_persistent_logger():
     """Creates a local 'logs' folder beside the script and logs all console output there."""
@@ -96,6 +100,7 @@ TELEGRAM_CHAT_ID = "PUT_YOUR_CHAT_ID_HERE"
 # Sound files (ensure these exist in script folder or provide full path)
 SOUND_PROFIT = "coin.mp3"
 SOUND_SL = "SL_HIT.mp3"
+SOUND_user_input = "User_input.WAV"
 
 # Trade defaults for Groww
 DEFAULT_PRODUCT = "MIS"   # intraday; change to "NRML" if you want positional
@@ -144,9 +149,9 @@ def send_telegram(message: str):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {"chat_id": CHAT_ID, "text": message}
-        requests.post(url, data=payload)
+        requests.post(url, data=payload, timeout=3)  # 3-second timeout
     except Exception as e:
-        print(f"⚠️ Telegram Error: {e}")
+        pass  # Silently ignore Telegram errors to avoid spam
 
 def play_sound_async(filename):
     try:
@@ -200,7 +205,7 @@ def csv_to_json(csv_file_path, json_file_path=None):
 
 ltp_lock = threading.Lock()
 
-def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO"):
+def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO", delay=0.05, max_retries=2):
     """
     Fetches the latest traded price (LTP) for a given F&O instrument using Groww's authenticated API.
     Thread-safe with a global lock to prevent too-frequent API calls.
@@ -222,8 +227,9 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO
 
         # 🔒 Lock ensures one API call at a time
         with ltp_lock:
-            resp = requests.get(url, headers=headers, timeout=10)
-            time.sleep(0.5)  # ⏳ short delay to respect Groww API rate limits
+            resp = session.get(url, headers=headers, timeout=5)  # Use session + reduced timeout
+            if delay > 0:
+                time.sleep(delay)  # ⏳ short delay to respect Groww API rate limits
 
         if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} error fetching LTP: {resp.text}")
@@ -292,18 +298,29 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2025-12-30",  #this needs to be same as expiry_date in json file of instruments # format DD/MM/YYYY to match instruments JSON (example)
+    "expiry": "2026-02-05",  #this needs to be same as expiry_date in json file of instruments # format DD/MM/YYYY to match instruments JSON (example)
     "min_premium": 80,
     "max_premium": 130,
-    "lots": 14,
+    "lots": 10,
     "book_profit": 1050,
     "target_pnl": 6000,
-    "spot":get_nifty_spot_price(access_token)
+    "spot":get_nifty_spot_price(access_token),
+    "TRAIL_START_PROFIT": 1,  # Start trailing after this profit per unit (in points)
+    "TRAIL_STEP": .75,  # Trailing step (in points)
+    "POLL_INTERVAL": 0.2,  # Poll interval in seconds (Reduced for faster SL hit)
+    "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
+    "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
+    "user_confirmation_needed": False,   # or False
+    "ENABLE_EMA_CHECK": True,
+    "ENABLE_ADX_CHECK": True,
+    "ENABLE_RSI_CHECK": True,
+    "ENABLE_VWAP_CHECK": True,
+    "ENABLE_LOGICAL_CONDITIONS_CHECK": True,
 }
 
 # Load instruments_data
 def load_instruments_from_json(json_path=None):
-    """
+    """ß
     Loads instruments from JSON (or CSV → JSON if convert_csv_to_json = 'yes'),
     but only keeps instruments:
       - matching expiry from CONFIG
@@ -401,179 +418,419 @@ def cmd_expiry_to_date(expiry_token):
     mm = MONTHS.get(mon_abbr[:3], None)
     if not mm:
         return None
-    return f"{dd}/{mm}/{yyyy}"
+    return f"{yyyy}-{mm}-{dd}"
+
 
 # ----------------- Command parser -----------------
 def parse_cp_command(command):
     """
     Parse strings like:
-      Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
+      14 NIFTY30DEC2525950CE
     Returns dict or None
     """
-    pattern = r'(?i)^\s*(Buy|Sell)\s+(\d+)\s+([A-Z]+)(\d{1,2}[A-Z]{3}\d{2,4})(\d+)(CE|PE)\s+at\s+CP\s+and\s+Book\s+at\s+(\d+(\.\d+)?)\s*$'
+    # Pattern to match: <lots> <TRADING_SYMBOL>
+    pattern = r'^\s*(\d+)\s+([A-Z0-9]+)\s*$'
     m = re.match(pattern, command.strip())
     if not m:
         return None
-    action = m.group(1).upper()
-    lots = int(m.group(2))
-    underlying = m.group(3).upper()
-    expiry_token = m.group(4).upper()
-    strike = m.group(5)
-    opt_type = m.group(6).upper()
-    target_profit = float(m.group(7))
-    expiry_date = cmd_expiry_to_date(expiry_token)
+
+    lots = int(m.group(1))
+    trading_symbol_str = m.group(2).upper()
+
     return {
-        "action": action,
         "lots": lots,
+        "trading_symbol_str": trading_symbol_str,
+    }
+
+def parse_trading_symbol_string(trading_symbol_str: str):
+    """
+    Parses a trading symbol string like 'NIFTY30DEC2525950CE'
+    into its components.
+    Returns dict or None.
+    """
+    # Pattern: UNDERLYING(NIFTY) DAY(30) MONTH(DEC) YEAR(25) STRIKE(25950) TYPE(CE)
+    pattern = r'([A-Z]+)(\d{1,2}[A-Z]{3}\d{2,4})(\d+)(CE|PE)'
+    m = re.match(pattern, trading_symbol_str)
+    if not m:
+        print(f"❌ Could not parse trading symbol string: {trading_symbol_str}")
+        return None
+
+    underlying = m.group(1).upper()
+    expiry_token = m.group(2).upper()
+    strike = m.group(3)
+    opt_type = m.group(4).upper()
+    expiry_date = cmd_expiry_to_date(expiry_token)
+
+    if not expiry_date:
+        print(f"❌ Could not derive expiry date from token: {expiry_token}")
+        return None
+
+    return {
         "underlying": underlying,
         "expiry_token": expiry_token,
         "expiry_date": expiry_date,
         "strike": strike,
-        "opt_type": opt_type,
-        "target_profit": target_profit
+        "opt_type": opt_type
     }
 
-# ----------------- Find instrument in instruments_data -----------------
-def find_instrument_from_command(command: str, instruments: list):
-    import re
-    # Example command: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050
-    pattern = r'([A-Z]+)(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)'
-    match = re.search(pattern, command.upper())
-    if not match:
-        print("❌ Could not parse symbol from command.")
-        return None
-
-    underlying, day, mon, yr, strike, opt_type = match.groups()
-    expiry_date = f"20{yr}-{mon_to_number(mon)}-{day}"
-
-    # Find match in JSON
+def find_instrument_by_details(underlying, expiry_date, strike, opt_type, instruments: list):
+    """
+    Finds an instrument in the master list based on parsed details.
+    """
     for inst in instruments:
         if (
             inst["underlying_symbol"].upper() == underlying
             and inst["expiry_date"] == expiry_date
-            and inst["strike_price"] == strike
+            and str(inst["strike_price"]) == strike
             and inst["instrument_type"].upper() == opt_type
         ):
             return inst
-
-    print("❌ Instrument not found in instrument master.")
+    print(f"❌ Instrument not found in instrument master for {underlying} {expiry_date} {strike} {opt_type}.")
     return None
 
 
-def mon_to_number(mon: str):
-    mapping = {
-        "JAN": "01", "FEB": "02", "MAR": "03", "APR": "04",
-        "MAY": "05", "JUN": "06", "JUL": "07", "AUG": "08",
-        "SEP": "09", "OCT": "10", "NOV": "11", "DEC": "12"
-    }
-    return mapping.get(mon.upper(), "00")
+def calculate_sma(prices, period):
+    if len(prices) < period:
+        return None
+    return np.mean(prices[-period:])
 
 
-import requests, time
+def calculate_ema(prices, period):
+    if len(prices) < period:
+        return None
+    # Initial SMA
+    ema = np.mean(prices[:period])
+    multiplier = 2 / (period + 1)
+    for price in prices[period:]:
+        ema = (price - ema) * multiplier + ema
+    return ema
 
-import requests
-import json
 
-import requests
+def calculate_rsi(prices, period=14):
+    prices = np.array(prices)
+    if len(prices) < period + 1:
+        return 50  # Default neutral
 
-def get_order_status(order_id, access_token):
-    """
-    Fetch the status of a Groww order (CASH, F&O, etc.)
-    Works with official Groww REST API response format.
-    """
-    url = f"https://api.groww.in/v1/order/status/{order_id}?segment=FNO"
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {access_token}",
-        "X-API-VERSION": "1.0"
-    }
+    deltas = np.diff(prices)
+    gains = np.maximum(deltas, 0)
+    losses = -np.minimum(deltas, 0)
 
-    try:
-        resp = requests.get(url, headers=headers, timeout=8)
-        resp.raise_for_status()  # raises for non-200 responses
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
 
-        data = resp.json()  # Proper JSON response from Groww
-        print("🔍 Order status response:", data)
+    if avg_loss == 0:
+        return 100
 
-        # ✅ Extract status cleanly
-        payload = data.get("payload", {})
-        status = payload.get("order_status")
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
 
-        return status
+    # Wilder's Smoothing
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
-    except requests.exceptions.JSONDecodeError:
-        print("⚠️ Error: Non-JSON response received.")
-        print("Response text:", resp.text)
+        if avg_loss == 0:
+            rsi = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+def calculate_adx(highs, lows, closes, period=14):
+    if len(highs) < period * 2:
+        return 25  # Default
+
+    highs = np.array(highs)
+    lows = np.array(lows)
+    closes = np.array(closes)
+
+    tr = np.zeros(len(highs))
+    plus_dm = np.zeros(len(highs))
+    minus_dm = np.zeros(len(highs))
+
+    for i in range(1, len(highs)):
+        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+
+        up_move = highs[i] - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
+
+        if up_move > down_move and up_move > 0:
+            plus_dm[i] = up_move
+        else:
+            plus_dm[i] = 0
+
+        if down_move > up_move and down_move > 0:
+            minus_dm[i] = down_move
+        else:
+            minus_dm[i] = 0
+
+    # Smoothing
+    def smooth(data, period):
+        smoothed = np.zeros_like(data)
+        if len(data) > period:
+            smoothed[period] = np.mean(data[1:period + 1])  # Initial SMA
+            for i in range(period + 1, len(data)):
+                smoothed[i] = (smoothed[i - 1] * (period - 1) + data[i]) / period
+        return smoothed
+
+    atr = smooth(tr, period)
+    plus_di = 100 * smooth(plus_dm, period) / (atr + 1e-9)  # Avoid div by zero
+    minus_di = 100 * smooth(minus_dm, period) / (atr + 1e-9)
+
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
+    adx = smooth(dx, period)
+
+    return adx[-1]
+
+
+def calculate_vwap(prices, volumes):
+    prices = np.array(prices)
+    volumes = np.array(volumes)
+    if len(prices) == 0 or len(volumes) == 0 or None in volumes:
         return None
 
-    except Exception as e:
-        print(f"⚠️ Error fetching order status: {e}")
-        return None
+    vwap = np.cumsum(prices * volumes) / np.cumsum(volumes)
+    return vwap[-1]
+
+def calculate_atr(high, low, close, period=14):
+    """Calculates the Average True Range (ATR)."""
+    if len(high) < period:
+        return 0
+    high = np.array(high)
+    low = np.array(low)
+    close = np.array(close)
+    tr1 = high - low
+    tr2 = np.abs(high - np.roll(close, 1))
+    tr3 = np.abs(low - np.roll(close, 1))
+    tr = np.amax((tr1, tr2, tr3), axis=0)
+    atr = calculate_ema(tr, period)  # Use EMA for smoothing ATR
+    return atr if atr is not None else 0
 
 
-import time
-from datetime import datetime, timedelta, timezone
-
-def get_recent_market_direction(symbol, groww):
+def get_technicals(symbol, groww_client, interval="1minute", segment="FNO", timeout=10):
     """
-    Returns 'CE' if recent 5-min direction is upward (bullish),
-    'PE' if downward (bearish), or None if uncertain.
-    Also prints the equivalent cURL command.
+    Fetch technical indicators with timeout protection.
+    Returns None if API call fails or times out.
     """
     try:
-        # Current time and 5 minutes earlier
+        # Fetch enough data for EMA 20/SMA 20/RSI 14/ADX 14.
+        # Increased to 120 mins for better ADX smoothing
         end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=3)
+        start_time = end_time - timedelta(minutes=120)
 
-        # Convert to string format accepted by Groww API
-        end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
-        start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
-        # Construct the Groww candle API URL
-        url = (
-            f"https://api.groww.in/v1/historical/candles?"
-            f"exchange=NSE&segment=FNO&groww_symbol={symbol}"
-            f"&start_time={start_time_str}"
-            f"&end_time={end_time_str}"
-            f"&candle_interval=1minute"
-        )
+        print(f"🔄 Fetching historical candles for {symbol}...")
+        
+        # Add timeout protection using threading
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Historical candles fetch timed out")
+        
+        # Set timeout alarm (Unix-based systems only)
+        try:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout)
+        except:
+            pass  # Windows doesn't support signal.SIGALRM
+        
+        try:
+            historical = groww_client.get_historical_candles(
+                groww_symbol=symbol,
+                exchange=groww_client.EXCHANGE_NSE,
+                segment=segment,
+                start_time=start_str,
+                end_time=end_str,
+                candle_interval=interval
+            )
+        finally:
+            try:
+                signal.alarm(0)  # Cancel alarm
+            except:
+                pass
 
-        # Print cURL command for debugging
-        print("\n🌀 Generated cURL for Groww Candle API:")
-        print(f"curl --location '{url}' \\")
-        print("  --header 'Accept: application/json' \\")
-        print(f"  --header 'Authorization: Bearer {access_token}' \\")
-        print("  --header 'X-API-VERSION: 1.0'\n")
-
-        # Fetch last 5-min candle via Groww SDK
-        historical = groww.get_historical_candles(
-            groww_symbol=symbol,
-            exchange=groww.EXCHANGE_NSE,
-            segment=groww.SEGMENT_FNO,
-            start_time=start_time_str,
-            end_time=end_time_str,
-            candle_interval="1minute" # 1-min candles for better precision
-        )
-
+        if not historical:
+            print("⚠️ No historical data returned")
+            return None
+            
         candles = historical.get("candles", [])
-        if not candles:
-            print("⚠️ No recent candle data found.")
+        if not candles or len(candles) < 30:
+            print(f"⚠️ Insufficient candles: {len(candles) if candles else 0}")
             return None
 
-        first_open = candles[0][1]
-        last_close = historical.get("closing_price")
+        print(f"✅ Fetched {len(candles)} candles")
+        
+        # Groww candles: [timestamp, open, high, low, close, volume]
+        opens = [c[1] for c in candles]
+        highs = [c[2] for c in candles]
+        lows = [c[3] for c in candles]
+        close_prices = [c[4] for c in candles]
 
-        if "PE" in symbol:
-            direction = "PE" if last_close > first_open else "CE"
-        else:  # CE symbol
-            direction = "CE" if last_close > first_open else "PE"
+        vwap = None
+        # VWAP is only applicable for instruments with volume
+        if segment == "FNO":
+            volumes = [c[5] for c in candles]
+            vwap = calculate_vwap(close_prices, volumes)
 
-        print(f"📊 3-min candle trend → {direction} (O1={first_open}, C3={last_close})")
-        return direction
+        # If VWAP couldn't be calculated, use last price as a fallback
+        if vwap is None:
+            vwap = close_prices[-1]
 
+        sma_20 = calculate_sma(close_prices, 20)
+        ema_9 = calculate_ema(close_prices, 9)
+        rsi_14 = calculate_rsi(close_prices, 14)
+        adx_14 = calculate_adx(highs, lows, close_prices, 14)
+        atr = calculate_atr(highs, lows, close_prices)
+
+
+        current_price = close_prices[-1]
+
+        return {
+            "sma_20": sma_20,
+            "ema_9": ema_9,
+            "rsi": rsi_14,
+            "adx": adx_14,
+            "vwap": vwap,
+            "ltp": current_price,
+            "atr": atr
+        }
     except Exception as e:
-        print("⚠️ Error fetching recent market direction:", e)
+        print(f"⚠️ Error fetching technicals: {e}")
         return None
+
+# --- START: Caching layer to prevent API rate limiting ---
+_option_chain_cache = {}
+_option_chain_cache_lock = threading.Lock()
+CACHE_EXPIRY_SECONDS = 15  # Cache for 15 seconds
+_last_api_call_time = 0
+_api_call_lock = threading.Lock()
+
+def _get_full_option_chain_cached(underlying, expiry_date, access_token):
+    """Cached option chain fetcher with rate limit handling"""
+    global _last_api_call_time
+    cache_key = (underlying, expiry_date)
+    now = time.time()
+
+    # Return cached if fresh
+    cached_payload, timestamp = _option_chain_cache.get(cache_key, (None, 0))
+    if cached_payload and (now - timestamp) < CACHE_EXPIRY_SECONDS:
+        return cached_payload
+
+    with _option_chain_cache_lock:
+        # Double-check after lock
+        cached_payload, timestamp = _option_chain_cache.get(cache_key, (None, 0))
+        if cached_payload and (time.time() - timestamp) < CACHE_EXPIRY_SECONDS:
+            return cached_payload
+
+        url = f"https://api.groww.in/v1/option-chain/exchange/NSE/underlying/{underlying}?expiry_date={expiry_date}"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}",
+            "X-API-VERSION": "1.0"
+        }
+
+        with _api_call_lock:
+            time_since_last = time.time() - _last_api_call_time
+            if time_since_last < 0.2:
+                time.sleep(0.2 - time_since_last)
+            
+            resp = session.get(url, headers=headers, timeout=8)
+            _last_api_call_time = time.time()
+
+        if resp.status_code != 200:
+            raise Exception(f"HTTP {resp.status_code}: {resp.text}")
+
+        data = resp.json()
+        if data.get("status") != "SUCCESS":
+            raise Exception("Failed to fetch option chain")
+
+        payload = data["payload"]
+        _option_chain_cache[cache_key] = (payload, time.time())
+        return payload
+
+# --- END: Caching layer ---
+
+
+def get_option_data_from_trading_symbol(
+    trading_symbol: str,
+    exchange: str = "NSE",
+    underlying: str = "NIFTY"
+):
+    """
+    Fetch delta, theta, OI, LTP, IV, volume etc. for a given trading_symbol
+    using a cached Groww Option Chain API call
+    """
+    expiry_date = CONFIG["expiry"].strip()
+
+    try:
+        payload = _get_full_option_chain_cached(underlying, expiry_date, access_token)
+    except Exception as e:
+        raise e
+
+    strikes = payload["strikes"]
+    underlying_ltp = payload["underlying_ltp"]
+
+    # 🔍 Find this trading_symbol in option chain
+    for strike_str, opt_data in strikes.items():
+        for opt_type in ("CE", "PE"):
+            opt = opt_data.get(opt_type)
+            if not opt:
+                continue
+
+            if opt.get("trading_symbol") == trading_symbol:
+                greeks = opt.get("greeks", {})
+
+                return {
+                    "trading_symbol": trading_symbol,
+                    "option_type": opt_type,
+                    "strike": int(strike_str),
+                    "expiry": expiry_date,
+                    "ltp": opt.get("ltp"),
+                    "open_interest": opt.get("open_interest"),
+                    "volume": opt.get("volume"),
+                    "delta": greeks.get("delta"),
+                    "theta": greeks.get("theta"),
+                    "iv": greeks.get("iv"),
+                    "gamma": greeks.get("gamma"),
+                    "vega": greeks.get("vega"),
+                    "rho": greeks.get("rho"),
+                    "underlying_ltp": underlying_ltp
+                }
+
+    raise ValueError(f"{trading_symbol} not found in option chain")
+
+# ----------------- Prefetcher (background) -----------------
+def _option_chain_prefetcher_loop():
+    """Daemon loop to keep option-chain cache warm"""
+    cfg = CONFIG
+    underlying = cfg.get("index", "NIFTY")
+    expiry = cfg.get("expiry")
+    interval = 10  # Prefetch every 10 seconds
+
+    while True:
+        try:
+            _get_full_option_chain_cached(underlying, expiry, access_token)
+            time.sleep(interval)
+        except Exception as e:
+            print(f"⚠️ Prefetcher error: {e}")
+            time.sleep(30)
+
+def start_option_chain_prefetcher():
+    t = threading.Thread(target=_option_chain_prefetcher_loop, daemon=True, name="OptionChainPrefetcher")
+    t.start()
+
+# Start background prefetcher
+try:
+    start_option_chain_prefetcher()
+    print("🔁 Option-chain prefetcher started.")
+except Exception as e:
+    print(f"⚠️ Failed to start prefetcher: {e}")
+
+# ----------------- End prefetcher -----------------
 
 
 # ----------------- Place orders with Groww -----------------
@@ -622,8 +879,6 @@ def round_to_nearest_5_paise(price):
     return round(round(price * 20) / 20, 2)
 
 # ----------------- Momentum sampling -----------------
-import numpy as np
-import time
 
 def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOMENTUM_DELAY=MOMENTUM_DELAY, threshold=0.25):
     """
@@ -883,6 +1138,40 @@ def detect_option_type_parallel(index, expiry, min_p, max_p, lots, funds_buffer=
         r = results["PE"]
         return "PE", r["instrument"], r["ltp"], r["lot_size"]
 
+def get_order_status(order_id, access_token):
+    """
+    Fetch the status of a Groww order (CASH, F&O, etc.)
+    Works with official Groww REST API response format.
+    """
+    url = f"https://api.groww.in/v1/order/status/{order_id}?segment=FNO"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0"
+    }
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=8)
+        resp.raise_for_status()  # raises for non-200 responses
+
+        data = resp.json()  # Proper JSON response from Groww
+        print("🔍 Order status response:", data)
+
+        # ✅ Extract status cleanly
+        payload = data.get("payload", {})
+        status = payload.get("order_status")
+
+        return status
+
+    except requests.exceptions.JSONDecodeError:
+        print("⚠️ Error: Non-JSON response received.")
+        print("Response text:", resp.text)
+        return None
+
+    except Exception as e:
+        print(f"⚠️ Error fetching order status: {e}")
+        return None
+
 
 
 def wait_for_order_status(order_id, access_token, order_type="BUY"):
@@ -958,20 +1247,32 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
 def place_cp_order(command, is_auto=False):
     global buy_status
     if is_auto:
-        print("Auto mode not supported in this bot, only mnaual mode")
+        print("Auto mode not supported in this bot, only manual mode")
     else:
-        parsed = parse_cp_command(command)
-        if not parsed:
-            print("❌ Could not parse command.")
+        parsed_command = parse_cp_command(command)
+        if not parsed_command:
+            print("❌ Invalid command format. Expected: <lots> <TRADING_SYMBOL>")
             return
 
-        instrument = find_instrument_from_command(command, instruments_data)
+        lots = parsed_command["lots"]
+        trading_symbol_str = parsed_command["trading_symbol_str"]
+
+        parsed_symbol_details = parse_trading_symbol_string(trading_symbol_str)
+        if not parsed_symbol_details:
+            return # Error message already printed by parse_trading_symbol_string
+
+        instrument = find_instrument_by_details(
+            parsed_symbol_details["underlying"],
+            parsed_symbol_details["expiry_date"],
+            parsed_symbol_details["strike"],
+            parsed_symbol_details["opt_type"],
+            instruments_data
+        )
         if not instrument:
-            print("❌ Instrument not found in instrument master.")
-            return
+            return # Error message already printed by find_instrument_by_details
 
         lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
-        quantity = parsed["lots"] * lot_size
+        quantity = lots * lot_size
 
         ltp_before = get_ltp_for_instrument(instrument, access_token)
         if ltp_before is None:
@@ -982,12 +1283,40 @@ def place_cp_order(command, is_auto=False):
         send_telegram(f"entry price: {entry_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
         print(f"entry price: {entry_price}")
 
-        # compute target per unit and target price
-        profit_total = parsed["target_profit"]
-        profit_per_unit = profit_total / quantity
-        target_price = round_to_nearest_5_paise(entry_price + profit_per_unit)
+        # Fetch technicals for ATR (optional - will use default if fails)
+        print("📊 Attempting to fetch technicals for ATR calculation...")
+        atr = CONFIG["HARD_SL_POINTS"]  # Default fallback
+        try:
+            from threading import Thread
+            import queue
+            
+            result_queue = queue.Queue()
+            
+            def fetch_technicals():
+                try:
+                    techs = get_technicals(instrument['groww_symbol'], groww, segment="FNO")
+                    result_queue.put(techs)
+                except Exception as e:
+                    print(f"⚠️ Technicals fetch error: {e}")
+                    result_queue.put(None)
+            
+            thread = Thread(target=fetch_technicals, daemon=True)
+            thread.start()
+            thread.join(timeout=8)  # Wait max 8 seconds
+            
+            if not result_queue.empty():
+                techs = result_queue.get()
+                if techs and techs.get("atr"):
+                    atr = techs["atr"]
+                    print(f"✅ ATR fetched: {atr:.2f}")
+                else:
+                    print(f"⚠️ ATR not available, using default: {atr:.2f}")
+            else:
+                print(f"⏱ Technicals fetch timed out, using default SL: {atr:.2f}")
+        except Exception as e:
+            print(f"⚠️ Could not fetch technicals: {e}, using default: {atr:.2f}")
 
-        # Place BUY @ MARKET
+        # === BUY @ MARKET ===
         try:
             order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
             order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
@@ -998,70 +1327,169 @@ def place_cp_order(command, is_auto=False):
             return
 
         # STATUS VALIDATION
-        # --- Wait until BUY order is EXECUTED or COMPLETED ---
+        # REMOVE_COMMENT
         # if order_id:
         #     buy_status = wait_for_order_status(order_id, access_token, "BUY")
         #     if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-        #         print(f"⚠️ Skipping SELL due to BUY status: {buy_status}")
+        #         print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
         #         return
+        # else:
+        #     print("❌ No BUY order ID received. Aborting trade.")
+        #     return
+        # avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+        # TILLTHIS
 
-        # === SELL @ LIMIT (target) ===
-        try:
-            sell_resp = place_limit_order_groww(
-                instrument, quantity, price=target_price,
-                transaction_type="SELL", product="MIS"
-            )
-            sell_order_id = (
-                    sell_resp.get("payload", {}).get("groww_order_id")
-                    or sell_resp.get("groww_order_id")
-            )
-            print(f"✅ Target SELL placed @ {target_price}. Response:", sell_resp , {datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-            send_telegram(f"✅ Target SELL placed @ {target_price}, {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        except Exception as e:
-            print(f"❌ Failed to place SELL order: {e}")
-            send_telegram(f"❌ Failed to place SELL order: {e}")
+
+
+        #APPLY_COMMENT
+        avg_price=entry_price
+        executed_qty=quantity
+        #TILLTHIS
+
+        if not avg_price or not executed_qty:
+            print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
             return
+        quantity = executed_qty # Use the actual executed quantity
+        print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {quantity}")
+        send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={quantity}")
 
-        # STATUS VALIDATION
-        # --- Wait until SELL order EXECUTED or COMPLETED ---
-        # if sell_order_id:
-        #     sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
-        #     if sell_status in ["EXECUTED", "COMPLETED"]:
-        #         print(f"💰 Target HIT @ {target_price}")
-        #         send_telegram(f"💰 Target HIT @ {target_price}")
-        #         print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-        #         send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-        #         play_sound_async(SOUND_PROFIT)
-        #         total_profit = (target_price - entry_price) * quantity
-        #         log_trade_to_excel(
-        #             instrument.get("internal_trading_symbol"),
-        #             entry_price, target_price, quantity, total_profit
-        #         )
-        #         return
-        #
-        #     elif sell_status in ["FAILED", "REJECTED", "CANCELLED"]:
-        #         print(f"⚠️ SELL order failed with status {sell_status}")
-        #         send_telegram(f"⚠️ SELL order failed ({sell_status})")
-        #     else:
-        #         print("⏱ Target not hit yet — switching to LTP monitoring.")
+        highest_price = avg_price
+        start_time = time.time()
+        last_trail_exit = None  # Track last printed trail exit to avoid spam
+        last_heartbeat = time.time()  # Track heartbeat for alive signal
+
+        trail_start = CONFIG["TRAIL_START_PROFIT"]
+        trail_step = CONFIG["TRAIL_STEP"]
+        poll = CONFIG["POLL_INTERVAL"]
+        max_time = CONFIG["MAX_TRAIL_TIME"]
+        hard_sl = entry_price - (1.5 * atr)  # Dynamic SL based on 1.5 * ATR
+
+        print(f"📈 Trailing started... Dynamic SL: {hard_sl:.2f} (based on ATR: {atr:.2f})")
+        try:
+            send_telegram(f"📈 Trailing started... Dynamic SL: {hard_sl:.2f}")
+        except:
+            pass
 
         while True:
-            ltp_now = get_ltp_for_instrument(instrument, access_token)
-            if ltp_now is None:
+            # Heartbeat every 30 seconds to show script is alive
+            if time.time() - last_heartbeat >= 30:
+                print(f"💓 Monitoring... LTP last seen: ₹{ltp if 'ltp' in locals() else 'fetching...'}")
+                last_heartbeat = time.time()
+            
+            try:
+                ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+            except Exception as e:
+                print(f"⚠️ LTP fetch error (retrying): {e}")
+                time.sleep(poll)
+                continue
+                
+            if ltp is None:
+                print("⚠️ LTP is None (retrying...)")
+                time.sleep(poll)
                 continue
 
-            if ltp_now >= target_price:
-                print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-                send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-                play_sound_async(SOUND_PROFIT)
-                total_profit = (target_price - entry_price) * quantity
+            ltp = float(ltp)
+            sell_reason = None
+
+            # 1. Check exit conditions
+            if ltp <= hard_sl:
+                sell_reason = f"🛑 DYNAMIC SL HIT @ {ltp}"
+            elif time.time() - start_time >= max_time:
+                sell_reason = "⏰ Max trail time reached — exiting"
+            else:
+                if ltp > highest_price:
+                    highest_price = ltp
+                    print(f"🔼 New High: ₹{highest_price}")
+                    try:
+                        send_telegram(f"🔼 New High: ₹{highest_price}")
+                    except:
+                        pass
+
+                if highest_price >= avg_price + trail_start:
+                    trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
+                    
+                    # Only print if trail exit changed (avoid spam)
+                    if trail_exit != last_trail_exit:
+                        print(f"📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                        try:
+                            send_telegram(f"📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                        except:
+                            pass
+                        last_trail_exit = trail_exit
+                    
+                    if ltp <= trail_exit:
+                        sell_reason = f"🔻 Trailing HIT @ {ltp}"
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                        sell_price = ltp
+                        sold_qty = quantity
+
+            # 2. If an exit condition is met, place sell order and exit
+            if sell_reason:
+                print(sell_reason)
+                try:
+                    send_telegram(sell_reason)
+                except:
+                    pass
+
+                try:
+                    print(f"🔄 Placing SELL order for {quantity} units @ market price...")
+                    order_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                    sell_order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
+                    print(f"✅ SELL Order placed: {order_resp}")
+                    print(f"🆔 SELL Order ID: {sell_order_id} @ [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                    try:
+                        send_telegram(f"✅ SELL Order placed: {sell_order_id}")
+                    except:
+                        pass
+                    
+                    # Wait for SELL order to execute
+                    # if sell_order_id:
+                    #     sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
+                    #     if sell_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                    #         # Fetch actual executed price
+                    #         sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                    #         if sell_price and sold_qty:
+                    #             profit = (sell_price - avg_price) * sold_qty
+                    #             print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                    #             send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
+                    #             play_sound_async(SOUND_PROFIT if profit > 0 else SOUND_SL)
+                    #             log_trade_to_excel(
+                    #                 instrument.get("internal_trading_symbol"),
+                    #                 avg_price, sell_price, sold_qty, profit
+                    #             )
+                    #         else:
+                    #             print("⚠️ Could not get executed SELL price. Logging with LTP.")
+                    #             profit = (ltp - avg_price) * quantity
+                    #             log_trade_to_excel(
+                    #                 instrument.get("internal_trading_symbol"),
+                    #                 avg_price, ltp, quantity, profit
+                    #             )
+                    #     else:
+                    #         print(f"⚠️ SELL order failed with status: {sell_status}")
+                    #         send_telegram(f"⚠️ SELL failed: {sell_status}")
+                    # else:
+                    #     print("⚠️ No SELL order ID received.")
+                        
+                except Exception as e:
+                    print(f"❌ SELL order placement failed: {e}")
+                    send_telegram(f"❌ SELL failed: {e}")
+                
+                profit = (sell_price - avg_price) * sold_qty
+                print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                try:
+                    send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
+                except:
+                    pass
+                play_sound_async(SOUND_PROFIT if profit > 0 else SOUND_SL)
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
-                    entry_price, target_price, quantity, total_profit
-                )
-                break
+                    avg_price, sell_price, sold_qty, profit
+                                )
 
+                print("✅ Trade cycle completed. Ready for next trade.")
+                break  # Exit the trailing loop
 
+            time.sleep(poll)
 
 
 # ----------------- Auto mode runner (momentum + premium) -----------------
@@ -1077,62 +1505,19 @@ def auto_mode_runner():
     max_p = cfg["max_premium"]
     lots = cfg["lots"]
     book_profit = cfg["book_profit"]
-
     target_pnl = cfg["target_pnl"]
 
     while True:
-        opt_result = detect_option_type_parallel(index, expiry, min_p, max_p, lots)
-        if not opt_result:
-            print("❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...")
-            send_telegram("❌ Could not determine CE/PE momentum side. Retrying in 3 minutes...")
-            time.sleep(180)
-            continue
-
-        opt_type, instrument, ltp, lot_size = opt_result
-        if not instrument:
-            print("❌ No matching/affordable option found. Retrying...")
-            send_telegram("❌ No matching/affordable option found. Retrying...")
-            time.sleep(60)
-            continue
-
-        symbol = instrument.get("tradingsymbol") or instrument.get("symbol") or instrument.get("internal_trading_symbol")
-        instrument_type = instrument.get("instrument_type", "NA")
-        groww_symbol = instrument.get("groww_symbol")
-        print(f"✅ Selected: {symbol} ({instrument_type}) | LTP={ltp} | lot_size={lot_size} | groww_symbol={groww_symbol}")
-        send_telegram(f"✅ Selected: {symbol} ({instrument_type}) | LTP={ltp} | lot_size={lot_size} | groww_symbol={groww_symbol}")
-
-        # 🚀 Directly place the order (no string parsing)
-        order_details = {
-            "symbol": symbol,
-            "ltp": ltp,
-            "lots": lots,
-            "book_profit": float(book_profit),
-            "lot_size": lot_size,
-            "side": "BUY"
-        }
-
-        market_direction = get_recent_market_direction(groww_symbol, groww)
-        print(f"Market Direction: {market_direction}")
-        send_telegram(f"Market Direction: {market_direction}")
-
-        if market_direction == instrument_type:
-            print("✅ Market direction CONFIRMS momentum → proceeding with order.")
-            print(f"➡️ Placing auto order: {order_details} ====== [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
-            send_telegram(f"➡️ Placing auto order: {order_details} ====== [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
-            place_cp_order(order_details, is_auto=True)
-        else:
-            print("❌ Skipping trade — market direction conflicts with momentum.")
-            print("Waiting for 3 mins to get another data.")
-            time.sleep(180)
-
+        print(f"Not supported auto mode runner, Switch to auto mode BOT for auto mode runnner")
         time.sleep(2)
+        break
 
 
 # ----------------- Main menu -----------------
 if __name__ == "__main__":
     print("\n✨ Groww NIFTY CP Bot Ready (Groww backend)")
     print("You can run in MANUAL or AUTO mode.")
-    print("Manual example: Buy 14 NIFTY30DEC2525950CE at CP and Book at 1050\n")
+    print("Manual example: 14 NIFTY30DEC2525950CE\n")
     while True:
         mode = input("Choose mode: (m)anual / (a)uto / (q)uit: ").strip().lower()
         if mode in ["q", "quit", "exit"]:
