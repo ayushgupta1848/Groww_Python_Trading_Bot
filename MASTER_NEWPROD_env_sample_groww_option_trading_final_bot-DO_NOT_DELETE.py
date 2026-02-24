@@ -25,7 +25,10 @@ import time
 import os
 import sys
 from datetime import datetime
+
+# ENHANCEMENT: Use a session for persistent HTTP connections (faster polling)
 session = requests.Session()
+
 MOMENTUM_SAMPLES = 5
 MOMENTUM_DELAY = 1
 
@@ -137,20 +140,22 @@ groww ,access_token = groww_init(api_key)
 
 # ----------------- Utilities: Telegram, Sound, Excel Logging -----------------
 
-
-#test
-
 # === TELEGRAM CONFIG ===
 BOT_TOKEN = "8482701378:AAG7Jtfw0ZW_K9mFiX21LpsyUAV4oOcDiAQ"
 CHAT_ID = "6012308856"
 
 def send_telegram(message: str):
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": message}
-        requests.post(url, data=payload)
-    except Exception as e:
-        print(f"⚠️ Telegram Error: {e}")
+    """Sends a telegram message asynchronously to avoid blocking the main thread."""
+    def _send():
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            payload = {"chat_id": CHAT_ID, "text": message}
+            requests.post(url, data=payload)
+        except Exception as e:
+            print(f"⚠️ Telegram Error: {e}")
+
+    # Fire and forget thread
+    threading.Thread(target=_send, daemon=True).start()
 
 def play_sound_async(filename):
     try:
@@ -226,10 +231,8 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True,segment = "FNO
 
         # 🔒 Lock ensures one API call at a time
         with ltp_lock:
-            # Use session for faster connection reuse
-            resp = session.get(url, headers=headers, timeout=10)
-            if delay > 0:
-                time.sleep(delay)  # ⏳ delay to respect Groww API rate limits
+            resp = requests.get(url, headers=headers, timeout=10)
+            time.sleep(delay)  # ⏳ short delay to respect Groww API rate limits
 
         if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} error fetching LTP: {resp.text}")
@@ -299,15 +302,15 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 CONFIG = {
     "index": "NIFTY",
     "expiry": "2026-02-03",  # Updated to DD/MM/YYYY to match instruments JSON
-    "min_premium": 95,
-    "max_premium": 160,
-    "lots": 25,
+    "min_premium": 80,
+    "max_premium": 130,
+    "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot":get_nifty_spot_price(access_token),
     "TRAIL_START_PROFIT": 1,  # Start trailing after this profit per unit (in points) #NEWCHANGE
     "TRAIL_STEP": .75,  # Trailing step (in points) #NEWCHANGE
-    "POLL_INTERVAL": .2,  # Poll interval in seconds
+    "POLL_INTERVAL": 1,  # Poll interval in seconds
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "user_confirmation_needed": False,   # or False
@@ -637,7 +640,7 @@ def round_to_nearest_5_paise(price):
 import numpy as np
 import time
 
-def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOMENTUM_DELAY=MOMENTUM_DELAY, threshold=0.30):
+def momentum_check_for_symbol(instrument, MOMENTUM_SAMPLES=MOMENTUM_SAMPLES, MOMENTUM_DELAY=MOMENTUM_DELAY, threshold=0.25):
     """
     Improved short-term momentum check for Nifty options.
     - Uses multiple intermediate samples
@@ -764,8 +767,8 @@ def find_option_by_premium_parallel(option_type, min_premium, max_premium,
 
     # ✅ Funds check (fallback = 1.2L if not available)
     try:
-        margins = getattr(groww, "get_margins", lambda: {"availablecash": 270000})()
-        available_cash = float(margins.get("availablecash", 270000))
+        margins = getattr(groww, "get_margins", lambda: {"availablecash": 130000})()
+        available_cash = float(margins.get("availablecash", 130000))
     except Exception:
         available_cash = 130000
 
@@ -1009,132 +1012,33 @@ def place_cp_order(command, is_auto=False):
             order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
             print(f"✅ Auto Buy placed: :{order_resp} ======= [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
             send_telegram(f"✅ Auto Buy placed: :{order_resp} ======= [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+            print(f"Order id ======= {order_id}")
+            send_telegram(f"Order id ======= {order_id}")
         except Exception as e:
             print(f"❌ Auto BUY failed: {e}")
             send_telegram(f"❌ Auto BUY failed: {e}")
             return
 
-
-        highest_price = entry_price
-
-        start_time = time.time()
-
-        trail_start = CONFIG["TRAIL_START_PROFIT"]
-        trail_step = CONFIG["TRAIL_STEP"]
-        poll = CONFIG["POLL_INTERVAL"]
-        max_time = CONFIG["MAX_TRAIL_TIME"]
-        hard_sl = entry_price - CONFIG.get("HARD_SL_POINTS")
-
-        print(print("📈 Trailing started..."))
-        send_telegram("📈 Trailing started")
-
-        while True:
-            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False ,delay = 0)
-            if ltp is None:
-                time.sleep(poll)
-                continue
-
-            ltp = float(ltp)
-
-            # 🔴 HARD STOP LOSS
-            if ltp <= hard_sl:
-                print(f"🛑 HARD SL HIT @ {ltp}")
-                send_telegram(f"🛑 HARD SL HIT @ {ltp}")
-                place_market_order_groww(instrument, qty, "SELL", "MIS")
-                play_sound_async(SOUND_SL)
-                profit = (ltp - entry_price) * qty
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, qty, profit
-                )
-                break
-
-            # 🔼 Update highest price
-            if ltp > highest_price:
-                highest_price = ltp
-                print(f"🔼 New High: ₹{highest_price}")
-                send_telegram(f"🔼 New High: ₹{highest_price}")
-            # 🟢 Start trailing after ₹1 profit
-            if highest_price >= entry_price + trail_start:
-                trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
-                print(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
-                send_telegram(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
-
-                #NEWCHANGE
-                # print("Waiting for 8 sec to have momentum")
-                # send_telegram("Waiting for 8 sec to have momentum")
-                # time.sleep(8)
-                #NEWCHANGE
-                ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay = 0)
-                if ltp <= trail_exit:
-                    print(f"🔻 Trailing HIT @ {ltp}")
-                    send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    place_market_order_groww(instrument, qty, "SELL", "MIS")
-                    play_sound_async(SOUND_PROFIT)
-
-                    profit = (ltp - entry_price) * qty
-                    log_trade_to_excel(
-                        instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, qty, profit
-                    )
-                    print("Waiting for new moment now for 1 min")
-                    time.sleep(60)
-                    break
-
-            # ⏰ SAFETY TIME EXIT
-            if time.time() - start_time >= max_time:
-                print("⏰ Max trail time reached — exiting")
-                send_telegram("⏰ Max trail time reached — exiting")
-                place_market_order_groww(instrument, qty, "SELL", "MIS")
-                play_sound_async(SOUND_PROFIT)
-
-                ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
-                profit = (ltp_now - entry_price) * qty
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp_now, qty, profit
-                )
-                break
-
-            time.sleep(poll)
-
-        return  # ✅ end of auto mode execution
-
-    else:
-        parsed = parse_cp_command(command)
-        if not parsed:
-            print("❌ Could not parse command.")
+        # STATUS VALIDATION
+        # --- Wait until BUY order is EXECUTED or COMPLETED ---
+        if order_id:
+            buy_status = wait_for_order_status(order_id, access_token, "BUY")
+            if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
+                return
+        else:
+            print("❌ No BUY order ID received. Aborting trade.")
             return
 
-        instrument = find_instrument_from_command(command, instruments_data)
-        if not instrument:
-            print("❌ Instrument not found in instrument master.")
+        avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+        if not avg_price or not executed_qty:
+            print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
             return
+        qty = executed_qty # Use the actual executed quantity
+        print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {qty}")
+        send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={qty}")
 
-        lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
-        quantity = parsed["lots"] * lot_size
-
-        ltp_before = get_ltp_for_instrument(instrument, access_token)
-        if ltp_before is None:
-            print("❌ Could not fetch LTP before placing order.")
-            return
-
-        entry_price = round(float(ltp_before), 2)
-        send_telegram(f"entry price: {entry_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
-        print(f"entry price: {entry_price}")
-
-        # Place BUY @ MARKET
-        try:
-            order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
-            order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
-            print("✅ Buy Order placed:", order_resp)
-        except Exception as e:
-            print(f"❌ Buy order failed: {e}")
-            send_telegram(f"❌ Buy order failed: {e}")
-            return
-
-        # ================= TRAILING LOGIC =================
-        highest_price = entry_price+1
+        highest_price = avg_price
         start_time = time.time()
 
         trail_start = CONFIG["TRAIL_START_PROFIT"]
@@ -1147,77 +1051,94 @@ def place_cp_order(command, is_auto=False):
         send_telegram("📈 Trailing started")
 
         while True:
-            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False)
+            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
             if ltp is None:
                 time.sleep(poll)
                 continue
 
             ltp = float(ltp)
+            sell_reason = None
 
-            # 🔴 HARD STOP LOSS
+            # 1. Check exit conditions
             if ltp <= hard_sl:
-                print(f"🛑 HARD SL HIT @ {ltp}")
-                send_telegram(f"🛑 HARD SL HIT @ {ltp}")
-                place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                play_sound_async(SOUND_SL)
-                profit = (ltp - entry_price) * quantity
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, quantity, profit
-                )
-                break
+                sell_reason = f"🛑 HARD SL HIT @ {ltp}"
+            elif time.time() - start_time >= max_time:
+                sell_reason = "⏰ Max trail time reached — exiting"
+            else:
+                if ltp > highest_price:
+                    highest_price = ltp
+                    print(f"🔼 New High: ₹{highest_price}")
+                    send_telegram(f"🔼 New High: ₹{highest_price}")
 
-            # 🔼 Update highest price
-            if ltp > highest_price:
-                highest_price = ltp
-                print(f"🔼 New High: ₹{highest_price}")
+                if highest_price >= avg_price + trail_start:
+                    trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
+                    print(f"📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                    send_telegram(f"📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                    if ltp <= trail_exit:
+                        sell_reason = f"🔻 Trailing HIT @ {ltp}"
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
 
-            # 🟢 Start trailing after ₹1 profit
-            if highest_price >= entry_price + trail_start:
-                trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
-                print(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
+            # 2. If an exit condition is met, place and verify sell order
+            if sell_reason:
+                print(sell_reason)
+                send_telegram(sell_reason)
 
-                if ltp <= trail_exit:
-                    print(f"🔻 Trailing HIT @ {ltp}")
-                    send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                    print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-                    send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
-                    play_sound_async(SOUND_PROFIT)
+                try:
+                    order_resp = place_market_order_groww(instrument, qty, "SELL", "MIS")
+                    sell_order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
+                    print(f"SELL Order placed: {order_resp}")
+                    print(f"SELL Order id: {sell_order_id} == [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                    send_telegram(f"SELL Order placed: {sell_order_id}")
+                except Exception as e:
+                    print(f"❌ Critical: SELL order placement failed: {e}")
+                    send_telegram(f"❌ Critical: SELL order placement failed: {e}")
+                    break # Exit loop on failure
 
-                    profit = (ltp - entry_price) * quantity
-                    log_trade_to_excel(
-                        instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, quantity, profit
-                    )
-                    break
+                # Verify SELL order
+                if sell_order_id:
+                    sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
+                    if sell_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                        print(f"⚠️ SELL order did not execute successfully. Status: {sell_status}")
+                        send_telegram(f"⚠️ SELL order failed. Status: {sell_status}")
+                        break # Exit loop
 
-            # ⏰ SAFETY TIME EXIT
-            if time.time() - start_time >= max_time:
-                print("⏰ Max trail time reached — exiting")
-                send_telegram("⏰ Max trail time reached — exiting")
-                place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                play_sound_async(SOUND_PROFIT)
+                    sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                    if sell_price and sold_qty:
+                        print(f"🎯 SELL EXECUTED @ ₹{sell_price} | Qty={sold_qty}")
+                        send_telegram(f"🎯 SELL EXECUTED @ ₹{sell_price} | Qty={sold_qty}")
+                        profit = (sell_price - avg_price) * sold_qty
+                        print(f"🔻 Trailing HIT @ sell_price = {sell_price}")
+                        print(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
+                        send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
+                        play_sound_async(SOUND_PROFIT)
+                        log_trade_to_excel(
+                            instrument.get("internal_trading_symbol"),
+                            avg_price, sell_price, sold_qty, profit
+                        )
+                    else:
+                        print("⚠️ Could not get executed price for SELL order. Logging with LTP.")
+                        profit = (ltp - avg_price) * qty
+                        log_trade_to_excel(
+                            instrument.get("internal_trading_symbol"),
+                            avg_price, ltp, qty, profit
+                        )
+                else:
+                    print("⚠️ No SELL order ID received. Cannot verify status or log trade accurately.")
 
-                ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
-                profit = (ltp_now - entry_price) * quantity
-                log_trade_to_excel(
-                    instrument.get("internal_trading_symbol"),
-                    entry_price, ltp_now, quantity, profit
-                )
-                break
+                print("Waiting for new moment now for 1 min")
+                time.sleep(60)
+                break # Exit the while loop after processing the sell
 
             time.sleep(poll)
 
-        print("Waiting for 1 min to get another data.")
+        return  # ✅ end of auto mode execution
+
+    else:
+        print("Not supporting Manual Trades, Switch to Manual Mode")
         time.sleep(60)
         return
 
-
-
-
 # ----------------- Auto mode runner (momentum + premium) -----------------
-
 
 def auto_mode_runner():
     cfg = CONFIG

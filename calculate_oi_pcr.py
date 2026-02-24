@@ -10,7 +10,7 @@ URL = "https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi"
 PARAMS = {
     "functionName": "getOptionChainData",
     "symbol": "NIFTY",
-    "params": "expiryDate=30-Dec-2025"
+    "params": "expiryDate=24-Feb-2026"
 }
 
 HEADERS = {
@@ -19,7 +19,7 @@ HEADERS = {
     "Referer": "https://www.nseindia.com/"
 }
 
-REFRESH_SECONDS = 120
+REFRESH_SECONDS = 60
 EXCEL_FILE = "oi_pcr_dashboard.xlsx"
 
 session = requests.Session()
@@ -248,6 +248,12 @@ def calculate(j):
             a_chg_ce += ce_chg
             a_chg_pe += pe_chg
 
+    # Calculate level strength for resistance/support
+    resistance_levels = sorted(ce_map, key=ce_map.get, reverse=True)[:3]
+    support_levels = sorted(pe_map, key=pe_map.get, reverse=True)[:3]
+    resistance_strength = [(level, ce_map[level], ce_map[level] + pe_map.get(level, 0)) for level in resistance_levels]
+    support_strength = [(level, pe_map[level], pe_map[level] + ce_map.get(level, 0)) for level in support_levels]
+
     return {
         "time": datetime.now().strftime("%H:%M:%S"),
         "price": price,
@@ -260,13 +266,21 @@ def calculate(j):
         "atm_oi_pe": a_oi_pe,
         "atm_chg_ce": a_chg_ce,
         "atm_chg_pe": a_chg_pe,
-        "resistance": sorted(ce_map, key=ce_map.get, reverse=True)[:3],
-        "support": sorted(pe_map, key=pe_map.get, reverse=True)[:3],
+        "resistance": resistance_levels,
+        "support": support_levels,
+        "resistance_strength": resistance_strength,
+        "support_strength": support_strength,
     }
 
 # ================= MAIN LOOP =================
+
 wb = init_excel()
 ws = wb["DATA"]
+
+# Store 15-min candle closes for breakout/breakdown detection
+candle_history = {}
+candle_interval = 900  # 15 min in seconds
+last_candle_close_time = None
 
 while True:
     try:
@@ -276,7 +290,6 @@ while True:
         pcr_all = m["total_oi_pe"] / m["total_oi_ce"] if m["total_oi_ce"] else 0
         pcr_atm = m["atm_oi_pe"] / m["atm_oi_ce"] if m["atm_oi_ce"] else 0
         pcr_chg = abs(m["atm_chg_pe"]) / abs(m["atm_chg_ce"]) if m["atm_chg_ce"] else 0
-
 
         coi_ce_all, coi_pe_all = coi_pct(m["total_chg_ce"], m["total_chg_pe"])
         coi_ce_atm, coi_pe_atm = coi_pct(m["atm_chg_ce"], m["atm_chg_pe"])
@@ -321,6 +334,76 @@ while True:
         print("\n--- MARKET SENTIMENT ---")
         print(f"SENTIMENT                    : {sentiment}")
 
+        # === LEVELS & STRENGTH ===
+        print("\n--- RESISTANCE LEVELS & STRENGTH ---")
+        for level, ce_oi, total_oi in m["resistance_strength"]:
+            print(f"Resistance: {level} | CE OI: {ce_oi:,} | Total OI: {total_oi:,}")
+        print("\n--- SUPPORT LEVELS & STRENGTH ---")
+        for level, pe_oi, total_oi in m["support_strength"]:
+            print(f"Support: {level} | PE OI: {pe_oi:,} | Total OI: {total_oi:,}")
+
+
+        # === Live signal update on each run ===
+        breakout_live = None
+        breakdown_live = None
+        breakout_prob = 0
+        breakdown_prob = 0
+        signal_strength = {}
+        signal_consistency = {}
+
+        # Calculate distance to resistance/support and probability
+        for level, ce_oi, total_oi in m["resistance_strength"]:
+            dist = m["price"] - level
+            strength = ce_oi
+            consistency = min(1.0, ce_oi / (total_oi + 1e-6))
+            prob = max(0, min(1, 1 - abs(dist) / (level * 0.01) + consistency * 0.5))  # crude estimate
+            signal_strength[level] = strength
+            signal_consistency[level] = consistency
+            if dist > 0:
+                breakout_live = (level, dist, strength, consistency, prob)
+                breakout_prob = prob
+        for level, pe_oi, total_oi in m["support_strength"]:
+            dist = m["price"] - level
+            strength = pe_oi
+            consistency = min(1.0, pe_oi / (total_oi + 1e-6))
+            prob = max(0, min(1, 1 - abs(dist) / (level * 0.01) + consistency * 0.5))
+            signal_strength[level] = strength
+            signal_consistency[level] = consistency
+            if dist < 0:
+                breakdown_live = (level, dist, strength, consistency, prob)
+                breakdown_prob = prob
+
+        # Print live signal info
+        print("\n--- LIVE SIGNAL UPDATE ---")
+        if breakout_live:
+            print(f"Breakout above {breakout_live[0]} | Distance: {breakout_live[1]:.2f} | Strength: {breakout_live[2]:,} | Consistency: {breakout_live[3]*100:.1f}% | Probability: {breakout_live[4]*100:.1f}%")
+        else:
+            print("No breakout imminent.")
+        if breakdown_live:
+            print(f"Breakdown below {breakdown_live[0]} | Distance: {breakdown_live[1]:.2f} | Strength: {breakdown_live[2]:,} | Consistency: {breakdown_live[3]*100:.1f}% | Probability: {breakdown_live[4]*100:.1f}%")
+        else:
+            print("No breakdown imminent.")
+
+        # === 15-min candle close breakout/breakdown detection ===
+        now = time.time()
+        breakout_signal = None
+        breakdown_signal = None
+        if last_candle_close_time is None or now - last_candle_close_time >= candle_interval:
+            for level in m["resistance"] + m["support"]:
+                candle_history.setdefault(level, []).append(m["price"])
+            last_candle_close_time = now
+            for level in m["resistance"]:
+                if candle_history[level][-1] > level:
+                    breakout_signal = (level, m["price"])
+            for level in m["support"]:
+                if candle_history[level][-1] < level:
+                    breakdown_signal = (level, m["price"])
+            if breakout_signal:
+                print(f"\n🚀 BREAKOUT SIGNAL: Price closed above resistance {breakout_signal[0]} | Market Direction: UP | Target: Next resistance")
+            if breakdown_signal:
+                print(f"\n🔻 BREAKDOWN SIGNAL: Price closed below support {breakdown_signal[0]} | Market Direction: DOWN | Target: Next support")
+
+        # === Save to Excel ===
         ws.append([
             m["time"], m["price"], m["atm"],
             m["total_oi_ce"], m["total_oi_pe"],
@@ -331,7 +414,11 @@ while True:
             coi_ce_all, coi_pe_all,
             coi_ce_atm, coi_pe_atm,
             ce_act, pe_act, ce_pow, pe_pow,
-            str(m["resistance"]), str(m["support"]), sentiment
+            str(m["resistance"]), str(m["support"]), sentiment,
+            str(m["resistance_strength"]), str(m["support_strength"]),
+            "BREAKOUT" if breakout_signal else "", "BREAKDOWN" if breakdown_signal else "",
+            breakout_live[0] if breakout_live else "", breakout_live[1] if breakout_live else "", breakout_live[2] if breakout_live else "", breakout_live[3] if breakout_live else "", breakout_live[4] if breakout_live else "",
+            breakdown_live[0] if breakdown_live else "", breakdown_live[1] if breakdown_live else "", breakdown_live[2] if breakdown_live else "", breakdown_live[3] if breakdown_live else "", breakdown_live[4] if breakdown_live else ""
         ])
 
         wb.save(EXCEL_FILE)
