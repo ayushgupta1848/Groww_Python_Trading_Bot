@@ -380,7 +380,7 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-02-10",  # Updated to DD/MM/YYYY to match instruments JSON
+    "expiry": "2026-02-17",  # Updated to DD/MM/YYYY to match instruments JSON
     "min_premium": 90,
     "max_premium": 155,
     "lots": 22,
@@ -393,8 +393,8 @@ CONFIG = {
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "user_confirmation_needed": False,   # or False
-    "enable_technical_filters": False,  # Set to False to skip technical filters (EMA, RSI, ADX, VWAP)
-    "enable_option_filters": False,  # Set to False to skip option Greeks filters (IV, Delta, Gamma, OI, Volume)
+    "enable_technical_filters": True,  # Set to False to skip technical filters (EMA, RSI, ADX, VWAP)
+    "enable_option_filters": True,  # Set to False to skip option Greeks filters (IV, Delta, Gamma, OI, Volume)
     # Volume + OI Risk Filter Settings
     "enable_volume_oi_filter": False,  # Enable Volume + OI based risk management
     "VOLUME_SPIKE_FACTOR": 2.0,  # Volume spike detection: curr_volume > prev_volume * factor (relaxed from 1.5)
@@ -1490,9 +1490,8 @@ def find_option_by_premium_parallel(option_type, min_premium, max_premium,
             slope_pct = mom_result.get("avg_change", 0)
             direction = mom_result.get("direction", "FLAT")
             consistency = mom_result.get("consistency", 0)
-
-            # ✅ Apply momentum filter right here
-            if abs(slope_pct) >= momentum_threshold_pct and consistency >= 70 and direction != "FLAT":
+            # Stricter momentum filter
+            if abs(slope_pct) >= 0.3 and consistency >= 80 and direction != "FLAT":
                 return {
                     "instrument": cand["instrument"],
                     "ltp": cand["ltp"],
@@ -1733,14 +1732,46 @@ def place_cp_order(command, is_auto=False):
 
         entry_price = round(float(ltp_before), 2)
 
+        # VWAP confirmation
+        technicals = get_technicals(instrument.get("groww_symbol"), groww, interval="1minute")
+        if technicals:
+            vwap = technicals.get("vwap")
+            ltp = technicals.get("ltp")
+            opt_type = instrument.get("instrument_type", "CE")
+            if (opt_type == "CE" and ltp < vwap) or (opt_type == "PE" and ltp > vwap):
+                print(f"❌ VWAP filter: {opt_type} entry rejected. LTP={ltp}, VWAP={vwap}")
+                send_telegram(f"❌ VWAP filter: {opt_type} entry rejected. LTP={ltp}, VWAP={vwap}")
+                return
+
+        # ATR-based position sizing
+        account_balance = risk_manager._get_equity()
+        candles = get_historical_candles(instrument, access_token, interval="5minute", days=2)
+        atr = calculate_atr_from_candles(candles) if candles else None
+        if atr:
+            qty = calculate_volatility_adjusted_position_size(entry_price, atr, account_balance, risk_pct=1.0)
+            print(f"🔢 ATR-based position size: {qty}")
+            send_telegram(f"🔢 ATR-based position size: {qty}")
+        else:
+            qty = max(1, int(qty * 0.5))  # fallback: reduce size
 
         # === BUY @ MARKET ===
-        # Risk check: estimated exposure
         est_cost = entry_price * qty
         if not risk_manager.can_open_trade(est_cost):
             send_telegram(f"❌ Trade blocked by RiskManager. est_cost={est_cost}")
             print("❌ Trade blocked by RiskManager. Skipping order.")
             return
+
+        # Trade cooldown: limit trades per hour
+        if hasattr(risk_manager, "last_trade_time"):
+            min_interval = 60 * 10  # 10 min cooldown
+            now = time.time()
+            if now - getattr(risk_manager, "last_trade_time", 0) < min_interval:
+                print("⏳ Trade cooldown active. Skipping entry.")
+                send_telegram("⏳ Trade cooldown active. Skipping entry.")
+                return
+            risk_manager.last_trade_time = now
+        else:
+            risk_manager.last_trade_time = time.time()
 
         try:
             order_resp = place_market_order_groww(instrument, qty, transaction_type="BUY", product="MIS")
@@ -1804,102 +1835,40 @@ def place_cp_order(command, is_auto=False):
         prev_ltp = entry_price
         prev_volume = volume if volume else 0
 
+
         while True:
-            # ENHANCEMENT: Zero delay in get_ltp to process immediately
             start_poll = time.time()
             ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
-            
             if ltp is None:
                 time.sleep(0.2)
                 continue
-
             ltp = float(ltp)
-            
-            # 🔍 Fetch current volume + OI for risk filter
-            curr_volume = volume
-            curr_oi = oi
-            if CONFIG.get("enable_volume_oi_filter", True):
-                try:
-                    opt_data = get_option_data_from_trading_symbol(symbol)
-                    curr_volume = opt_data.get("volume", volume)
-                    curr_oi = opt_data.get("open_interest", oi)
-                except Exception as e:
-                    print(f"⚠️ Could not fetch live volume/OI: {e}")
-            
             # 💰 Calculate current profit
             profit = (ltp - entry_price) * qty
-            
-            # 🛡️ Volume + OI Risk Filter: Check exit conditions
-            if CONFIG.get("enable_volume_oi_filter", True):
-                should_exit, exit_reason = should_exit_trade(
-                    profit, curr_volume, prev_volume, curr_oi, ltp, prev_ltp
-                )
-                if should_exit:
-                    print(exit_reason)
-                    send_telegram(exit_reason)
-                    
-                    # Place exit order
-                    for attempt in range(3):
-                        try:
-                            place_market_order_groww(instrument, qty, "SELL", "MIS")
-                            print(f"✅ Risk Filter Exit Order placed (Attempt {attempt+1})")
-                            break
-                        except Exception as e:
-                            print(f"❌ Exit Order failed (Attempt {attempt+1}): {e}")
-                            time.sleep(0.1)
-                    
-                    if profit >= CONFIG.get("SMALL_PROFIT_TARGET", 500):
-                        play_sound_async(SOUND_PROFIT)
-                    
-                    log_trade_to_excel(
-                        instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, qty, profit, curr_volume, curr_oi
-                    )
-                    try:
-                        risk_manager.record_trade(profit)
-                    except Exception:
-                        pass
-                    break
-            
-            # Update tracking variables
-            prev_ltp = ltp
-            prev_volume = curr_volume
-            
-            # 📊 Update dynamic stops based on profit (research: tighten after 10% gain)
-            if atr and CONFIG.get("USE_VOLATILITY_SIZING", True):
+            # 📊 ATR-based dynamic stops
+            if atr:
                 profit_pct = ((ltp - entry_price) / entry_price)
                 if profit_pct >= CONFIG.get("PROFIT_TIGHTEN_THRESHOLD", 0.10):
-                    # Tighten stops
                     new_sl, new_tp = calculate_dynamic_stops(entry_price, atr, profit_pct)
-                    if new_sl > dynamic_sl:  # Only move SL up, never down
+                    if new_sl > dynamic_sl:
                         dynamic_sl = new_sl
                         print(f"🔒 Stop tightened to {dynamic_sl:.2f} (profit {profit_pct*100:.1f}%)")
-
-            # 🔴 HARD STOP LOSS (use dynamic SL if available)
-            active_sl = dynamic_sl if atr else hard_sl
+                active_sl = dynamic_sl
+            else:
+                active_sl = hard_sl
+            # 🔴 HARD/DYNAMIC STOP LOSS
             if ltp <= active_sl:
-                print(f"🛑 {'DYNAMIC' if atr else 'HARD'} SL HIT @ {ltp} (SL={active_sl:.2f})")
+                print(f"🛑 SL HIT @ {ltp} (SL={active_sl:.2f})")
                 send_telegram(f"🛑 SL HIT @ {ltp}")
-                
-                # Retry logic for SL order
-                order_placed = False
                 for attempt in range(3):
                     try:
                         place_market_order_groww(instrument, qty, "SELL", "MIS")
-                        order_placed = True
                         print(f"✅ SL Order placed (Attempt {attempt+1})")
                         break
                     except Exception as e:
                         print(f"❌ SL Order failed (Attempt {attempt+1}): {e}")
                         time.sleep(0.1)
-                
-                if not order_placed:
-                     send_telegram("🚨 CRITICAL: SL Order FAILED 3 times! Check manually!")
-                     play_sound_async(SOUND_SL)
-                else:
-                     play_sound_async(SOUND_SL)
-                
-                profit = (ltp - entry_price) * qty
+                play_sound_async(SOUND_SL)
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
                     entry_price, ltp, qty, profit, volume , oi
@@ -1909,7 +1878,6 @@ def place_cp_order(command, is_auto=False):
                 except Exception:
                     pass
                 break
-
             # 🔼 Update highest price
             if ltp > highest_price:
                 highest_price = ltp
@@ -1920,19 +1888,10 @@ def place_cp_order(command, is_auto=False):
                 trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
                 print(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
                 send_telegram(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
-
-                #NEWCHANGE
-                # print("Waiting for 8 sec to have momentum")
-                # send_telegram("Waiting for 8 sec to have momentum")
-                # time.sleep(8)
-                #NEWCHANGE
-                # Check again immediately
                 ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
                 if ltp and float(ltp) <= trail_exit:
                     print(f"🔻 Trailing HIT @ {ltp}")
                     send_telegram(f"🔻 Trailing HIT @ {ltp}")
-                    
-                    # Retry logic for Target order
                     for attempt in range(3):
                         try:
                             place_market_order_groww(instrument, qty, "SELL", "MIS")
@@ -1941,9 +1900,7 @@ def place_cp_order(command, is_auto=False):
                         except Exception as e:
                             print(f"❌ Target Order failed (Attempt {attempt+1}): {e}")
                             time.sleep(0.1)
-                    
                     play_sound_async(SOUND_PROFIT)
-
                     profit = (float(ltp) - entry_price) * qty
                     log_trade_to_excel(
                         instrument.get("internal_trading_symbol"),
@@ -1954,13 +1911,32 @@ def place_cp_order(command, is_auto=False):
                     except Exception:
                         pass
                     break
-
+            # 💰 Profit booking at 1x ATR
+            if atr and profit >= atr * qty:
+                print(f"💰 Profit booking at ATR target: {profit:.2f}")
+                send_telegram(f"💰 Profit booking at ATR target: {profit:.2f}")
+                for attempt in range(3):
+                    try:
+                        place_market_order_groww(instrument, qty, "SELL", "MIS")
+                        print(f"✅ Profit Booking Order placed (Attempt {attempt+1})")
+                        break
+                    except Exception as e:
+                        print(f"❌ Profit Booking Order failed (Attempt {attempt+1}): {e}")
+                        time.sleep(0.1)
+                play_sound_async(SOUND_PROFIT)
+                log_trade_to_excel(
+                    instrument.get("internal_trading_symbol"),
+                    entry_price, ltp, qty, profit, volume , oi
+                )
+                try:
+                    risk_manager.record_trade(profit)
+                except Exception:
+                    pass
+                break
             # ⏰ SAFETY TIME EXIT
             if time.time() - start_time >= max_time:
                 print("⏰ Max trail time reached — exiting")
                 send_telegram("⏰ Max trail time reached — exiting")
-                
-                # Retry logic for Time Exit
                 for attempt in range(3):
                     try:
                         place_market_order_groww(instrument, qty, "SELL", "MIS")
@@ -1969,9 +1945,7 @@ def place_cp_order(command, is_auto=False):
                     except Exception as e:
                         print(f"❌ Time Exit Order failed (Attempt {attempt+1}): {e}")
                         time.sleep(0.1)
-                        
                 play_sound_async(SOUND_PROFIT)
-
                 ltp_now = get_ltp_for_instrument(instrument, access_token, verbose=False) or entry_price
                 profit = (ltp_now - entry_price) * qty
                 log_trade_to_excel(
@@ -1983,11 +1957,12 @@ def place_cp_order(command, is_auto=False):
                 except Exception:
                     pass
                 break
-
-            # Manual sleep to respect poll interval
             elapsed = time.time() - start_poll
             if elapsed < poll:
                 time.sleep(poll - elapsed)
+        print("Waiting for 1 min to get another data.")
+        time.sleep(60)
+        return  # ✅ end of auto mode execution
 
         print("Waiting for 1 min to get another data.")
         time.sleep(60)
