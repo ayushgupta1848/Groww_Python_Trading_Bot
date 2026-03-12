@@ -495,10 +495,10 @@ def load_instruments_from_json(json_path=None, force_reload=False):
     else:  # NIFTY default
         step = 50
 
-    # Define strike range (±10 strikes)
+    # Define strike range (±20 strikes for wider OTM coverage)
     nearest_strike = round(spot / step) * step
-    lower_bound = nearest_strike - (10 * step)
-    upper_bound = nearest_strike + (10 * step)
+    lower_bound = nearest_strike - (20 * step)
+    upper_bound = nearest_strike + (20 * step)
 
     print(f"🎯 Filtering {INDEX} {EXPIRY} instruments between {lower_bound}–{upper_bound} (Spot={spot})")
 
