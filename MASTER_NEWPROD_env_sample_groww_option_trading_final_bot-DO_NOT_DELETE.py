@@ -301,10 +301,10 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-02-03",  # Updated to DD/MM/YYYY to match instruments JSON
+    "expiry": "2026-03-17",  # Updated to DD/MM/YYYY to match instruments JSON
     "min_premium": 80,
-    "max_premium": 130,
-    "lots": 16,
+    "max_premium": 160,
+    "lots": 20,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot":get_nifty_spot_price(access_token),
@@ -313,6 +313,7 @@ CONFIG = {
     "POLL_INTERVAL": 1,  # Poll interval in seconds
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
+    "VALIDATE_ORDERS": False,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution | False for testing with estimates
     "user_confirmation_needed": False,   # or False
 }
 
@@ -1020,23 +1021,32 @@ def place_cp_order(command, is_auto=False):
             return
 
         # STATUS VALIDATION
-        # --- Wait until BUY order is EXECUTED or COMPLETED ---
-        if order_id:
-            buy_status = wait_for_order_status(order_id, access_token, "BUY")
-            if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
+        # ✅ LIVE TRADING: Wait until BUY order is EXECUTED (controlled by VALIDATE_ORDERS)
+        if CONFIG.get("VALIDATE_ORDERS", True):
+            if order_id:
+                buy_status = wait_for_order_status(order_id, access_token, "BUY")
+                if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                    print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
+                    send_telegram(f"⚠️ BUY failed: {buy_status}")
+                    return
+            else:
+                print("❌ No BUY order ID received. Aborting trade.")
+                send_telegram("❌ No BUY order ID received")
                 return
-        else:
-            print("❌ No BUY order ID received. Aborting trade.")
-            return
 
-        avg_price, executed_qty = get_order_executed_price(order_id, access_token)
-        if not avg_price or not executed_qty:
-            print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
-            return
-        qty = executed_qty # Use the actual executed quantity
-        print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {qty}")
-        send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={qty}")
+            avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+            if not avg_price or not executed_qty:
+                print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
+                return
+            qty = executed_qty  # Use the actual executed quantity
+            entry_price = avg_price  # Use actual executed price
+            print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {qty}")
+            send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={qty}")
+        else:
+            # Testing mode: Use entry price estimate
+            avg_price = entry_price
+            executed_qty = qty
+            print(f"⚠️ Testing mode: Using entry price estimate ₹{avg_price}")
 
         highest_price = avg_price
         start_time = time.time()
@@ -1045,10 +1055,10 @@ def place_cp_order(command, is_auto=False):
         trail_step = CONFIG["TRAIL_STEP"]
         poll = CONFIG["POLL_INTERVAL"]
         max_time = CONFIG["MAX_TRAIL_TIME"]
-        hard_sl = entry_price - CONFIG.get("HARD_SL_POINTS")
+        hard_sl = avg_price - CONFIG.get("HARD_SL_POINTS")  # Use actual executed price
 
-        print("📈 Trailing started...")
-        send_telegram("📈 Trailing started")
+        print(f"📈 Trailing started... Entry: ₹{avg_price}, SL: ₹{hard_sl}")
+        send_telegram(f"📈 Trailing started | Entry: ₹{avg_price} | SL: ₹{hard_sl}")
 
         while True:
             ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
@@ -1092,15 +1102,15 @@ def place_cp_order(command, is_auto=False):
                 except Exception as e:
                     print(f"❌ Critical: SELL order placement failed: {e}")
                     send_telegram(f"❌ Critical: SELL order placement failed: {e}")
-                    break # Exit loop on failure
+                    break  # Exit loop on failure
 
-                # Verify SELL order
-                if sell_order_id:
+                # Verify SELL order (controlled by VALIDATE_ORDERS)
+                if CONFIG.get("VALIDATE_ORDERS", True) and sell_order_id:
                     sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
                     if sell_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
                         print(f"⚠️ SELL order did not execute successfully. Status: {sell_status}")
                         send_telegram(f"⚠️ SELL order failed. Status: {sell_status}")
-                        break # Exit loop
+                        break  # Exit loop
 
                     sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
                     if sell_price and sold_qty:
@@ -1122,6 +1132,17 @@ def place_cp_order(command, is_auto=False):
                             instrument.get("internal_trading_symbol"),
                             avg_price, ltp, qty, profit
                         )
+                elif not CONFIG.get("VALIDATE_ORDERS", True):
+                    # Testing mode: Use LTP estimate
+                    sell_price = ltp
+                    sold_qty = qty
+                    profit = (sell_price - avg_price) * sold_qty
+                    print(f"⚠️ Testing mode: Estimated profit ₹{profit:.2f}")
+                    play_sound_async(SOUND_PROFIT if profit > 0 else SOUND_SL)
+                    log_trade_to_excel(
+                        instrument.get("internal_trading_symbol"),
+                        avg_price, sell_price, sold_qty, profit
+                    )
                 else:
                     print("⚠️ No SELL order ID received. Cannot verify status or log trade accurately.")
 
@@ -1222,7 +1243,20 @@ def auto_mode_runner():
 
 # ----------------- Main menu -----------------
 if __name__ == "__main__":
-    print("\n✨ Groww NIFTY CP Bot Ready (Groww backend)")
+    print("\n" + "="*60)
+    print("✨ Groww Options Trading Bot Ready")
+    print("="*60)
+    print(f"📊 Index: {CONFIG['index']} | Expiry: {CONFIG['expiry']}")
+    print(f"💰 Lots: {CONFIG['lots']} | Poll: {CONFIG['POLL_INTERVAL']}s")
+    
+    if CONFIG.get("VALIDATE_ORDERS", True):
+        print("✅ LIVE TRADING MODE: Order validation ENABLED")
+        print("   → BUY/SELL orders will be verified before proceeding")
+    else:
+        print("⚠️  TESTING MODE: Order validation DISABLED")
+        print("   → Using estimated prices (NOT recommended for live)")
+    
+    print("="*60)
     print("You can run in MANUAL or AUTO mode.")
     print("Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050\n")
     while True:
