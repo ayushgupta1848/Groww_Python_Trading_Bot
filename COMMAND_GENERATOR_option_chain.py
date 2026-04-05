@@ -45,8 +45,41 @@ def groww_init(api_key):
 groww, access_token = groww_init(api_key)
 
 # ==================== UTILITY FUNCTIONS ====================
+def download_latest_instruments():
+    """Download latest instrument.csv from Groww"""
+    try:
+        url = "https://growwapi-assets.groww.in/instruments/instrument.csv"
+        print("📥 Downloading latest instruments from Groww...")
+        
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        with open(csv_path, 'wb') as f:
+            f.write(response.content)
+        
+        print("✅ Instruments updated successfully")
+        return True
+    except Exception as e:
+        print(f"⚠️ Failed to download instruments: {e}")
+        return False
+
 def load_instruments_from_csv():
-    """Load instruments from CSV file - SILENT"""
+    """Load instruments from CSV file - Auto-downloads if missing or older than 1 day"""
+    # Check if file exists and its age
+    should_download = False
+    
+    if not os.path.exists(csv_path):
+        should_download = True
+    else:
+        # Check if file is older than 1 day
+        file_age = datetime.now() - datetime.fromtimestamp(os.path.getmtime(csv_path))
+        if file_age > timedelta(days=1):
+            should_download = True
+    
+    # Download if needed
+    if should_download:
+        download_latest_instruments()
+    
     instruments = []
     if not os.path.exists(csv_path):
         return instruments
