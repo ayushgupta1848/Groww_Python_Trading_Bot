@@ -273,6 +273,130 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True, segment="FNO"
         print(f"⚠️ Error fetching LTP for {instrument.get('trading_symbol')}: {e}")
         return None
 
+def get_user_positions(access_token):
+    """
+    Fetches user's current positions from Groww API.
+    Returns: dict with positions data or None
+    """
+    try:
+        url = "https://api.groww.in/v1/positions/user"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}",
+            "X-API-VERSION": "1.0"
+        }
+        
+        resp = session.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            print(f"⚠️ HTTP {resp.status_code} error fetching positions: {resp.text}")
+            return None
+        
+        data = resp.json()
+        if data.get("status") == "SUCCESS":
+            return data.get("payload", {})
+        else:
+            print(f"⚠️ Failed to fetch positions: {data}")
+            return None
+            
+    except Exception as e:
+        print(f"⚠️ Error fetching positions: {e}")
+        return None
+
+def get_user_margins(access_token):
+    """
+    Fetches user's margin details from Groww API.
+    Returns: dict with margin data or None
+    """
+    try:
+        url = "https://api.groww.in/v1/margins/detail/user"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}",
+            "X-API-VERSION": "1.0"
+        }
+        
+        resp = session.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            print(f"⚠️ HTTP {resp.status_code} error fetching margins: {resp.text}")
+            return None
+        
+        data = resp.json()
+        if data.get("status") == "SUCCESS":
+            return data.get("payload", {})
+        else:
+            print(f"⚠️ Failed to fetch margins: {data}")
+            return None
+            
+    except Exception as e:
+        print(f"⚠️ Error fetching margins: {e}")
+        return None
+
+def display_account_summary(access_token):
+    """
+    Fetches and displays total realised P&L and available balance after trade execution.
+    Uses clear visual indicators: 🟢 for profit, 🔴 for loss.
+    """
+    print("\n" + "="*60)
+    print("📊 ACCOUNT SUMMARY AFTER TRADE")
+    print("="*60)
+    
+    # Fetch positions for realised P&L
+    positions_data = get_user_positions(access_token)
+    total_realised_pnl = 0.0
+    
+    if positions_data and "positions" in positions_data:
+        for pos in positions_data["positions"]:
+            realised_pnl = pos.get("realised_pnl", 0)
+            if realised_pnl:
+                total_realised_pnl += float(realised_pnl)
+                trading_symbol = pos.get("trading_symbol", "N/A")
+                
+                # Use clear visual indicators
+                if float(realised_pnl) < 0:
+                    print(f"  📈 {trading_symbol}: 🔴 LOSS: ₹{realised_pnl} ❌")
+                else:
+                    print(f"  📈 {trading_symbol}: 🟢 PROFIT: ₹{realised_pnl} ✅")
+        
+        # Total P&L with clear indicators
+        print("\n" + "-"*60)
+        if total_realised_pnl < 0:
+            print(f"💰 Total Realised P&L: 🔴 LOSS: ₹{total_realised_pnl:.2f} ❌")
+        else:
+            print(f"💰 Total Realised P&L: 🟢 PROFIT: ₹{total_realised_pnl:.2f} ✅")
+        print("-"*60)
+    else:
+        print("⚠️ Could not fetch positions data")
+    
+    # Fetch margins for available balance
+    margins_data = get_user_margins(access_token)
+    
+    if margins_data:
+        fno_details = margins_data.get("fno_margin_details", {})
+        option_buy_balance = fno_details.get("option_buy_balance_available", 0)
+        
+        print(f"💵 Option Buy Balance Available: ₹{option_buy_balance:.2f}")
+        
+        # Also show clear cash
+        clear_cash = margins_data.get("clear_cash", 0)
+        print(f"💸 Clear Cash: ₹{clear_cash:.2f}")
+    else:
+        print("⚠️ Could not fetch margins data")
+    
+    print("="*60 + "\n")
+    
+    # Send to Telegram
+    try:
+        summary_msg = f"""
+📊 ACCOUNT SUMMARY
+━━━━━━━━━━━━━━━━
+💰 Total Realised P&L: ₹{total_realised_pnl:.2f}
+💵 Option Buy Balance: ₹{option_buy_balance:.2f}
+💸 Clear Cash: ₹{clear_cash:.2f}
+        """
+        send_telegram(summary_msg)
+    except:
+        pass
+
 def get_index_spot_price(index_name, access_token=None, json_path=None):
     """
     Fetches live spot price for any index (NIFTY, SENSEX, BANKNIFTY, etc.) using Groww instrument data.
@@ -393,10 +517,10 @@ def get_nifty_spot_price(access_token=None, json_path=None):
 
 CONFIG = {
     "index": "NIFTY",  # Change to "SENSEX", "BANKNIFTY", "FINNIFTY" as needed
-    "expiry": "2026-03-02",  #this needs to be same as expiry_date in json file of instruments # format DD/MM/YYYY to match instruments JSON (example)
-    "min_premium": 80,
-    "max_premium": 130,
-    "lots": 10,
+    "expiry": "2026-03-24",  #this needs to be same as expiry_date in json file of instruments # format DD/MM/YYYY to match instruments JSON (example)
+    "min_premium": 90,
+    "max_premium": 230,
+    "lots": 16,
     "book_profit": 1050,
     "target_pnl": 6000,
     "spot": 0,  # Will be fetched dynamically below
@@ -405,13 +529,17 @@ CONFIG = {
     "POLL_INTERVAL": 0.15,  # Poll interval in seconds (Optimized for speed)
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
-    "VALIDATE_ORDERS": False,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
+    "VALIDATE_ORDERS": True,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
     "user_confirmation_needed": False,   # or False
     "ENABLE_EMA_CHECK": False,
     "ENABLE_ADX_CHECK": False,
     "ENABLE_RSI_CHECK": False,
     "ENABLE_VWAP_CHECK": False,
     "ENABLE_LOGICAL_CONDITIONS_CHECK": False,
+    # Directional Mode Settings
+    "DIRECTIONAL_MODE": {
+        "prefer_mid_premium": True,  # Pick option closest to mid-range of min/max premium (legacy, not used in new format)
+    }
 }
 
 # 🚀 PERFORMANCE: Global cache to avoid reloading instruments (must be defined before usage)
@@ -495,10 +623,10 @@ def load_instruments_from_json(json_path=None, force_reload=False):
     else:  # NIFTY default
         step = 50
 
-    # Define strike range (±10 strikes)
+    # Define strike range (±20 strikes for wider OTM coverage)
     nearest_strike = round(spot / step) * step
-    lower_bound = nearest_strike - (10 * step)
-    upper_bound = nearest_strike + (10 * step)
+    lower_bound = nearest_strike - (20 * step)
+    upper_bound = nearest_strike + (20 * step)
 
     print(f"🎯 Filtering {INDEX} {EXPIRY} instruments between {lower_bound}–{upper_bound} (Spot={spot})")
 
@@ -1062,6 +1190,38 @@ def place_limit_order_groww(instrument, quantity, price, transaction_type="SELL"
     except Exception as e:
         raise
 
+def cancel_order_groww(order_id, access_token):
+    """
+    Cancel a pending order using Groww API
+    Returns True if cancellation successful, False otherwise
+    """
+    url = "https://api.groww.in/v1/order/cancel"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0"
+    }
+    
+    payload = {
+        "segment": "FNO",
+        "groww_order_id": order_id
+    }
+    
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=8)
+        resp.raise_for_status()
+        data = resp.json()
+        print(f"🔄 Cancel order response: {data}")
+        
+        # Check if cancellation was successful
+        if data.get("success") or data.get("payload", {}).get("order_status") == "CANCELLED":
+            return True
+        return False
+    except Exception as e:
+        print(f"⚠️ Error cancelling order {order_id}: {e}")
+        return False
+
 # ----------------- Rounding for limits (5 paise) -----------------
 def round_to_nearest_5_paise(price):
     # Round to nearest 0.05
@@ -1433,8 +1593,245 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
 
 
 # ----------------- Place CP order workflow (mirrors AngelOne logic) -----------------
+def place_quick_order(command):
+    """Quick mode: Buy at market and instantly set limit sell at +1.5 points"""
+    global buy_status, instruments_data, CONFIG
+    
+    parsed_command = parse_cp_command(command)
+    if not parsed_command:
+        print("❌ Invalid command format. Expected: <lots> <TRADING_SYMBOL>")
+        return
+
+    lots = parsed_command["lots"]
+    trading_symbol_str = parsed_command["trading_symbol_str"]
+
+    parsed_symbol_details = parse_trading_symbol_string(trading_symbol_str)
+    if not parsed_symbol_details:
+        return
+
+    requested_index = parsed_symbol_details["underlying"]
+    current_index = CONFIG.get("index", "").upper()
+    
+    if requested_index != current_index:
+        print(f"🔄 Detected index change: {current_index} → {requested_index}")
+        print(f"📦 Reloading instruments for {requested_index}...")
+        CONFIG["index"] = requested_index
+        CONFIG["expiry"] = parsed_symbol_details["expiry_date"]
+        CONFIG["spot"] = get_index_spot_price(requested_index, access_token)
+        instruments_data = load_instruments_from_json()
+        print(f"✅ Switched to {requested_index} | Spot: {CONFIG['spot']}")
+
+    instrument = find_instrument_by_details(
+        parsed_symbol_details["underlying"],
+        parsed_symbol_details["expiry_date"],
+        parsed_symbol_details["strike"],
+        parsed_symbol_details["opt_type"],
+        instruments_data
+    )
+    if not instrument:
+        return
+
+    lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
+    quantity = lots * lot_size
+
+    # Fetch LTP
+    ltp_before = get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
+    if ltp_before is None:
+        print("❌ Could not fetch LTP before placing order.")
+        return
+
+    entry_price = round(float(ltp_before), 2)
+    target_price = round(entry_price + 1.5, 2)  # +1.5 points target
+    print(f"⚡ QUICK MODE: Entry={entry_price} | Target={target_price} (+1.5)")
+
+    # Place BUY order
+    try:
+        order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
+        order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
+        print(f"✅ Buy Order placed:", order_resp, {datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        send_telegram(f"⚡ QUICK BUY: {entry_price} | Target: {target_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
+    except Exception as e:
+        print(f"❌ Buy order failed: {e}")
+        send_telegram(f"❌ Buy order failed: {e}")
+        return
+
+    # Wait for BUY execution (only if VALIDATE_ORDERS is True)
+    if CONFIG.get("VALIDATE_ORDERS", True):
+        if order_id:
+            buy_status = wait_for_order_status(order_id, access_token, "BUY")
+            if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                print(f"⚠️ BUY failed: {buy_status}")
+                send_telegram(f"⚠️ BUY failed: {buy_status}")
+                return
+            
+            avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+            if not avg_price or not executed_qty:
+                print(f"❌ Could not get executed price/qty for BUY order {order_id}.")
+                return
+            quantity = executed_qty
+            target_price = round(avg_price + 1.5, 2)  # Recalculate target based on actual buy price
+            print(f"🎯 BUY EXECUTED @ ₹{avg_price} | New Target: ₹{target_price}")
+        else:
+            print("❌ No BUY order ID received.")
+            return
+    else:
+        # Testing mode: Use entry price estimate, skip validation
+        avg_price = entry_price
+        target_price = round(entry_price + 1.5, 2)
+        print(f"⚠️ Testing mode: Using entry price estimate ₹{avg_price}, target ₹{target_price}")
+
+    # Fetch ATR for dynamic SL
+    atr = CONFIG.get("HARD_SL_POINTS", 5)  # Default SL
+    try:
+        from threading import Thread
+        import queue
+        
+        result_queue = queue.Queue()
+        
+        def fetch_technicals():
+            try:
+                techs = get_technicals(instrument['groww_symbol'], groww, segment="FNO", instrument=instrument)
+                result_queue.put(techs)
+            except Exception as e:
+                result_queue.put(None)
+        
+        thread = Thread(target=fetch_technicals, daemon=True)
+        thread.start()
+        thread.join(timeout=3)  # Wait max 3 seconds
+        
+        if not result_queue.empty():
+            techs = result_queue.get()
+            if techs and techs.get("atr"):
+                atr = techs["atr"]
+                print(f"✅ ATR fetched: {atr:.2f}")
+    except:
+        pass
+    
+    # Calculate SL based on ATR
+    sl_price = round(avg_price - (1.5 * atr), 2)
+    print(f"🛡️ Dynamic SL: ₹{sl_price} (based on 1.5x ATR={atr:.2f})")
+
+    # Place LIMIT SELL order instantly at target
+    try:
+        sell_resp = place_limit_order_groww(instrument, quantity, target_price, transaction_type="SELL", product="MIS")
+        sell_order_id = sell_resp.get("payload", {}).get("groww_order_id") or sell_resp.get("groww_order_id")
+        print(f"✅ LIMIT SELL placed @ ₹{target_price}:", sell_resp)
+        send_telegram(f"🎯 LIMIT SELL @ ₹{target_price} | Order ID: {sell_order_id}")
+        
+        # Validate SELL order placement if flag is true
+        if CONFIG.get("VALIDATE_ORDERS", True) and sell_order_id:
+            print(f"🔎 Validating SELL order placement...")
+            initial_status = get_order_status(sell_order_id, access_token)
+            print(f"📋 SELL order status: {initial_status}")
+            if initial_status in ["FAILED", "REJECTED", "CANCELLED"]:
+                print(f"❌ SELL order placement failed: {initial_status}")
+                send_telegram(f"❌ SELL order failed: {initial_status}")
+                return
+    except Exception as e:
+        print(f"❌ Limit SELL order failed: {e}")
+        send_telegram(f"❌ Limit SELL failed: {e}")
+        return
+
+    # Monitor price until target or SL is hit
+    print(f"⏳ Monitoring price... Target: ₹{target_price} | SL: ₹{sl_price}")
+    start_time = time.time()
+    max_monitor_time = 3600  # 1 hour max
+    
+    while True:
+        if time.time() - start_time >= max_monitor_time:
+            print("⏰ Max monitoring time reached (1 hour)")
+            break
+            
+        try:
+            ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+            if ltp is None:
+                time.sleep(1)
+                continue
+            ltp = float(ltp)
+            
+            # Check if target hit
+            if ltp >= target_price:
+                print(f"🎯 TARGET HIT! LTP: ₹{ltp}")
+                send_telegram(f"🎯 TARGET HIT @ ₹{ltp}")
+                play_sound_async(SOUND_PROFIT)
+                
+                # Check SELL order status
+                if CONFIG.get("VALIDATE_ORDERS", True) and sell_order_id:
+                    final_status = wait_for_order_status(sell_order_id, access_token, "SELL")
+                    if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                        sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                        if sell_price and sold_qty:
+                            profit = (sell_price - avg_price) * sold_qty
+                            print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                            send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
+                            log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
+                        else:
+                            profit = (ltp - avg_price) * quantity
+                            print(f"💰 Estimated PROFIT: ₹{profit:.2f}")
+                            log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, profit)
+                else:
+                    profit = (ltp - avg_price) * quantity
+                    print(f"💰 Estimated PROFIT: ₹{profit:.2f}")
+                    log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, profit)
+                break
+                
+            # Check if SL hit
+            if ltp <= sl_price:
+                print(f"🛑 SL HIT! LTP: ₹{ltp}")
+                send_telegram(f"🛑 SL HIT @ ₹{ltp}")
+                play_sound_async(SOUND_SL)
+                
+                # Cancel pending target order and place market sell
+                try:
+                    print(f"🔄 Cancelling target order and placing market SELL...")
+                    
+                    # Cancel the pending limit sell order
+                    if sell_order_id:
+                        cancel_success = cancel_order_groww(sell_order_id, access_token)
+                        if cancel_success:
+                            print(f"✅ Target order {sell_order_id} cancelled successfully")
+                            send_telegram(f"✅ Target order cancelled")
+                        else:
+                            print(f"⚠️ Could not cancel target order {sell_order_id}, it may have already executed")
+                    
+                    # Place market sell
+                    market_sell_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                    market_sell_id = market_sell_resp.get("payload", {}).get("groww_order_id") or market_sell_resp.get("groww_order_id")
+                    print(f"✅ Market SELL placed: {market_sell_id}")
+                    
+                    if CONFIG.get("VALIDATE_ORDERS", True) and market_sell_id:
+                        final_status = wait_for_order_status(market_sell_id, access_token, "SELL")
+                        if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                            sell_price, sold_qty = get_order_executed_price(market_sell_id, access_token)
+                            if sell_price and sold_qty:
+                                loss = (sell_price - avg_price) * sold_qty
+                                print(f"💸 LOSS: ₹{loss:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                send_telegram(f"💸 LOSS: ₹{loss:.2f}")
+                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, loss)
+                    else:
+                        loss = (ltp - avg_price) * quantity
+                        print(f"💸 Estimated LOSS: ₹{loss:.2f}")
+                        log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, loss)
+                except Exception as e:
+                    print(f"❌ SL execution failed: {e}")
+                break
+            
+            time.sleep(1)  # Poll every second
+            
+        except Exception as e:
+            print(f"⚠️ Monitoring error: {e}")
+            time.sleep(2)
+    
+    print("✅ Quick order complete. Ready for next command.")
+
+
 def place_cp_order(command, is_auto=False):
     global buy_status, instruments_data, CONFIG
+    
+    # Start timing for manual mode
+    command_start_time = datetime.now()
+    print(f"[{command_start_time.strftime('%H:%M:%S.%f')[:-3]}] ⏱️  Command entered: {command}")
+    
     if is_auto:
         print("Auto mode not supported in this bot, only manual mode")
     else:
@@ -1445,6 +1842,8 @@ def place_cp_order(command, is_auto=False):
 
         lots = parsed_command["lots"]
         trading_symbol_str = parsed_command["trading_symbol_str"]
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 🔍 Parsing symbol: {trading_symbol_str}")
 
         parsed_symbol_details = parse_trading_symbol_string(trading_symbol_str)
         if not parsed_symbol_details:
@@ -1479,20 +1878,25 @@ def place_cp_order(command, is_auto=False):
 
         lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
         quantity = lots * lot_size
-
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 💰 Fetching LTP...")
         ltp_before = get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
         if ltp_before is None:
             print("❌ Could not fetch LTP before placing order.")
             return
 
         entry_price = round(float(ltp_before), 2)
-        print(f"entry price: {entry_price}")
+        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 💵 Entry price: ₹{entry_price}")
 
         # ⚡ PLACE BUY ORDER IMMEDIATELY (no delays before this)
         try:
+            order_start = datetime.now()
+            print(f"[{order_start.strftime('%H:%M:%S.%f')[:-3]}] 🔄 Placing BUY order for {quantity} units...")
             order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
             order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
-            print(f"✅ Buy Order placed:", order_resp , {datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            order_placed = datetime.now()
+            order_duration = (order_placed - order_start).total_seconds()
+            print(f"[{order_placed.strftime('%H:%M:%S.%f')[:-3]}] ✅ BUY Order placed: {order_id} (took {order_duration:.2f}s)")
             send_telegram(f"entry price: {entry_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
         except Exception as e:
             print(f"❌ Buy order failed: {e}")
@@ -1524,23 +1928,29 @@ def place_cp_order(command, is_auto=False):
         # ✅ LIVE TRADING: Wait until BUY order is EXECUTED (controlled by VALIDATE_ORDERS)
         if CONFIG.get("VALIDATE_ORDERS", True):
             if order_id:
+                validation_start = datetime.now()
                 buy_status = wait_for_order_status(order_id, access_token, "BUY")
                 if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                    print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
+                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
                     send_telegram(f"⚠️ BUY failed: {buy_status}")
                     return
             else:
-                print("❌ No BUY order ID received. Aborting trade.")
+                print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ❌ No BUY order ID received. Aborting trade.")
                 send_telegram("❌ No BUY order ID received")
                 return
             
             # Fetch actual executed price and quantity
             avg_price, executed_qty = get_order_executed_price(order_id, access_token)
             if not avg_price or not executed_qty:
-                print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
+                print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
                 return
             quantity = executed_qty # Use the actual executed quantity
-            print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {quantity}")
+            validation_end = datetime.now()
+            validation_duration = (validation_end - validation_start).total_seconds()
+            total_duration = (validation_end - command_start_time).total_seconds()
+            
+            print(f"[{validation_end.strftime('%H:%M:%S.%f')[:-3]}] 🎯 Executed avg price: ₹{avg_price}, Qty: {quantity}")
+            print(f"[{validation_end.strftime('%H:%M:%S.%f')[:-3]}] ⏱️  Total time: {total_duration:.2f}s (Order: {order_duration:.2f}s, Validation: {validation_duration:.2f}s)")
             send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={quantity}")
         else:
             # Testing mode: Use entry price estimate
@@ -1678,6 +2088,8 @@ def place_cp_order(command, is_auto=False):
                                     instrument.get("internal_trading_symbol"),
                                     avg_price, sell_price, sold_qty, profit
                                 )
+                                # Display account summary
+                                display_account_summary(access_token)
                             else:
                                 print("⚠️ Could not get executed SELL price. Logging with LTP.")
                                 profit = (ltp - avg_price) * quantity
@@ -1686,6 +2098,8 @@ def place_cp_order(command, is_auto=False):
                                     instrument.get("internal_trading_symbol"),
                                     avg_price, ltp, quantity, profit
                                 )
+                                # Display account summary
+                                display_account_summary(access_token)
                         else:
                             print(f"⚠️ SELL order failed with status: {sell_status}")
                             send_telegram(f"⚠️ SELL failed: {sell_status}")
@@ -1701,6 +2115,8 @@ def place_cp_order(command, is_auto=False):
                             instrument.get("internal_trading_symbol"),
                             avg_price, sell_price, sold_qty, profit
                         )
+                        # Display account summary
+                        display_account_summary(access_token)
                     else:
                         print("⚠️ No SELL order ID received.")
                         
@@ -1712,6 +2128,349 @@ def place_cp_order(command, is_auto=False):
                 break  # Exit the trailing loop
 
             time.sleep(poll)
+
+
+# ----------------- Directional Mode -----------------
+
+def directional_mode():
+    """
+    Directional mode: User types premium value and direction
+    Example: '150 c' = Find Call option with premium closest to ₹150
+    Example: '200 p' = Find Put option with premium closest to ₹200
+    """
+    cfg = CONFIG
+    dir_cfg = cfg["DIRECTIONAL_MODE"]
+    
+    print("\n" + "="*60)
+    print("📍 DIRECTIONAL MODE")
+    print("="*60)
+    print(f"Index: {cfg['index']} | Expiry: {cfg['expiry']}")
+    print(f"Lots: {cfg['lots']}")
+    print("\n💡 Usage: <premium> <direction>")
+    print("   Example: 150 c  → Find Call option near ₹150")
+    print("   Example: 200 p  → Find Put option near ₹200")
+    print("="*60)
+    
+    while True:
+        user_input = input("\nEnter command (e.g., '150 c') or 'back' to menu: ").strip().lower()
+        
+        if user_input == "back":
+            return
+        
+        # Parse input: expect "<premium> <c/p>"
+        parts = user_input.split()
+        if len(parts) != 2:
+            print("⚠️ Invalid format. Use: <premium> <c/p>  (e.g., '150 c')")
+            continue
+        
+        try:
+            target_premium = float(parts[0])
+        except ValueError:
+            print("⚠️ Invalid premium value. Use a number (e.g., '150 c')")
+            continue
+        
+        if parts[1] not in ["c", "p"]:
+            print("⚠️ Invalid direction. Use 'c' for Call or 'p' for Put")
+            continue
+        
+        option_type = "CE" if parts[1] == "c" else "PE"
+        direction_name = "CALL (Bullish)" if parts[1] == "c" else "PUT (Bearish)"
+        
+        # Start timing
+        start_time = datetime.now()
+        print(f"\n[{start_time.strftime('%H:%M:%S.%f')[:-3]}] 🎯 Direction: {direction_name} | Target Premium: ₹{target_premium:.2f}")
+        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 🔍 Searching for matching option...")
+        
+        try:
+            # Use spot price from CONFIG (already fetched at startup)
+            spot_price = cfg["spot"]
+            if not spot_price or spot_price <= 0:
+                # Fallback: try to fetch fresh spot price
+                spot_price = get_index_spot_price(cfg["index"], access_token)
+                if not spot_price:
+                    print("❌ Could not fetch spot price. Try again.")
+                    continue
+            
+            print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 📊 {cfg['index']} Spot: ₹{spot_price:.2f}")
+            
+            # Find all matching options for this type and expiry
+            matching_options = []
+            for instrument in instruments_data:
+                if (instrument.get("underlying_symbol", "").upper() == cfg["index"].upper() and
+                    instrument.get("expiry_date", "") == cfg["expiry"] and
+                    instrument.get("instrument_type", "").upper() == option_type):
+                    matching_options.append(instrument)
+            
+            if not matching_options:
+                print(f"❌ No {option_type} options found for {cfg['index']} expiry {cfg['expiry']}")
+                continue
+            
+            # Sort options by distance from ATM to scan smartly (ATM first, then expanding)
+            step = 100 if "SENSEX" in cfg["index"].upper() else 50
+            atm_strike = round(spot_price / step) * step
+            matching_options.sort(key=lambda x: abs(float(x.get("strike_price", 0)) - atm_strike))
+            
+            scan_start = datetime.now()
+            print(f"[{scan_start.strftime('%H:%M:%S.%f')[:-3]}] 📋 Scanning {len(matching_options)} options starting from ATM...")
+            
+            # Parallel LTP fetching for speed (fetch 5 options at once)
+            max_checks = 30  # Maximum options to check
+            batch_size = 5  # Fetch 5 options in parallel
+            
+            best_option = None
+            best_diff = float('inf')
+            best_ltp = None
+            checked_count = 0
+            
+            # Helper function to fetch LTP with option data
+            def fetch_ltp_with_option(opt):
+                try:
+                    ltp = get_ltp_for_instrument(opt, access_token, verbose=False, delay=0)
+                    if ltp and ltp > 0:
+                        return (opt, float(ltp), abs(float(ltp) - target_premium))
+                except:
+                    pass
+                return None
+            
+            # Process options in batches
+            for batch_start in range(0, min(len(matching_options), max_checks), batch_size):
+                batch_end = min(batch_start + batch_size, len(matching_options), max_checks)
+                batch = matching_options[batch_start:batch_end]
+                
+                # Fetch LTPs in parallel
+                with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                    futures = [executor.submit(fetch_ltp_with_option, opt) for opt in batch]
+                    
+                    for future in as_completed(futures):
+                        result = future.result()
+                        if result:
+                            opt, ltp, diff = result
+                            checked_count += 1
+                            
+                            # Update best if closer
+                            if diff < best_diff:
+                                best_diff = diff
+                                best_option = opt
+                                best_ltp = ltp
+                            
+                            # Early exit if found very close match (within ₹3)
+                            if diff <= 3.0:
+                                print(f"✅ Found close match after checking {checked_count} options (diff: ₹{diff:.2f})")
+                                break
+                
+                # Exit if found good match
+                if best_option and best_diff <= 3.0:
+                    break
+            
+            if best_option:
+                print(f"✅ Best match found after checking {checked_count} options")
+            
+            if not best_option or not best_ltp:
+                print("❌ Could not find any options with valid prices. Try again.")
+                continue
+            
+            selected_option = best_option
+            ltp = best_ltp
+            
+            selection_time = datetime.now()
+            scan_duration = (selection_time - scan_start).total_seconds()
+            
+            # Display selected option
+            symbol = selected_option.get("internal_trading_symbol") or selected_option.get("trading_symbol")
+            strike = float(selected_option.get("strike_price", 0))
+            lot_size = int(selected_option.get("lot_size", 25))
+            quantity = cfg["lots"] * lot_size
+            total_value = ltp * quantity
+            
+            # Determine ITM/OTM/ATM
+            step = 100 if "SENSEX" in cfg["index"].upper() else 50
+            atm_strike = round(spot_price / step) * step
+            if option_type == "CE":
+                position = "ITM" if strike < atm_strike else "OTM" if strike > atm_strike else "ATM"
+            else:
+                position = "ITM" if strike > atm_strike else "OTM" if strike < atm_strike else "ATM"
+            
+            print(f"\n[{selection_time.strftime('%H:%M:%S.%f')[:-3]}] ⏱️  Scan completed in {scan_duration:.2f}s")
+            print("\n" + "="*60)
+            print("✅ OPTION SELECTED")
+            print("="*60)
+            print(f"Symbol: {symbol}")
+            print(f"Strike: {strike} {option_type} ({position})")
+            print(f"Premium: ₹{ltp:.2f} (Target: ₹{target_premium:.2f}, Diff: ₹{abs(ltp - target_premium):.2f})")
+            print(f"Lots: {cfg['lots']} × {lot_size} = {quantity} units")
+            print(f"Total Value: ₹{total_value:,.2f}")
+            print(f"SL: ₹{ltp - cfg['HARD_SL_POINTS']:.2f} ({cfg['HARD_SL_POINTS']} points)")
+            print(f"Trail: Activates at ₹{ltp + cfg['TRAIL_START_PROFIT']:.2f}")
+            print("="*60)
+            
+            # Auto-execute trade directly without command parsing
+            print(f"\n[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 🚀 Executing trade automatically...")
+            
+            try:
+                # Place BUY order
+                order_start = datetime.now()
+                print(f"[{order_start.strftime('%H:%M:%S.%f')[:-3]}] 🔄 Placing BUY order for {quantity} units @ market price...")
+                buy_order_resp = place_market_order_groww(selected_option, quantity, "BUY", "MIS")
+                buy_order_id = buy_order_resp.get("payload", {}).get("groww_order_id") or buy_order_resp.get("groww_order_id")
+                
+                if not buy_order_id:
+                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ❌ Failed to get BUY order ID")
+                    continue
+                
+                order_placed = datetime.now()
+                order_duration = (order_placed - order_start).total_seconds()
+                print(f"[{order_placed.strftime('%H:%M:%S.%f')[:-3]}] ✅ BUY Order placed: {buy_order_id} (took {order_duration:.2f}s)")
+                send_telegram(f"✅ BUY {symbol} @ ₹{ltp:.2f} | Qty: {quantity}")
+                
+                # Wait for BUY order execution
+                if cfg.get("VALIDATE_ORDERS", True):
+                    validation_start = datetime.now()
+                    buy_status = wait_for_order_status(buy_order_id, access_token, "BUY")
+                    if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ❌ BUY order failed with status: {buy_status}")
+                        continue
+                    
+                    # Get executed price
+                    avg_price, bought_qty = get_order_executed_price(buy_order_id, access_token)
+                    if not avg_price:
+                        avg_price = ltp
+                        bought_qty = quantity
+                    
+                    validation_end = datetime.now()
+                    validation_duration = (validation_end - validation_start).total_seconds()
+                else:
+                    avg_price = ltp
+                    bought_qty = quantity
+                    validation_duration = 0
+                
+                execution_time = datetime.now()
+                total_duration = (execution_time - start_time).total_seconds()
+                print(f"[{execution_time.strftime('%H:%M:%S.%f')[:-3]}] ✅ BUY executed @ ₹{avg_price:.2f} | Qty: {bought_qty}")
+                print(f"[{execution_time.strftime('%H:%M:%S.%f')[:-3]}] ⏱️  Total time: {total_duration:.2f}s (Scan: {scan_duration:.2f}s, Order: {order_duration:.2f}s, Validation: {validation_duration:.2f}s)")
+                
+                # Start trailing stop monitoring (inline logic from place_cp_order)
+                trail_start_time = datetime.now()
+                print(f"\n[{trail_start_time.strftime('%H:%M:%S.%f')[:-3]}] 🔄 Starting trailing stop monitoring...")
+                
+                # Calculate dynamic SL using ATR
+                hard_sl_points = cfg["HARD_SL_POINTS"]
+                hard_sl = round_to_nearest_5_paise(avg_price - hard_sl_points)
+                
+                print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 📈 Trailing started... Hard SL: ₹{hard_sl:.2f}")
+                send_telegram(f"📈 Trailing started | Entry: ₹{avg_price:.2f} | SL: ₹{hard_sl:.2f}")
+                
+                # Trailing parameters
+                trail_start = cfg["TRAIL_START_PROFIT"]
+                trail_step = cfg["TRAIL_STEP"]
+                poll = cfg["POLL_INTERVAL"]
+                max_time = cfg["MAX_TRAIL_TIME"]
+                
+                highest_price = avg_price
+                start_time = time.time()
+                last_heartbeat = time.time()
+                last_trail_exit = None
+                
+                while True:
+                    # Heartbeat every 30 seconds
+                    if time.time() - last_heartbeat > 30:
+                        print(f"💓 Monitoring... LTP last seen: ₹{ltp if 'ltp' in locals() else 'fetching...'}")
+                        last_heartbeat = time.time()
+                    
+                    try:
+                        ltp = get_ltp_for_instrument(selected_option, access_token, verbose=False, delay=0)
+                    except Exception as e:
+                        print(f"⚠️ LTP fetch error (retrying): {e}")
+                        time.sleep(poll)
+                        continue
+                    
+                    if ltp is None:
+                        print("⚠️ LTP is None (retrying...)")
+                        time.sleep(poll)
+                        continue
+                    
+                    ltp = float(ltp)
+                    sell_reason = None
+                    
+                    # Check exit conditions
+                    if ltp <= hard_sl:
+                        sell_reason = f"🛑 DYNAMIC SL HIT @ {ltp}"
+                    elif time.time() - start_time >= max_time:
+                        sell_reason = "⏰ Max trail time reached"
+                    else:
+                        if ltp > highest_price:
+                            highest_price = ltp
+                            print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 🔼 New High: ₹{highest_price}")
+                        
+                        if highest_price >= avg_price + trail_start:
+                            trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
+                            
+                            if trail_exit != last_trail_exit:
+                                print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 📉 Trail Active | LTP={ltp} | High={highest_price} | Exit={trail_exit}")
+                                last_trail_exit = trail_exit
+                            
+                            if ltp <= trail_exit:
+                                sell_reason = f"🔻 Trailing HIT @ {ltp}"
+                    
+                    # If exit condition met, place SELL order
+                    if sell_reason:
+                        exit_time = datetime.now()
+                        monitoring_duration = (exit_time - trail_start_time).total_seconds()
+                        print(f"[{exit_time.strftime('%H:%M:%S.%f')[:-3]}] {sell_reason}")
+                        print(f"[{exit_time.strftime('%H:%M:%S.%f')[:-3]}] ⏱️  Monitored for {monitoring_duration:.2f}s")
+                        if "SL HIT" in sell_reason or "DYNAMIC SL" in sell_reason:
+                            play_sound_async(SOUND_SL)
+                        else:
+                            play_sound_async(SOUND_PROFIT)
+                        
+                        try:
+                            sell_order_start = datetime.now()
+                            print(f"[{sell_order_start.strftime('%H:%M:%S.%f')[:-3]}] 🔄 Placing SELL order for {bought_qty} units...")
+                            sell_order_resp = place_market_order_groww(selected_option, bought_qty, "SELL", "MIS")
+                            sell_order_id = sell_order_resp.get("payload", {}).get("groww_order_id") or sell_order_resp.get("groww_order_id")
+                            sell_order_placed = datetime.now()
+                            sell_order_duration = (sell_order_placed - sell_order_start).total_seconds()
+                            print(f"[{sell_order_placed.strftime('%H:%M:%S.%f')[:-3]}] ✅ SELL Order placed: {sell_order_id} (took {sell_order_duration:.2f}s)")
+                            send_telegram(f"{sell_reason}\n✅ SELL Order: {sell_order_id}")
+                            
+                            if cfg.get("VALIDATE_ORDERS", True) and sell_order_id:
+                                sell_validation_start = datetime.now()
+                                sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
+                                if sell_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                                    sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                                    if sell_price and sold_qty:
+                                        sell_executed = datetime.now()
+                                        sell_validation_duration = (sell_executed - sell_validation_start).total_seconds()
+                                        profit = (sell_price - avg_price) * sold_qty
+                                        
+                                        # Calculate complete trade duration
+                                        complete_trade_duration = (sell_executed - start_time).total_seconds()
+                                        
+                                        print(f"[{sell_executed.strftime('%H:%M:%S.%f')[:-3]}] 💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                        print(f"[{sell_executed.strftime('%H:%M:%S.%f')[:-3]}] ⏱️  SELL validation: {sell_validation_duration:.2f}s | Complete trade: {complete_trade_duration:.2f}s")
+                                        send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
+                                        play_sound_async(SOUND_PROFIT if profit > 0 else SOUND_SL)
+                                        log_trade_to_excel(symbol, avg_price, sell_price, sold_qty, profit)
+                                        display_account_summary(access_token)
+                            
+                            print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ✅ Trade cycle completed.")
+                            break
+                        
+                        except Exception as sell_error:
+                            print(f"❌ SELL order failed: {sell_error}")
+                            send_telegram(f"❌ SELL failed: {sell_error}")
+                            break
+                    
+                    time.sleep(poll)
+                
+            except Exception as trade_error:
+                print(f"❌ Trade execution failed: {trade_error}")
+                import traceback
+                traceback.print_exc()
+            
+        except Exception as e:
+            print(f"❌ Error in directional mode: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 # ----------------- Auto mode runner (momentum + premium) -----------------
@@ -1751,17 +2510,37 @@ if __name__ == "__main__":
         print("   → Using estimated prices (NOT recommended for live)")
     
     print("="*60)
+    
+    # Display initial account summary
+    print("\n📊 Fetching initial account summary...")
+    display_account_summary(access_token)
+    
+    print("="*60)
     print("Supported: NIFTY (NSE) | SENSEX (BSE) | BANKNIFTY | FINNIFTY")
-    print("Manual example: 14 NIFTY10FEB202625900CE")
-    print("                14 SENSEX12FEB202683500CE\n")
+    print("Manual example: 20 NIFTY17MAR202623150CE")
+    print("                50 SENSEX12MAR202674600CE")
+    print("Directional: c (Call) / p (Put) - Auto-selects option\n")
     
     while True:
-        mode = input("Choose mode: (m)anual / (a)uto / (q)uit: ").strip().lower()
-        if mode in ["q", "quit", "exit"]:
+        mode = input("Choose mode: (m)anual / (q)uick / (d)irectional / (a)uto / (e)xit: ").strip().lower()
+        if mode in ["e", "exit", "quit"]:
             print("Exiting.")
             break
         if mode in ["a", "auto"]:
             auto_mode_runner()
+            continue
+        if mode in ["d", "directional", "dir"]:
+            directional_mode()
+            continue
+        if mode in ["q", "quick"]:
+            user_input = input("\n⚡ QUICK MODE - Enter command (buy + instant 1.5pt target): ").strip()
+            command_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            print(f"⏱️  Command entered at: {command_time}")
+            if user_input.lower() in ["back"]:
+                continue
+            if user_input == "":
+                continue
+            place_quick_order(user_input)
             continue
         if mode in ["m", "manual"]:
             user_input = input("\nEnter command (or press Enter for status, type 'back' to menu): ").strip()
@@ -1774,4 +2553,4 @@ if __name__ == "__main__":
                 continue
             place_cp_order(user_input)
             continue
-        print("Invalid input. Choose 'm' or 'a' or 'q'.")
+        print("Invalid input. Choose 'm' (manual), 'q' (quick), 'a' (auto), or 'e' (exit).")

@@ -380,7 +380,7 @@ def get_nifty_spot_price(access_token=None,json_path=None):
 
 CONFIG = {
     "index": "NIFTY",
-    "expiry": "2026-02-17",  # Updated to DD/MM/YYYY to match instruments JSON
+    "expiry": "2026-03-17",  # Updated to DD/MM/YYYY to match instruments JSON
     "min_premium": 90,
     "max_premium": 155,
     "lots": 22,
@@ -392,9 +392,11 @@ CONFIG = {
     "POLL_INTERVAL": 0.2,  # Poll interval in seconds (Reduced for faster SL hit)
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
+    "VALIDATE_ORDERS": False,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution | False for testing with estimates
     "user_confirmation_needed": False,   # or False
-    "enable_technical_filters": True,  # Set to False to skip technical filters (EMA, RSI, ADX, VWAP)
-    "enable_option_filters": True,  # Set to False to skip option Greeks filters (IV, Delta, Gamma, OI, Volume)
+    "enable_technical_filters": False,  # Set to False to skip technical filters (EMA, RSI, ADX, VWAP)
+    "enable_option_filters": False,  # Set to False to skip option Greeks filters (IV, Delta, Gamma, OI, Volume)
+    "enable_vwap_filter": False,  # Set to True to enable VWAP entry filter (CE: LTP must be above VWAP, PE: LTP must be below VWAP)
     # Volume + OI Risk Filter Settings
     "enable_volume_oi_filter": False,  # Enable Volume + OI based risk management
     "VOLUME_SPIKE_FACTOR": 2.0,  # Volume spike detection: curr_volume > prev_volume * factor (relaxed from 1.5)
@@ -413,7 +415,7 @@ CONFIG = {
     "ATR_MULTIPLIER_TP": 3.0,
     "ATR_TIGHTEN_FACTOR": 0.5,
     "PROFIT_TIGHTEN_THRESHOLD": 0.10,
-    "USE_VOLATILITY_SIZING": True,
+    "USE_VOLATILITY_SIZING": False,
     # Greeks Thresholds (relaxed for more trades)
     "MIN_DELTA_ENTRY": 0.35,  # Relaxed from 0.45
     "MAX_IV_PERCENTILE": 0.75  # Relaxed from 0.70
@@ -1732,16 +1734,21 @@ def place_cp_order(command, is_auto=False):
 
         entry_price = round(float(ltp_before), 2)
 
-        # VWAP confirmation
-        technicals = get_technicals(instrument.get("groww_symbol"), groww, interval="1minute")
-        if technicals:
-            vwap = technicals.get("vwap")
-            ltp = technicals.get("ltp")
-            opt_type = instrument.get("instrument_type", "CE")
-            if (opt_type == "CE" and ltp < vwap) or (opt_type == "PE" and ltp > vwap):
-                print(f"❌ VWAP filter: {opt_type} entry rejected. LTP={ltp}, VWAP={vwap}")
-                send_telegram(f"❌ VWAP filter: {opt_type} entry rejected. LTP={ltp}, VWAP={vwap}")
-                return
+        # VWAP confirmation (controlled by enable_vwap_filter flag)
+        if CONFIG.get("enable_vwap_filter", False):
+            technicals = get_technicals(instrument.get("groww_symbol"), groww, interval="1minute")
+            if technicals:
+                vwap = technicals.get("vwap")
+                ltp = technicals.get("ltp")
+                opt_type = instrument.get("instrument_type", "CE")
+                if (opt_type == "CE" and ltp < vwap) or (opt_type == "PE" and ltp > vwap):
+                    print(f"❌ VWAP filter: {opt_type} entry rejected. LTP={ltp}, VWAP={vwap}")
+                    send_telegram(f"❌ VWAP filter: {opt_type} entry rejected. LTP={ltp}, VWAP={vwap}")
+                    return
+            else:
+                print("⚠️ VWAP filter enabled but technicals unavailable, proceeding with entry")
+        else:
+            print("ℹ️ VWAP filter disabled, skipping VWAP confirmation")
 
         # ATR-based position sizing
         account_balance = risk_manager._get_equity()
@@ -2002,38 +2009,53 @@ def place_cp_order(command, is_auto=False):
             order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
             order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
             print("✅ Buy Order placed:", order_resp)
+            send_telegram(f"entry price: {entry_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
         except Exception as e:
             print(f"❌ Buy order failed: {e}")
             send_telegram(f"❌ Buy order failed: {e}")
             return
 
         # STATUS VALIDATION
-        # --- Wait until BUY order is EXECUTED or COMPLETED ---
-        # if order_id:
-        #     buy_status = wait_for_order_status(order_id, access_token, "BUY")
-        #     if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-        #         print(f"⚠️ Skipping SELL due to BUY status: {buy_status}")
-        #         return
-        #
-        # avg_price, quantity = get_order_executed_price(order_id, access_token)
-        # if avg_price is None:
-        #     print("❌ Could not get executed price. Aborting.")
-        #     return
-        # print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {quantity}")
-        # send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={quantity}")
+        # ✅ LIVE TRADING: Wait until BUY order is EXECUTED (controlled by VALIDATE_ORDERS)
+        if CONFIG.get("VALIDATE_ORDERS", True):
+            if order_id:
+                buy_status = wait_for_order_status(order_id, access_token, "BUY")
+                if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                    print(f"⚠️ Skipping trade monitoring due to BUY status: {buy_status}")
+                    send_telegram(f"⚠️ BUY failed: {buy_status}")
+                    return
+            else:
+                print("❌ No BUY order ID received. Aborting trade.")
+                send_telegram("❌ No BUY order ID received")
+                return
+            
+            # Fetch actual executed price and quantity
+            avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+            if not avg_price or not executed_qty:
+                print(f"❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
+                return
+            quantity = executed_qty  # Use the actual executed quantity
+            entry_price = avg_price  # Use actual executed price
+            print(f"🎯 Executed avg price: ₹{avg_price}, Qty: {quantity}")
+            send_telegram(f"🎯 BUY EXECUTED @ ₹{avg_price} | Qty={quantity}")
+        else:
+            # Testing mode: Use entry price estimate
+            avg_price = entry_price
+            executed_qty = quantity
+            print(f"⚠️ Testing mode: Using entry price estimate ₹{avg_price}")
 
         # ================= TRAILING LOGIC =================
-        highest_price = entry_price+1
+        highest_price = avg_price + 1  # Use actual executed price
         start_time = time.time()
 
         trail_start = CONFIG["TRAIL_START_PROFIT"]
         trail_step = CONFIG["TRAIL_STEP"]
         poll = CONFIG["POLL_INTERVAL"]
         max_time = CONFIG["MAX_TRAIL_TIME"]
-        hard_sl = entry_price - CONFIG.get("HARD_SL_POINTS")
+        hard_sl = avg_price - CONFIG.get("HARD_SL_POINTS")  # Use actual executed price
 
-        print("📈 Trailing started...")
-        send_telegram("📈 Trailing started")
+        print(f"📈 Trailing started... Entry: ₹{avg_price}, SL: ₹{hard_sl}")
+        send_telegram(f"📈 Trailing started | Entry: ₹{avg_price} | SL: ₹{hard_sl}")
 
         while True:
             # ENHANCEMENT: Zero delay in get_ltp to process immediately
@@ -2069,10 +2091,10 @@ def place_cp_order(command, is_auto=False):
                 else:
                      play_sound_async(SOUND_SL)
                 
-                profit = (ltp - entry_price) * quantity
+                profit = (ltp - avg_price) * quantity  # Use actual executed price
                 log_trade_to_excel(
                     instrument.get("internal_trading_symbol"),
-                    entry_price, ltp, quantity, profit, volume , oi
+                    avg_price, ltp, quantity, profit, volume , oi
                 )
                 break
 
@@ -2082,7 +2104,7 @@ def place_cp_order(command, is_auto=False):
                 print(f"🔼 New High: ₹{highest_price}")
 
             # 🟢 Start trailing after ₹1 profit
-            if highest_price >= entry_price + trail_start:
+            if highest_price >= avg_price + trail_start:  # Use actual executed price
                 trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
                 print(f"📉 Trail Active | LTP={ltp} | Exit={trail_exit}")
 
@@ -2104,10 +2126,10 @@ def place_cp_order(command, is_auto=False):
                     send_telegram(f"💰💰💰💰💰💰 PROFIT BOOKED 💰💰💰💰💰")
                     play_sound_async(SOUND_PROFIT)
 
-                    profit = (ltp - entry_price) * quantity
+                    profit = (ltp - avg_price) * quantity  # Use actual executed price
                     log_trade_to_excel(
                         instrument.get("internal_trading_symbol"),
-                        entry_price, ltp, quantity, profit , volume, oi
+                        avg_price, ltp, quantity, profit , volume, oi
                     )
                     break
 
@@ -2599,7 +2621,20 @@ def auto_mode_runner():
 
 # ----------------- Main menu -----------------
 if __name__ == "__main__":
-    print("\n✨ Groww NIFTY CP Bot Ready (Groww backend)")
+    print("\n" + "="*60)
+    print("✨ Groww Options Trading Bot Ready")
+    print("="*60)
+    print(f"📊 Index: {CONFIG['index']} | Expiry: {CONFIG['expiry']}")
+    print(f"💰 Lots: {CONFIG['lots']} | Poll: {CONFIG['POLL_INTERVAL']}s")
+    
+    if CONFIG.get("VALIDATE_ORDERS", True):
+        print("✅ LIVE TRADING MODE: Order validation ENABLED")
+        print("   → BUY/SELL orders will be verified before proceeding")
+    else:
+        print("⚠️  TESTING MODE: Order validation DISABLED")
+        print("   → Using estimated prices (NOT recommended for live)")
+    
+    print("="*60)
     print("You can run in MANUAL or AUTO mode.")
     print("Manual example: Buy 14 NIFTY04NOV2525950CE at CP and Book at 1050\n")
     while True:
