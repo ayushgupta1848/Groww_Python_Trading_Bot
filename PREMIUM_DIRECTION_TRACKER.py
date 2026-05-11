@@ -696,7 +696,38 @@ def _fib_signal(spot: float, fib: dict) -> dict:
 # ─────────────────────────────────────────────────────────────
 _fib_lock      = threading.Lock()
 _last_fib_zone = ""          # tracks last spoken zone to avoid repeating
-_prob_history: deque = deque(maxlen=40)  # stores ce_prob values over time
+_prob_history:  deque = deque(maxlen=40)   # ce_prob ratio history (for chart)
+_spot_history:  deque = deque(maxlen=40)   # spot sampled each fib refresh (~30s each → 20 min)
+
+
+def _calc_momentum() -> tuple[str, float, float]:
+    """
+    Linear-regression slope over the rolling spot history.
+    Returns (direction, pts_per_min, minutes_tracked).
+      direction: "UP" | "DOWN" | "FLAT"
+    Threshold: <3 pts/min treated as FLAT (normal noise).
+    """
+    spots = list(_spot_history)
+    n = len(spots)
+    if n < 4:                          # need at least ~2 min of samples
+        return "FLAT", 0.0, 0.0
+
+    xs     = list(range(n))
+    x_mean = sum(xs) / n
+    y_mean = sum(spots) / n
+    numer  = sum((xs[i] - x_mean) * (spots[i] - y_mean) for i in range(n))
+    denom  = sum((xs[i] - x_mean) ** 2 for i in range(n))
+    if denom == 0:
+        return "FLAT", 0.0, 0.0
+
+    slope_per_sample = numer / denom                        # pts per sample
+    refresh_sec      = CONFIG.get("FIB_REFRESH_SEC", 30)
+    pts_per_min      = slope_per_sample * (60 / refresh_sec)
+    minutes          = round(n * refresh_sec / 60, 1)
+
+    if abs(pts_per_min) < 3.0:
+        return "FLAT", pts_per_min, minutes
+    return ("UP" if pts_per_min > 0 else "DOWN"), pts_per_min, minutes
 _fib_state: dict = {
     "updated_at": None,
     "spot":       None,
@@ -797,6 +828,7 @@ def _refresh_fib(groww_client, index_name: str, access_token: str, expiry: str) 
     if not fib:
         return
     sig = _fib_signal(spot, fib)
+    _spot_history.append(spot)          # feed momentum tracker
     with _fib_lock:
         _fib_state.update({
             "updated_at": datetime.now(),
@@ -923,6 +955,43 @@ def _print_fib_panel() -> None:
     print(f"  {C.BOLD}ACTION  {act_col}{s.get('action','')}{C.RESET}")
     for line in s.get("mentor", []):
         print(f"  {C.DIM}{line}{C.RESET}")
+
+    # ── Momentum conflict block ───────────────────────────────
+    mom_dir, mom_pts, mom_mins = _calc_momentum()
+    ce_p_val = s.get("ce_prob", 50)
+    fib_says_ce = ce_p_val >= 60     # zone recommends CE
+    fib_says_pe = ce_p_val <= 40     # zone recommends PE
+    conflict = (mom_dir == "DOWN" and fib_says_ce) or (mom_dir == "UP" and fib_says_pe)
+
+    if conflict and mom_mins >= 2.0:
+        sup_px  = s.get("sup_price")
+        res_px  = s.get("res_price")
+        sup_lbl = s.get("sup_label", "")
+        res_lbl = s.get("res_label", "")
+        mom_str = f"{abs(mom_pts):.1f} pts/min"
+        mins_str = f"{mom_mins:.0f} min"
+        print(thin)
+        if mom_dir == "DOWN" and fib_says_ce:
+            print(f"  {C.YELLOW}{C.BOLD}⚠️  MOMENTUM CONFLICT{C.RESET}  "
+                  f"{C.DIM}Fib → CE  │  Market ↓ {mom_str} (last {mins_str}){C.RESET}")
+            print(f"  {C.DIM}Market has been falling while Fib zone suggests bullish.{C.RESET}")
+            if sup_px:
+                print(f"  {C.DIM}► Spot is near support {sup_lbl} ({sup_px:.0f}) — wait here.{C.RESET}")
+                print(f"  {C.RED}► If breaks BELOW {sup_px:.0f} → momentum accelerating down → switch to PE.{C.RESET}")
+            if res_px:
+                print(f"  {C.GREEN}► CE conviction returns only on close ABOVE {res_px:.0f}.{C.RESET}")
+            print(f"  {C.DIM}► Do NOT enter CE while market is still declining.{C.RESET}")
+        else:  # mom UP, fib says PE
+            print(f"  {C.YELLOW}{C.BOLD}⚠️  MOMENTUM CONFLICT{C.RESET}  "
+                  f"{C.DIM}Fib → PE  │  Market ↑ {mom_str} (last {mins_str}){C.RESET}")
+            print(f"  {C.DIM}Market has been rising while Fib zone suggests bearish.{C.RESET}")
+            if res_px:
+                print(f"  {C.DIM}► Spot is near resistance {res_lbl} ({res_px:.0f}) — wait here.{C.RESET}")
+                print(f"  {C.GREEN}► If breaks ABOVE {res_px:.0f} → momentum accelerating up → switch to CE.{C.RESET}")
+            if sup_px:
+                print(f"  {C.RED}► PE conviction returns only on close BELOW {sup_px:.0f}.{C.RESET}")
+            print(f"  {C.DIM}► Do NOT enter PE while market is still rising.{C.RESET}")
+
     print(rule)
     _print_prob_chart()
     print(f"{rule}\n")
