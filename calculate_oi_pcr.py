@@ -16,7 +16,7 @@ URL = "https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi"
 PARAMS = {
     "functionName": "getOptionChainData",
     "symbol": "NIFTY",
-    "params": "expiryDate=28-Apr-2026"
+    "params": "expiryDate=12-May-2026"
 }
 
 HEADERS = {
@@ -278,7 +278,9 @@ def calculate(j):
     price = j["underlyingValue"]
     data = j["data"]
 
-    strikes = sorted(i["strikePrice"] for i in data)
+    strikes = sorted(i["strikePrice"] for i in data if "strikePrice" in i)
+    if not strikes:
+        raise ValueError("No strike data returned — expiry date may be wrong or market is closed.")
     atm = min(strikes, key=lambda x: abs(x - price))
     idx = strikes.index(atm)
     atm_range = strikes[max(0, idx-3): idx+4]

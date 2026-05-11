@@ -222,6 +222,31 @@ def csv_to_json(csv_file_path, json_file_path=None):
 
 ltp_lock = threading.Lock()
 
+# ── Token-bucket rate limiter for Groww Live Data API ──────────────────────
+# Groww limit: 10 req/sec burst, 300 req/min (= 5 req/sec avg).
+# We cap at 4 req/sec here so the tracker + fib bots can share the budget.
+class _RateLimiter:
+    def __init__(self, rate: float):
+        self._rate   = rate      # tokens/second
+        self._tokens = rate      # start full
+        self._last   = time.monotonic()
+        self._lock   = threading.Lock()
+
+    def acquire(self):
+        with self._lock:
+            now = time.monotonic()
+            self._tokens = min(self._rate, self._tokens + (now - self._last) * self._rate)
+            self._last = now
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+                return
+            wait = (1.0 - self._tokens) / self._rate
+        time.sleep(wait)
+        with self._lock:
+            self._tokens = max(0.0, self._tokens - 1.0)
+
+_live_data_limiter = _RateLimiter(rate=4.0)  # 4 req/sec = 240/min from this bot
+
 def get_ltp_for_instrument(instrument, access_token, verbose=True, segment="FNO", delay=0.05, max_retries=2):
     """
     Fetches the latest traded price (LTP) for a given F&O instrument using Groww's authenticated API.
@@ -246,12 +271,19 @@ def get_ltp_for_instrument(instrument, access_token, verbose=True, segment="FNO"
             "X-API-VERSION": "1.0"
         }
 
+        # Throttle to 4 req/sec so this bot stays within Groww's 300 req/min Live Data budget
+        _live_data_limiter.acquire()
+
         # 🔒 Lock ensures one API call at a time
         with ltp_lock:
             resp = session.get(url, headers=headers, timeout=5)  # Use session + reduced timeout
             if delay > 0:
                 time.sleep(delay)  # ⏳ short delay to respect Groww API rate limits
 
+        if resp.status_code == 429:
+            print(f"⚠️ HTTP 429 error fetching LTP: {resp.text}")
+            time.sleep(3)  # back off so the rate-limit ban can expire
+            return None
         if resp.status_code != 200:
             print(f"⚠️ HTTP {resp.status_code} error fetching LTP: {resp.text}")
             return None
@@ -534,7 +566,7 @@ CONFIG = {
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
     "VALIDATE_ORDERS": True,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
-    "PAPER_TRADING": False,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
+    "PAPER_TRADING": True,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
     "user_confirmation_needed": False,   # or False
     "ENABLE_EMA_CHECK": False,
     "ENABLE_ADX_CHECK": False,

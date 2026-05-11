@@ -61,8 +61,8 @@ CONFIG = {
     # Smaller = more sensitive. Larger = fewer direction flips.
     "DIRECTION_THRESHOLD": 0.25,
 
-    # Seconds between LTP polls.
-    "REFRESH_SEC": .5,
+    # Seconds between LTP polls. Keep ≥ 2 when running alongside main bot to stay under rate limits.
+    "REFRESH_SEC": 2,
 
     "MARKET_OPEN":  "09:15",
     "MARKET_CLOSE": "15:30",
@@ -76,7 +76,9 @@ CONFIG = {
     "FIB_REFRESH_SEC":    30,
 
     # Hours of 15-min candle history to use for swing detection.
-    "FIB_LOOKBACK_HOURS": 10,
+    # Use 48h so we always cover 2 full trading days regardless of time of day.
+    # (Market is only open 9:15-15:30, so 10h only captures ~2h of candles at 11AM.)
+    "FIB_LOOKBACK_HOURS": 48,
     # Bars each side for swing high/low detection (lower = more sensitive).
     "FIB_SWING_WINDOW":   3,
 
@@ -93,7 +95,7 @@ CONFIG = {
 #  Generates a realistic random-walk premium stream so you can
 #  verify the display and direction logic while market is closed.
 # ─────────────────────────────────────────────────────────────
-TEST_MODE = True
+TEST_MODE = False
 
 # Mock settings (only used when TEST_MODE = True)
 TEST_INDEX       = "NIFTY"
@@ -124,6 +126,32 @@ API_KEY = (
 TOTP_SECRET = "SC3YMFLEGLHBWUPHRBOYLPEEOVAT2PZ4"
 
 _session = requests.Session()
+
+# ── Token-bucket rate limiter for Groww Live Data API ──────────────────────
+# Budget allocation: main bot uses ~240 req/min, tracker gets ~60 req/min.
+# After batching CE+PE into one call the tracker makes ≤ 30 req/min; limiter
+# is a safety net capping at 1 req/sec = 60 req/min.
+class _RateLimiter:
+    def __init__(self, rate: float):
+        self._rate   = rate
+        self._tokens = rate
+        self._last   = time.monotonic()
+        self._lock   = threading.Lock()
+
+    def acquire(self):
+        with self._lock:
+            now = time.monotonic()
+            self._tokens = min(self._rate, self._tokens + (now - self._last) * self._rate)
+            self._last = now
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+                return
+            wait = (1.0 - self._tokens) / self._rate
+        time.sleep(wait)
+        with self._lock:
+            self._tokens = max(0.0, self._tokens - 1.0)
+
+_live_data_limiter = _RateLimiter(rate=1.0)  # 1 req/sec = 60 req/min from this bot
 
 # ─────────────────────────────────────────────────────────────
 #  ANSI COLORS
@@ -266,8 +294,12 @@ def get_ltp(instrument: dict, access_token: str) -> float | None:
         "Authorization": f"Bearer {access_token}",
         "X-API-VERSION": "1.0",
     }
+    _live_data_limiter.acquire()
     try:
         resp = _session.get(url, headers=headers, timeout=5)
+        if resp.status_code == 429:
+            time.sleep(5)
+            return None
         if resp.status_code == 200:
             val = resp.json().get("payload", {}).get(exchange_symbol)
             if val is not None:
@@ -275,6 +307,42 @@ def get_ltp(instrument: dict, access_token: str) -> float | None:
     except Exception:
         pass
     return None
+
+
+def get_ltp_pair(ce_inst: dict, pe_inst: dict, access_token: str) -> tuple[float | None, float | None]:
+    """Fetch CE and PE LTP in a single API call — halves Live Data quota usage."""
+    syms: list[str] = []
+    for inst in (ce_inst, pe_inst):
+        ts = inst.get("trading_symbol")
+        ex = inst.get("exchange", "NSE").upper()
+        if ts:
+            syms.append(f"{ex}_{ts}")
+    if len(syms) != 2:
+        return None, None
+    url = (
+        f"https://api.groww.in/v1/live-data/ltp"
+        f"?segment=FNO&exchange_symbols={syms[0]}&exchange_symbols={syms[1]}"
+    )
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0",
+    }
+    _live_data_limiter.acquire()
+    try:
+        resp = _session.get(url, headers=headers, timeout=5)
+        if resp.status_code == 429:
+            time.sleep(5)
+            return None, None
+        if resp.status_code == 200:
+            payload = resp.json().get("payload", {})
+            ce_val = payload.get(syms[0])
+            pe_val = payload.get(syms[1])
+            return (float(ce_val) if ce_val is not None else None,
+                    float(pe_val) if pe_val is not None else None)
+    except Exception:
+        pass
+    return None, None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -496,7 +564,7 @@ def _fib_signal(spot: float, fib: dict) -> dict:
             lines=[f"🚨 Below golden zone! Uptrend is in serious danger.",
                    f"   PE preferred here.  Target: swing low {sl:.0f}.",
                    f"   CE only if price fully reclaims R61.8% ({r618:.0f})."]
-        else:
+        elif spot > sl:
             zone=f"NEAR BREAKDOWN — below R78.6% ({r786:.0f})"; ce=15; pe=85
             trend="⬇ STRONGLY BEARISH — breakdown imminent"
             action="STRONG PE — breakdown very likely"
@@ -504,9 +572,49 @@ def _fib_signal(spot: float, fib: dict) -> dict:
             lines=[f"🚨 CRITICAL — below R78.6%, near swing low {sl:.0f}.",
                    f"   Very high probability of breakdown. Stay in PE.",
                    f"   Avoid CE. Re-enter CE only above R61.8% ({r618:.0f})."]
+        else:
+            # Price broke below the swing low — bullish swing is fully negated.
+            # Extension targets for the reversed (bearish) move, measured from sh.
+            _ext_dns = [
+                (round(sh - rng * 1.272, 1), "E127.2%"),
+                (round(sh - rng * 1.618, 1), "E161.8%"),
+                (round(sh - rng * 2.618, 1), "E261.8%"),
+            ]
+            # Pick the first extension that price hasn't reached yet (going down)
+            _unmet = [(p, lb) for p, lb in _ext_dns if p < spot]
+            tgt, tgt_lbl = _unmet[0] if _unmet else _ext_dns[-1]
+            zone="BREAKDOWN CONFIRMED — below swing low"; ce=10; pe=90
+            trend="⬇ STRONGLY BEARISH — bullish swing fully reversed"
+            action="STRONG PE — breakdown confirmed below swing low"
+            stp=sl; stp_lbl=f"SWING LOW ({sl:.0f})"
+            lines=[f"🚨 BREAKDOWN CONFIRMED below swing low {sl:.0f}!",
+                   f"   The bullish swing {sl:.0f}→{sh:.0f} is fully negated.",
+                   f"   Next target: {tgt:.0f}  ({tgt_lbl} — {tgt - spot:+.0f} pts).",
+                   f"   Hold PE. Trail stop above {sl:.0f} (now becomes resistance).",
+                   f"   Avoid CE until spot reclaims R61.8% ({r618:.0f})."]
     else:
         # Bearish swing — levels go from sl upward
-        if spot <= sl:
+        if spot >= sh:
+            # Price exceeded the swing high — the entire bearish swing is reversed.
+            # Extension targets for the reversed (bullish) move, measured from sl.
+            _ext_ups = [
+                (round(sl + rng * 1.272, 1), "E127.2%"),
+                (round(sl + rng * 1.618, 1), "E161.8%"),
+                (round(sl + rng * 2.618, 1), "E261.8%"),
+            ]
+            # Pick the first extension that price hasn't reached yet
+            _unmet = [(p, lb) for p, lb in _ext_ups if p > spot]
+            tgt, tgt_lbl = _unmet[0] if _unmet else _ext_ups[-1]
+            zone="BREAKOUT CONFIRMED — above swing high"; ce=90; pe=10
+            trend="⬆ STRONGLY BULLISH — bearish swing fully reversed"
+            action="STRONG CE — breakout confirmed above swing high"
+            stp=sh; stp_lbl=f"SWING HIGH ({sh:.0f})"
+            lines=[f"✅ BREAKOUT CONFIRMED above swing high {sh:.0f}!",
+                   f"   The bearish swing {sh:.0f}→{sl:.0f} is fully negated.",
+                   f"   Next target: {tgt:.0f}  ({tgt_lbl} — {tgt - spot:+.0f} pts).",
+                   f"   Hold CE. Trail stop below {sh:.0f} (now becomes support).",
+                   f"   Avoid PE until spot drops back below R61.8% ({r618:.0f})."]
+        elif spot <= sl:
             zone="BREAKDOWN — below swing low"; ce=15; pe=85
             trend="⬇ STRONG BEARISH — breakdown confirmed"
             action="STRONG PE — ride the breakdown"
@@ -673,8 +781,17 @@ def _refresh_fib(groww_client, index_name: str, access_token: str, expiry: str) 
         return
     swings = _detect_swings(candles, CONFIG["FIB_SWING_WINDOW"])
     pair   = _swing_pair(swings)
+    # Early-session fallback: shrink the window until we get ≥2 alternating swings.
+    # Happens when only a few candles are available (e.g. first 1-2 hours of the day).
     if not pair:
-        print(f"\n{C.DIM}[FIB] ⚠️  Only {len(swings)} swing(s) detected — need ≥ 2 (try raising FIB_LOOKBACK_HOURS){C.RESET}")
+        for fallback_win in [2, 1]:
+            swings = _detect_swings(candles, fallback_win)
+            pair   = _swing_pair(swings)
+            if pair:
+                print(f"\n{C.DIM}[FIB] ℹ️  Using window={fallback_win} (only {len(candles)} candles available){C.RESET}")
+                break
+    if not pair:
+        print(f"\n{C.DIM}[FIB] ⚠️  Only {len(swings)} swing(s) in {len(candles)} candles — data too thin for Fibonacci{C.RESET}")
         return
     fib = _calc_fib(pair["low"], pair["high"], pair["bullish"])
     if not fib:
@@ -941,7 +1058,7 @@ def ask_expiry(current: str | None, nxt: str | None) -> str:
 # ─────────────────────────────────────────────────────────────
 def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
              sound_enabled: bool = False, sound_track: str | None = None,
-             get_spot_fn=None):
+             get_spot_fn=None, get_ltp_pair_fn=None):
     threshold = CONFIG["DIRECTION_THRESHOLD"]
     refresh   = CONFIG["REFRESH_SEC"]
 
@@ -962,8 +1079,11 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
         try:
             ts = datetime.now().strftime("%H:%M:%S")
 
-            ce_ltp = get_ce_ltp()
-            pe_ltp = get_pe_ltp()
+            if get_ltp_pair_fn is not None:
+                ce_ltp, pe_ltp = get_ltp_pair_fn()
+            else:
+                ce_ltp = get_ce_ltp()
+                pe_ltp = get_pe_ltp()
 
             if ce_ltp is not None:
                 d_ce = direction(prev_ce, ce_ltp, threshold)
@@ -1145,10 +1265,12 @@ def main():
     snd_on, snd_track = ask_sound_settings()
     run_loop(
         ce_label, pe_label,
-        lambda: get_ltp(ce_inst, access_token),
-        lambda: get_ltp(pe_inst, access_token),
-        snd_on, snd_track,
-        lambda: get_spot_live(index_name, expiry, access_token),
+        get_ce_ltp=None,
+        get_pe_ltp=None,
+        sound_enabled=snd_on,
+        sound_track=snd_track,
+        get_spot_fn=lambda: get_spot_live(index_name, expiry, access_token),
+        get_ltp_pair_fn=lambda: get_ltp_pair(ce_inst, pe_inst, access_token),
     )
 
 
