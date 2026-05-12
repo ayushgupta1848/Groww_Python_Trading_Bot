@@ -8,3 +8,5 @@ env/
 echo instrument.json >> .gitignore
 instrument.json
 *.log
+ai_config.json
+.chatgpt_profile/

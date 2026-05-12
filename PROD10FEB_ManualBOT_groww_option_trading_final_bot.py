@@ -37,7 +37,7 @@ def setup_persistent_logger():
     """Creates a local 'logs' folder beside the script and logs all console output there."""
     # Create /logs folder in the same directory as the script
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    log_dir = os.path.join(base_dir, "logs")
+    log_dir = os.path.join(base_dir, "logs", "groww_bot")
     os.makedirs(log_dir, exist_ok=True)
 
     # Create a timestamped log file
@@ -165,6 +165,19 @@ def play_sound_async(filename):
 def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit):
     file_name = "Lakshmi.xlsx"
     mode = "PAPER" if CONFIG.get("PAPER_TRADING", False) else "LIVE"
+
+    # Emit machine-parseable record for ANALYZE_BOT
+    _rec = {
+        "ts":       datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "symbol":   str(symbol or ""),
+        "buy_px":   round(float(buy_price),  2) if buy_price  is not None else None,
+        "sell_px":  round(float(sell_price), 2) if sell_price is not None else None,
+        "qty":      int(quantity) if quantity is not None else None,
+        "pnl":      round(float(profit), 2)  if profit    is not None else None,
+        "mode":     mode,
+    }
+    print(f"[TRADE_RECORD] {json.dumps(_rec)}")
+
     if not os.path.exists(file_name):
         wb = Workbook()
         ws = wb.active

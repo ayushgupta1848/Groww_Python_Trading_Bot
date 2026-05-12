@@ -45,14 +45,44 @@ except ImportError:
     sys.exit(1)
 
 # ─────────────────────────────────────────────────────────────
+#  LOGGING
+# ─────────────────────────────────────────────────────────────
+def setup_logger():
+    base  = os.path.dirname(os.path.abspath(__file__))
+    log_d = os.path.join(base, "logs", "premium_tracker")
+    os.makedirs(log_d, exist_ok=True)
+    ts    = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    path  = os.path.join(log_d, f"Premium_Tracker_{ts}.log")
+
+    class Tee:
+        def __init__(self, *s):
+            self.streams = s
+        def write(self, d):
+            for s in self.streams:
+                try:    s.write(d); s.flush()
+                except: pass
+        def flush(self):
+            for s in self.streams:
+                try:    s.flush()
+                except: pass
+
+    lf = open(path, "a", buffering=1, encoding="utf-8")
+    sys.stdout = Tee(sys.stdout, lf)
+    sys.stderr = Tee(sys.stderr, lf)
+    print(f"📝 Log: {path}")
+    return path
+
+LOG_FILE_PATH = setup_logger()
+
+# ─────────────────────────────────────────────────────────────
 #  CONFIG  ← edit this block to customize behaviour
 # ─────────────────────────────────────────────────────────────
 CONFIG = {
     # Premium range: only strikes where BOTH CE and PE fall inside
     # [MIN_PREMIUM, MAX_PREMIUM] are considered. Set a wide range to
     # always land on raw ATM.
-    "MIN_PREMIUM": 90,       # ₹ — skip strikes cheaper than this
-    "MAX_PREMIUM": 180,      # ₹ — skip strikes more expensive than this
+    "MIN_PREMIUM": 120,       # ₹ — skip strikes cheaper than this
+    "MAX_PREMIUM": 380,      # ₹ — skip strikes more expensive than this
 
     # How many strikes above/below ATM to scan (order: ATM, ATM-1, ATM+1, …)
     "STRIKE_SCAN_RANGE": 8,
@@ -76,9 +106,9 @@ CONFIG = {
     "FIB_REFRESH_SEC":    30,
 
     # Hours of 15-min candle history to use for swing detection.
-    # Use 48h so we always cover 2 full trading days regardless of time of day.
-    # (Market is only open 9:15-15:30, so 10h only captures ~2h of candles at 11AM.)
-    "FIB_LOOKBACK_HOURS": 48,
+    # 24h = yesterday's full session + today's partial session.
+    # 48h risked pulling in 2-day-old swings at stale price levels.
+    "FIB_LOOKBACK_HOURS": 24,
     # Bars each side for swing high/low detection (lower = more sensitive).
     "FIB_SWING_WINDOW":   3,
 
@@ -126,6 +156,19 @@ API_KEY = (
 TOTP_SECRET = "SC3YMFLEGLHBWUPHRBOYLPEEOVAT2PZ4"
 
 _session = requests.Session()
+
+BOT_TOKEN = "8666941668:AAEObDodwWqDwdVJVXy8WvFx_lyreq8p7fI"
+CHAT_ID   = "6012308856"
+
+def _send_telegram(msg: str) -> None:
+    try:
+        _session.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": msg},
+            timeout=3,
+        )
+    except Exception:
+        pass
 
 # ── Token-bucket rate limiter for Groww Live Data API ──────────────────────
 # Budget allocation: main bot uses ~240 req/min, tracker gets ~60 req/min.
@@ -475,15 +518,53 @@ def _detect_swings(candles: list[dict], window: int = 3) -> list[dict]:
             val.append(s)
     return val
 
-def _swing_pair(swings: list[dict]) -> dict | None:
+def _swing_pair(swings: list[dict], spot: float | None = None) -> dict | None:
     if len(swings) < 2:
         return None
-    last, prev = swings[-1], swings[-2]
-    if last["type"] == "HIGH":
-        return {"low": prev["price"], "high": last["price"], "bullish": True,
-                "desc": f"↑ {prev['price']:.0f}→{last['price']:.0f}"}
-    return {"low": last["price"], "high": prev["price"], "bullish": False,
-            "desc": f"↓ {prev['price']:.0f}→{last['price']:.0f}"}
+
+    def _make_pair(last: dict, prev: dict) -> dict:
+        if last["type"] == "HIGH":
+            return {"low": prev["price"], "high": last["price"], "bullish": True,
+                    "desc": f"↑ {prev['price']:.0f}→{last['price']:.0f}"}
+        return {"low": last["price"], "high": prev["price"], "bullish": False,
+                "desc": f"↓ {prev['price']:.0f}→{last['price']:.0f}"}
+
+    if spot is not None:
+        # Pass 1: spot strictly inside the swing range (most recent first)
+        for i in range(len(swings) - 1, 0, -1):
+            last, prev = swings[i], swings[i - 1]
+            lo = min(last["price"], prev["price"])
+            hi = max(last["price"], prev["price"])
+            if lo <= spot <= hi:
+                return _make_pair(last, prev)
+
+        # Pass 2: spot within 0.5× range outside — valid breakdown/breakout context
+        for i in range(len(swings) - 1, 0, -1):
+            last, prev = swings[i], swings[i - 1]
+            lo = min(last["price"], prev["price"])
+            hi = max(last["price"], prev["price"])
+            rng = hi - lo
+            if rng > 0 and lo - 0.5 * rng <= spot <= hi + 0.5 * rng:
+                return _make_pair(last, prev)
+
+        # Pass 3: no nearby pair found — pick the one whose range is closest to spot
+        # (normalized by range size so small nearby swings beat large distant ones)
+        best_i, best_dist = 1, float("inf")
+        for i in range(len(swings) - 1, 0, -1):
+            last, prev = swings[i], swings[i - 1]
+            lo = min(last["price"], prev["price"])
+            hi = max(last["price"], prev["price"])
+            rng = hi - lo
+            if rng == 0:
+                continue
+            dist = max(0.0, lo - spot, spot - hi) / rng
+            if dist < best_dist:
+                best_dist = dist
+                best_i = i
+        return _make_pair(swings[best_i], swings[best_i - 1])
+
+    # No spot provided — use most recent pair
+    return _make_pair(swings[-1], swings[-2])
 
 def _nearest_levels(spot: float, fib: dict) -> tuple:
     levels = sorted(
@@ -579,6 +660,8 @@ def _fib_signal(spot: float, fib: dict) -> dict:
                 (round(sh - rng * 1.272, 1), "E127.2%"),
                 (round(sh - rng * 1.618, 1), "E161.8%"),
                 (round(sh - rng * 2.618, 1), "E261.8%"),
+                (round(sh - rng * 4.236, 1), "E423.6%"),
+                (round(sh - rng * 6.854, 1), "E685.4%"),
             ]
             # Pick the first extension that price hasn't reached yet (going down)
             _unmet = [(p, lb) for p, lb in _ext_dns if p < spot]
@@ -601,6 +684,8 @@ def _fib_signal(spot: float, fib: dict) -> dict:
                 (round(sl + rng * 1.272, 1), "E127.2%"),
                 (round(sl + rng * 1.618, 1), "E161.8%"),
                 (round(sl + rng * 2.618, 1), "E261.8%"),
+                (round(sl + rng * 4.236, 1), "E423.6%"),
+                (round(sl + rng * 6.854, 1), "E685.4%"),
             ]
             # Pick the first extension that price hasn't reached yet
             _unmet = [(p, lb) for p, lb in _ext_ups if p > spot]
@@ -728,6 +813,124 @@ def _calc_momentum() -> tuple[str, float, float]:
     if abs(pts_per_min) < 3.0:
         return "FLAT", pts_per_min, minutes
     return ("UP" if pts_per_min > 0 else "DOWN"), pts_per_min, minutes
+
+
+def _calc_divergence() -> tuple[str, str]:
+    """
+    Detect CE/PE divergence vs spot movement over recent ticks.
+    Returns (signal, description): signal = "BULLISH" | "BEARISH" | "NEUTRAL"
+    """
+    ticks = [(t[0], t[1], t[2]) for t in _tick_history
+             if t[0] is not None and t[1] is not None and t[2] is not None]
+    n = len(ticks)
+    if n < 6:
+        return "NEUTRAL", ""
+    third = max(2, n // 3)
+    early  = ticks[:third]
+    recent = ticks[-third:]
+    spot_chg = sum(t[0] for t in recent) / third - sum(t[0] for t in early) / third
+    ce_chg   = sum(t[1] for t in recent) / third - sum(t[1] for t in early) / third
+    pe_chg   = sum(t[2] for t in recent) / third - sum(t[2] for t in early) / third
+    SPOT_T, PREM_T = 3.0, 0.60
+    if abs(spot_chg) < SPOT_T:
+        return "NEUTRAL", ""
+    if spot_chg > SPOT_T:
+        if pe_chg > PREM_T:
+            return "BEARISH", f"spot ↑{spot_chg:.0f}pts but PE ↑₹{pe_chg:.1f} (institutional hedging)"
+        if ce_chg < -PREM_T:
+            return "BEARISH", f"spot ↑{spot_chg:.0f}pts but CE ↓₹{abs(ce_chg):.1f} (smart selling)"
+    else:
+        if ce_chg > PREM_T:
+            return "BULLISH", f"spot ↓{abs(spot_chg):.0f}pts but CE ↑₹{ce_chg:.1f} (smart accumulation)"
+        if pe_chg < -PREM_T:
+            return "BULLISH", f"spot ↓{abs(spot_chg):.0f}pts but PE ↓₹{abs(pe_chg):.1f} (PE sellers absorbed)"
+    return "NEUTRAL", ""
+
+
+def _calc_composite_score() -> tuple[int, str]:
+    """
+    Combine FIB zone + momentum + premium flow + divergence into CE score 1–10.
+    """
+    with _fib_lock:
+        ce_prob = _fib_state.get("ce_prob", 50)
+    fib_score = (ce_prob - 50) / 50 * 3.0
+    mom_dir, mom_pts, _ = _calc_momentum()
+    if mom_dir == "UP":
+        mom_score = min(2.0, abs(mom_pts) / 5.0)
+    elif mom_dir == "DOWN":
+        mom_score = -min(2.0, abs(mom_pts) / 5.0)
+    else:
+        mom_score = 0.0
+    flow = list(_prob_history)
+    if len(flow) >= 5:
+        flow_score = (sum(flow[-5:]) / 5 - 50) / 50 * 2.0
+    else:
+        flow_score = 0.0
+    div_sig, _ = _calc_divergence()
+    div_score = 1.0 if div_sig == "BULLISH" else (-1.0 if div_sig == "BEARISH" else 0.0)
+    total    = fib_score * 0.40 + mom_score * 0.30 + flow_score * 0.20 + div_score * 0.10
+    ce_score = int(round(max(1, min(10, 5 + total * 1.5))))
+    fib_ok   = "✅" if ce_prob >= 60 else ("❌" if ce_prob <= 40 else "⚪")
+    mom_ok   = "✅" if mom_dir == "UP" else ("❌" if mom_dir == "DOWN" else "⚪")
+    flow_ok  = "✅" if flow_score > 0.3 else ("❌" if flow_score < -0.3 else "⚪")
+    div_ok   = "✅" if div_sig == "BULLISH" else ("❌" if div_sig == "BEARISH" else "⚪")
+    return ce_score, f"FIB{fib_ok}  MOM{mom_ok}  FLOW{flow_ok}  DIV{div_ok}"
+
+
+def _session_context_str() -> str:
+    """One-line session context for the panel header."""
+    ctx = _session_ctx
+    parts = []
+    now = datetime.now()
+    close_t = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    if now < close_t:
+        rem = int((close_t - now).total_seconds())
+        h, m = divmod(rem // 60, 60)
+        parts.append(f"{h}h {m:02d}m to close")
+    else:
+        parts.append("market closed")
+    if ctx.get("is_expiry_day"):
+        parts.append("EXPIRY TODAY ⚠️")
+    strike = ctx.get("strike")
+    spot_now = _fib_state.get("spot")
+    if strike and spot_now:
+        otm = abs(int(strike) - spot_now)
+        side = "OTM" if int(strike) > spot_now else "ITM"
+        parts.append(f"Strike {strike} = {otm:.0f}pts {side}")
+    hi = ctx.get("session_high")
+    lo = ctx.get("session_low")
+    if hi and lo:
+        parts.append(f"H:{hi:.0f}  L:{lo:.0f}")
+    return "  │  ".join(parts)
+
+
+_fib_force_refresh = threading.Event()   # set to trigger immediate fib recalc
+
+_tick_history: deque = deque(maxlen=20)  # (spot, ce_ltp, pe_ltp) per poll tick
+
+_session_ctx: dict = {                   # set once by main(), read in panel
+    "strike":       None,   # int tracked strike
+    "expiry":       None,   # str "YYYY-MM-DD"
+    "session_high": None,   # float, intraday spot high
+    "session_low":  None,   # float, intraday spot low
+    "is_expiry_day": False,
+}
+
+_telegram_sent: dict = {                 # cooldowns to avoid duplicate alerts
+    "zone":      "",        # last alerted zone
+    "conflict":  0.0,       # epoch of last conflict alert
+    "level":     0.0,       # epoch of last level-cross alert
+    "score_low": 0.0,       # epoch of last low-score alert
+    "day_hl":    0.0,       # epoch of last day H/L proximity alert
+}
+
+_day_hl: dict = {           # today's intraday high/low for the index
+    "high":       None,     # float
+    "low":        None,     # float
+    "updated_at": None,     # datetime
+}
+
+
 _fib_state: dict = {
     "updated_at": None,
     "spot":       None,
@@ -801,6 +1004,35 @@ def _fetch_candles_fib(groww_client, index_name: str) -> list[dict]:
     return []
 
 
+def _refresh_day_hl(groww_client, index_name: str) -> None:
+    """Fetch today's intraday high/low from 15-min candles starting at 09:15."""
+    now = datetime.now()
+    today_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    sym_map = {
+        "NIFTY":     (groww_client.EXCHANGE_NSE, ["NSE-NIFTY 50", "NSE-NIFTY"]),
+        "SENSEX":    (groww_client.EXCHANGE_BSE, ["BSE-SENSEX", "BSE-S&P BSE SENSEX"]),
+        "BANKNIFTY": (groww_client.EXCHANGE_NSE, ["NSE-NIFTY BANK"]),
+    }
+    exchange, symbols = sym_map.get(index_name.upper(), (groww_client.EXCHANGE_NSE, []))
+    for sym in symbols:
+        try:
+            result = groww_client.get_historical_candles(
+                groww_symbol=sym, exchange=exchange, segment="CASH",
+                start_time=today_open.strftime("%Y-%m-%d %H:%M:%S"),
+                end_time=now.strftime("%Y-%m-%d %H:%M:%S"),
+                candle_interval="15minute",
+            )
+            if result and result.get("candles") and len(result["candles"]) >= 1:
+                highs = [float(c[2]) for c in result["candles"]]
+                lows  = [float(c[3]) for c in result["candles"]]
+                _day_hl["high"]       = max(highs)
+                _day_hl["low"]        = min(lows)
+                _day_hl["updated_at"] = now
+                return
+        except Exception:
+            pass
+
+
 def _refresh_fib(groww_client, index_name: str, access_token: str, expiry: str) -> None:
     spot = get_spot(index_name, expiry, access_token)
     if spot is None:
@@ -811,13 +1043,13 @@ def _refresh_fib(groww_client, index_name: str, access_token: str, expiry: str) 
         print(f"\n{C.DIM}[FIB] ⚠️  No candle data returned (market closed / API limit){C.RESET}")
         return
     swings = _detect_swings(candles, CONFIG["FIB_SWING_WINDOW"])
-    pair   = _swing_pair(swings)
+    pair   = _swing_pair(swings, spot)
     # Early-session fallback: shrink the window until we get ≥2 alternating swings.
     # Happens when only a few candles are available (e.g. first 1-2 hours of the day).
     if not pair:
         for fallback_win in [2, 1]:
             swings = _detect_swings(candles, fallback_win)
-            pair   = _swing_pair(swings)
+            pair   = _swing_pair(swings, spot)
             if pair:
                 print(f"\n{C.DIM}[FIB] ℹ️  Using window={fallback_win} (only {len(candles)} candles available){C.RESET}")
                 break
@@ -836,10 +1068,20 @@ def _refresh_fib(groww_client, index_name: str, access_token: str, expiry: str) 
             "swing_desc": pair["desc"],
             **sig,
         })
+    _refresh_day_hl(groww_client, index_name)   # piggyback on fib cycle — no extra rate cost
     global _last_fib_zone
-    if CONFIG.get("FIB_VOICE") and sig["zone"] != _last_fib_zone:
+    zone_changed = sig["zone"] != _last_fib_zone and _last_fib_zone != ""
+    if sig["zone"] != _last_fib_zone:
+        if zone_changed:
+            msg = (f"📐 PDT ZONE CHANGE — {index_name}\n"
+                   f"  Was : {_last_fib_zone}\n"
+                   f"  Now : {sig['zone']}\n"
+                   f"  Spot: {spot:.0f}\n"
+                   f"  Action: {sig['action']}")
+            threading.Thread(target=_send_telegram, args=(msg,), daemon=True).start()
         _last_fib_zone = sig["zone"]
-        _speak_fib(sig["action"], sig["trend"], sig["mentor"])
+        if CONFIG.get("FIB_VOICE"):
+            _speak_fib(sig["action"], sig["trend"], sig["mentor"])
 
 
 def _fib_worker(groww_client, index_name: str, access_token: str, expiry: str) -> None:
@@ -849,7 +1091,11 @@ def _fib_worker(groww_client, index_name: str, access_token: str, expiry: str) -
             _refresh_fib(groww_client, index_name, access_token, expiry)
         except Exception as e:
             print(f"\n{C.RED}[FIB] Worker exception: {e}{C.RESET}")
-        time.sleep(refresh)
+        # Wait for scheduled refresh OR an immediate force-refresh signal
+        triggered = _fib_force_refresh.wait(timeout=refresh)
+        if triggered:
+            _fib_force_refresh.clear()
+            print(f"{C.DIM}[FIB] ⚡ Force-refresh triggered (key level crossed){C.RESET}")
 
 
 def _print_prob_chart() -> None:
@@ -932,15 +1178,69 @@ def _print_fib_panel() -> None:
     rule  = f"{C.CYAN}{'─' * W}{C.RESET}"
     thin  = f"  {C.DIM}{'·' * (W - 2)}{C.RESET}"
 
+    # ── Composite score ───────────────────────────────────────
+    ce_score, score_breakdown = _calc_composite_score()
+    score_filled = round(ce_score * bar_w / 10)
+    score_bar    = "█" * score_filled + "░" * (bar_w - score_filled)
+    score_col    = C.GREEN if ce_score >= 7 else (C.YELLOW if ce_score >= 5 else C.RED)
+
+    # ── Divergence ────────────────────────────────────────────
+    div_sig, div_desc = _calc_divergence()
+
     print(f"\n{rule}")
     print(f"  {C.BOLD}{C.CYAN}FIB MENTOR  [{ts}]{C.RESET}")
+    # Session context bar
+    ctx_str = _session_context_str()
+    if ctx_str:
+        print(f"  {C.DIM}{ctx_str}{C.RESET}")
     print(f"  Swing  {s['swing_desc']}  │  Spot {C.BOLD}{spot_val:.1f}{C.RESET}")
+    # Day High / Day Low line
+    dh = _day_hl.get("high")
+    dl = _day_hl.get("low")
+    if dh and dl and spot_val:
+        above_h = spot_val > dh
+        below_l = spot_val < dl
+        if above_h:
+            # Spot broke above day high — show pts above + upside extension
+            pts_above  = spot_val - dh
+            ext_target = round(dh + (dh - dl) * 0.618, 0)   # 61.8% of day range projected up
+            print(f"  {C.BOLD}Day  {C.GREEN}⬆ H BROKEN  {dh:.0f}  "
+                  f"(+{pts_above:.0f} pts above){C.RESET}  "
+                  f"{C.DIM}Next up: {ext_target:.0f}  (+{ext_target-spot_val:.0f} pts){C.RESET}")
+            print(f"  {C.DIM}     L {dl:.0f}   │   Day range {dh-dl:.0f} pts{C.RESET}")
+        elif below_l:
+            # Spot broke below day low — show pts below + downside extension
+            pts_below  = dl - spot_val
+            ext_target = round(dl - (dh - dl) * 0.618, 0)   # 61.8% of day range projected down
+            print(f"  {C.BOLD}Day  {C.RED}⬇ L BROKEN  {dl:.0f}  "
+                  f"(-{pts_below:.0f} pts below){C.RESET}  "
+                  f"{C.DIM}Next down: {ext_target:.0f}  (-{spot_val-ext_target:.0f} pts){C.RESET}")
+            print(f"  {C.DIM}     H {dh:.0f}   │   Day range {dh-dl:.0f} pts{C.RESET}")
+        else:
+            # Spot inside day range — show distance to each level
+            to_h   = dh - spot_val
+            to_l   = spot_val - dl
+            h_col  = C.RED    if to_h < 15 else (C.YELLOW if to_h < 40 else C.DIM)
+            l_col  = C.GREEN  if to_l < 15 else (C.YELLOW if to_l < 40 else C.DIM)
+            print(f"  {C.BOLD}Day{C.RESET}   "
+                  f"{h_col}H {dh:.0f}  (↑{to_h:.0f} to break){C.RESET}"
+                  f"   │   "
+                  f"{l_col}L {dl:.0f}  (↓{to_l:.0f} support){C.RESET}")
     print(thin)
     print(f"  Zone   {C.BOLD}{s.get('zone','')}{C.RESET}")
     print(f"  Trend  {s.get('trend','')}")
+    # Composite score line
+    print(f"  {C.BOLD}Score  {score_col}{score_bar}  CE {ce_score}/10{C.RESET}  "
+          f"{C.DIM}[{score_breakdown}]{C.RESET}")
     print(thin)
     print(f"  {ce_col}CE {ce_p:>3}%  {ce_bar}{C.RESET}"
           f"   {pe_col}PE {pe_p:>3}%  {pe_bar}{C.RESET}")
+    # Divergence line
+    if div_sig != "NEUTRAL":
+        div_col = C.GREEN if div_sig == "BULLISH" else C.YELLOW
+        div_icon = "🟢" if div_sig == "BULLISH" else "⚠️"
+        print(f"  {div_col}{C.BOLD}Divergence  {div_icon} {div_sig}{C.RESET}  "
+              f"{C.DIM}{div_desc}{C.RESET}")
     print(thin)
     if s.get("res_price") is not None:
         print(f"  {C.GREEN}BREAKOUT  → {s['res_price']:.0f}  "
@@ -958,9 +1258,9 @@ def _print_fib_panel() -> None:
 
     # ── Momentum conflict block ───────────────────────────────
     mom_dir, mom_pts, mom_mins = _calc_momentum()
-    ce_p_val = s.get("ce_prob", 50)
-    fib_says_ce = ce_p_val >= 60     # zone recommends CE
-    fib_says_pe = ce_p_val <= 40     # zone recommends PE
+    ce_p_val   = s.get("ce_prob", 50)
+    fib_says_ce = ce_p_val >= 60
+    fib_says_pe = ce_p_val <= 40
     conflict = (mom_dir == "DOWN" and fib_says_ce) or (mom_dir == "UP" and fib_says_pe)
 
     if conflict and mom_mins >= 2.0:
@@ -981,7 +1281,7 @@ def _print_fib_panel() -> None:
             if res_px:
                 print(f"  {C.GREEN}► CE conviction returns only on close ABOVE {res_px:.0f}.{C.RESET}")
             print(f"  {C.DIM}► Do NOT enter CE while market is still declining.{C.RESET}")
-        else:  # mom UP, fib says PE
+        else:
             print(f"  {C.YELLOW}{C.BOLD}⚠️  MOMENTUM CONFLICT{C.RESET}  "
                   f"{C.DIM}Fib → PE  │  Market ↑ {mom_str} (last {mins_str}){C.RESET}")
             print(f"  {C.DIM}Market has been rising while Fib zone suggests bearish.{C.RESET}")
@@ -991,6 +1291,24 @@ def _print_fib_panel() -> None:
             if sup_px:
                 print(f"  {C.RED}► PE conviction returns only on close BELOW {sup_px:.0f}.{C.RESET}")
             print(f"  {C.DIM}► Do NOT enter PE while market is still rising.{C.RESET}")
+        # Telegram alert for conflict (max once per 5 min)
+        now_ts = time.time()
+        if now_ts - _telegram_sent["conflict"] > 300:
+            _telegram_sent["conflict"] = now_ts
+            conflict_msg = (f"⚠️ PDT MOMENTUM CONFLICT\n"
+                            f"  Fib: {'CE' if fib_says_ce else 'PE'}  │  "
+                            f"Market: {'↓' if mom_dir=='DOWN' else '↑'} {mom_str} ({mins_str})\n"
+                            f"  Spot: {spot_val:.0f}  Score: {ce_score}/10")
+            threading.Thread(target=_send_telegram, args=(conflict_msg,), daemon=True).start()
+
+    # Telegram for very low score
+    if ce_score <= 3:
+        now_ts = time.time()
+        if now_ts - _telegram_sent["score_low"] > 300:
+            _telegram_sent["score_low"] = now_ts
+            threading.Thread(target=_send_telegram,
+                args=(f"🔴 PDT LOW SCORE: CE {ce_score}/10 [{score_breakdown}]\nSpot: {spot_val:.0f}",),
+                daemon=True).start()
 
     print(rule)
     _print_prob_chart()
@@ -1139,6 +1457,7 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
     prev_pe: float | None = None
     prev_dir_ce: str = "INIT"
     prev_dir_pe: str = "INIT"
+    prev_spot: float | None = None
     last_fib_print: float = 0.0   # epoch seconds of last panel print
     fib_print_sec  = CONFIG["FIB_PRINT_SEC"]
     frozen_ticks   = 0            # consecutive ticks with unchanged CE price
@@ -1206,6 +1525,77 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
                 last_fib_print = time.time()
 
             spot_val = get_spot_fn() if get_spot_fn else None
+
+            # Track tick history and session H/L
+            if spot_val is not None:
+                _tick_history.append((spot_val, ce_ltp, pe_ltp))
+                hi = _session_ctx.get("session_high")
+                lo = _session_ctx.get("session_low")
+                _session_ctx["session_high"] = max(hi, spot_val) if hi else spot_val
+                _session_ctx["session_low"]  = min(lo, spot_val) if lo else spot_val
+
+                # Force-refresh fib when spot crosses a key support/resistance level
+                with _fib_lock:
+                    sup_px = _fib_state.get("sup_price")
+                    res_px = _fib_state.get("res_price")
+                if prev_spot is not None:
+                    crossed_lbl = crossed_lvl = None
+                    if res_px and ((prev_spot < res_px <= spot_val) or (prev_spot > res_px >= spot_val)):
+                        crossed_lbl = "BREAKOUT" if spot_val >= res_px else "PULLBACK"
+                        crossed_lvl = f"{res_px:.0f}"
+                    elif sup_px and ((prev_spot > sup_px >= spot_val) or (prev_spot < sup_px <= spot_val)):
+                        crossed_lbl = "BREAKDOWN" if spot_val <= sup_px else "BOUNCE"
+                        crossed_lvl = f"{sup_px:.0f}"
+                    if crossed_lbl:
+                        now_ts = time.time()
+                        if now_ts - _telegram_sent["level"] > 120:
+                            _telegram_sent["level"] = now_ts
+                            threading.Thread(
+                                target=_send_telegram,
+                                args=(f"⚡ PDT KEY LEVEL: {crossed_lbl} at {crossed_lvl}\n"
+                                      f"Spot: {spot_val:.0f}",),
+                                daemon=True,
+                            ).start()
+                        _fib_force_refresh.set()
+
+                # Day High / Day Low proximity and crossing alerts
+                dh = _day_hl.get("high")
+                dl = _day_hl.get("low")
+                if dh and dl and prev_spot is not None:
+                    now_ts = time.time()
+                    alert_msg = None
+                    day_range = dh - dl
+                    ext_up   = round(dh + day_range * 0.618, 0)
+                    ext_down = round(dl - day_range * 0.618, 0)
+                    # Crossing alerts (highest priority)
+                    if prev_spot < dh <= spot_val:
+                        alert_msg = (f"🚀 PDT DAY HIGH BROKEN: {dh:.0f}\n"
+                                     f"Spot: {spot_val:.0f}  (+{spot_val-dh:.0f} pts above)\n"
+                                     f"Next up target: {ext_up:.0f}  (+{ext_up-spot_val:.0f} pts)")
+                    elif prev_spot > dl >= spot_val:
+                        alert_msg = (f"🔻 PDT DAY LOW BROKEN: {dl:.0f}\n"
+                                     f"Spot: {spot_val:.0f}  (-{dl-spot_val:.0f} pts below)\n"
+                                     f"Next down target: {ext_down:.0f}  (-{spot_val-ext_down:.0f} pts)")
+                    # Proximity alert when within 15 pts
+                    else:
+                        near_h = (dh - spot_val) <= 15
+                        near_l = (spot_val - dl) <= 15
+                        if near_h or near_l:
+                            parts = []
+                            if near_h:
+                                parts.append(f"Day High {dh:.0f} — {dh-spot_val:.0f} pts away ⬆️  (if breaks → {ext_up:.0f})")
+                            if near_l:
+                                parts.append(f"Day Low {dl:.0f} — {spot_val-dl:.0f} pts away ⬇️  (if breaks → {ext_down:.0f})")
+                            alert_msg = (f"⚠️ PDT NEAR DAY RANGE\n"
+                                         f"Spot: {spot_val:.0f}\n" + "\n".join(parts))
+                    if alert_msg and (now_ts - _telegram_sent["day_hl"] > 180):
+                        _telegram_sent["day_hl"] = now_ts
+                        threading.Thread(
+                            target=_send_telegram, args=(alert_msg,), daemon=True
+                        ).start()
+
+            prev_spot = spot_val
+
             spot_str = (f"  {C.CYAN}SPOT {C.BOLD}{spot_val:.1f}{C.RESET}" if spot_val else "")
             print(f"[{C.DIM}{ts}{C.RESET}]{spot_str}  {ce_str}   |   {pe_str}")
             time.sleep(refresh)
@@ -1321,6 +1711,11 @@ def main():
     strike_label = int(chosen_strike)
     ce_label = f"({strike_label} CE)"
     pe_label = f"({strike_label} PE)"
+
+    # Populate session context so the panel header shows strike/expiry/expiry-day info
+    _session_ctx["strike"]        = strike_label
+    _session_ctx["expiry"]        = expiry
+    _session_ctx["is_expiry_day"] = (datetime.now().strftime("%Y-%m-%d") == expiry)
 
     # Start Fibonacci background thread
     fib_thread = threading.Thread(

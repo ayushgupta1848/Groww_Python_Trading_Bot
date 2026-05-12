@@ -66,12 +66,12 @@ FIBO_CONFIG = {
     # EXPIRY is auto-detected from instrument.csv — no manual update needed
 
     # ── Swing detection ──────────────────────────────────────
-    "SWING_WINDOW_15M": 3,       # Bars each side for 15-min swing detection (lower=more swings)
-    "SWING_WINDOW_1H":  5,       # Bars each side for 1-hr  swing detection (higher=only major swings)
+    "SWING_WINDOW_15M": 2,       # Bars each side for 15-min swing detection (2 = more swings, works with fewer candles)
+    "SWING_WINDOW_1H":  3,       # Bars each side for 1-hr swing (used only for trend direction)
 
     # ── Candle lookback ──────────────────────────────────────
     "LOOKBACK_15M_HRS": 10,      # Hours of 15-min candle history to fetch (covers full trading day)
-    "LOOKBACK_1H_HRS":  120,     # Hours of 1-hr  candle history to fetch  (~5 trading days)
+    "LOOKBACK_1H_HRS":  26,      # Hours of 1-hr candle history — today + yesterday only (trend direction only)
 
     # ── Alert thresholds ─────────────────────────────────────
     "NEAR_LEVEL_PCT":    0.20,   # Telegram alert when price within 0.20% of a key level
@@ -462,6 +462,48 @@ def calc_fib_levels(
     return levels
 
 
+def calc_day_fib(candles: list[dict]) -> dict | None:
+    """
+    Day Session Fibonacci: draw fib from today's high to today's low.
+    Direction = which came first:  low-first → bullish swing (low→high)
+                                   high-first → bearish swing (high→low)
+    Returns standard fib dict with extra _day_* keys.
+    """
+    today = datetime.now().date()
+    today_c = []
+    for c in candles:
+        ts = c.get("ts")
+        if isinstance(ts, datetime):
+            cdate = ts.date()
+        else:
+            try:
+                # Groww API returns epoch-milliseconds
+                cdate = datetime.fromtimestamp(int(ts) / 1000).date()
+            except Exception:
+                cdate = today
+        if cdate == today:
+            today_c.append(c)
+
+    if len(today_c) < 2:
+        return None
+
+    day_high = max(c["high"] for c in today_c)
+    day_low  = min(c["low"]  for c in today_c)
+    if day_high <= day_low:
+        return None
+
+    high_idx = next(i for i, c in enumerate(today_c) if c["high"] == day_high)
+    low_idx  = next(i for i, c in enumerate(today_c) if c["low"]  == day_low)
+    bullish  = low_idx < high_idx  # low formed first → bullish session
+
+    fib = calc_fib_levels(day_low, day_high, is_bullish_swing=bullish)
+    if fib:
+        fib["_day_high"]    = day_high
+        fib["_day_low"]     = day_low
+        fib["_day_bullish"] = bullish
+    return fib
+
+
 # ─────────────────────────────────────────────────────────────
 #  SWING DETECTION
 # ─────────────────────────────────────────────────────────────
@@ -557,6 +599,49 @@ def second_swing_pair(swings: list[dict]) -> dict | None:
             "is_bullish": False,
             "description": f"↓ {prev['price']:.0f} → {last['price']:.0f} (prev)",
         }
+
+
+def find_relevant_swing_pair(swings: list[dict], spot: float) -> dict | None:
+    """
+    Find the swing pair whose range is most relevant to the current spot.
+    Pass 1: spot strictly inside the swing range (most recent first).
+    Pass 2: spot within 1× range outside (breakdown / breakout context).
+    Falls back to most_recent_swing_pair if nothing qualifies.
+    """
+    if len(swings) < 2:
+        return None
+
+    def _make(last: dict, prev: dict) -> dict:
+        if last["type"] == "HIGH":
+            return {
+                "swing_low":  prev["price"],
+                "swing_high": last["price"],
+                "is_bullish": True,
+                "description": f"↑ {prev['price']:.0f} → {last['price']:.0f}",
+            }
+        return {
+            "swing_low":  last["price"],
+            "swing_high": prev["price"],
+            "is_bullish": False,
+            "description": f"↓ {prev['price']:.0f} → {last['price']:.0f}",
+        }
+
+    # Pass 1: spot inside range
+    for i in range(len(swings) - 1, 0, -1):
+        lo = min(swings[i]["price"], swings[i - 1]["price"])
+        hi = max(swings[i]["price"], swings[i - 1]["price"])
+        if lo <= spot <= hi:
+            return _make(swings[i], swings[i - 1])
+
+    # Pass 2: spot within 1× range outside (breakdown / breakout)
+    for i in range(len(swings) - 1, 0, -1):
+        lo = min(swings[i]["price"], swings[i - 1]["price"])
+        hi = max(swings[i]["price"], swings[i - 1]["price"])
+        rng = hi - lo
+        if rng > 0 and (lo - rng) <= spot <= (hi + rng):
+            return _make(swings[i], swings[i - 1])
+
+    return most_recent_swing_pair(swings)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -772,13 +857,13 @@ PATTERN_SCORE = {
 }
 
 
-def get_final_bias(score_15m: int, score_1h: int, pattern: str) -> tuple:
+def get_final_bias(score_15m: int, pattern: str) -> tuple:
     """
-    Combine multi-timeframe scores and pattern signal into one bias label.
-    Weighting: 1-hr (55%) + 15-min (35%) + pattern (10%)
+    Intraday bias from 15-min score + pattern signal.
+    Weighting: 15-min (90%) + pattern (10%)
     """
     p_adj = PATTERN_SCORE.get(pattern, 0.0)
-    raw   = score_1h * 0.55 + score_15m * 0.35 + p_adj * 0.10
+    raw   = score_15m * 0.90 + p_adj * 0.10
     score = int(max(-3, min(3, round(raw))))
     label, color = BIAS_MAP.get(score, ("→  NEUTRAL", C.YELLOW))
     return score, label, color
@@ -890,47 +975,45 @@ def run_analysis(groww, access_token: str, ltp_buffer: deque) -> dict | None:
     record_spot(spot)
     frozen = is_price_frozen()
 
-    # 2. Candle data — 15-min and 1-hr timeframes
+    # 2. Candle data
     c15m = fetch_candles(groww, index, "15minute", cfg["LOOKBACK_15M_HRS"])
     c1h  = fetch_candles(groww, index, "1hour",    cfg["LOOKBACK_1H_HRS"])
 
     # Synthetic fallback when API doesn't serve CASH candles
     if not c15m and len(ltp_buffer) >= 10:
         c15m = build_synthetic_candles(ltp_buffer, candle_minutes=15)
-    if not c1h and len(ltp_buffer) >= 5:
-        c1h = build_synthetic_candles(ltp_buffer, candle_minutes=60)
 
     # 3. Swing detection
     sw15m = detect_swings(c15m, window=cfg["SWING_WINDOW_15M"]) if c15m else []
     sw1h  = detect_swings(c1h,  window=cfg["SWING_WINDOW_1H"])  if c1h  else []
 
-    pair15m = most_recent_swing_pair(sw15m)
-    pair1h  = most_recent_swing_pair(sw1h)
-
+    pair15m      = find_relevant_swing_pair(sw15m, spot)
     pair15m_prev = second_swing_pair(sw15m)
-    pair1h_prev  = second_swing_pair(sw1h)
+    pair1h       = find_relevant_swing_pair(sw1h, spot)
 
     # 4. Fibonacci levels
     fib15m      = calc_fib_levels(pair15m["swing_low"],      pair15m["swing_high"],      pair15m["is_bullish"])      if pair15m      else None
-    fib1h       = calc_fib_levels(pair1h["swing_low"],       pair1h["swing_high"],       pair1h["is_bullish"])       if pair1h       else None
     fib15m_prev = calc_fib_levels(pair15m_prev["swing_low"], pair15m_prev["swing_high"], pair15m_prev["is_bullish"]) if pair15m_prev else None
-    fib1h_prev  = calc_fib_levels(pair1h_prev["swing_low"],  pair1h_prev["swing_high"],  pair1h_prev["is_bullish"])  if pair1h_prev  else None
+    fib1h       = calc_fib_levels(pair1h["swing_low"],       pair1h["swing_high"],       pair1h["is_bullish"])       if pair1h       else None
 
-    # 5. Confluence zones (merge all grids)
-    all_fibs   = [f for f in [fib15m, fib1h, fib15m_prev, fib1h_prev] if f]
+    # 5. Day session Fibonacci (today's high → today's low)
+    fib_day = calc_day_fib(c15m) if c15m else None
+
+    # 6. Confluence zones (15-min grids + day fib)
+    all_fibs   = [f for f in [fib15m, fib15m_prev, fib_day] if f]
     confluence = find_confluence_zones(all_fibs, tol_pct=cfg["CONFLUENCE_TOL_PCT"])
 
-    # 6. Price position in each timeframe
+    # 7. Price position
     pos15m, sc15m, sup15m, res15m = analyze_position(spot, fib15m)
-    pos1h,  sc1h,  sup1h,  res1h  = analyze_position(spot, fib1h)
+    _,      sc1h,  _,      _      = analyze_position(spot, fib1h)
 
-    # 7. Pattern from 15-min candles
+    # 8. Pattern from 15-min candles
     pattern = detect_pattern(c15m) if len(c15m) >= 3 else "NONE"
 
-    # 8. RSI
+    # 9. RSI
     rsi = calculate_rsi([c["close"] for c in c15m]) if len(c15m) >= 15 else None
 
-    # 9. RSI signal note
+    # 10. RSI signal note
     rsi_note = ""
     if rsi is not None:
         if rsi >= 70:
@@ -944,14 +1027,13 @@ def run_analysis(groww, access_token: str, ltp_buffer: deque) -> dict | None:
         else:
             rsi_note = "neutral"
 
-    # 10. Final bias
-    bias_score, bias_label, bias_color = get_final_bias(sc15m, sc1h, pattern)
+    # 11. Final bias (15-min timing; 1-hr direction shown separately)
+    bias_score, bias_label, bias_color = get_final_bias(sc15m, pattern)
 
-    # 11. Next move prediction
+    # 12. Next move prediction
     prediction = predict_next_move(spot, bias_score, fib15m)
 
-    # 12. Alerts
-    # Suppress level alerts on holidays / frozen market to avoid spam
+    # 13. Alerts (15-min + day fib levels)
     alerts = [] if frozen else _check_level_alerts(spot, all_fibs, index)
 
     return {
@@ -960,17 +1042,15 @@ def run_analysis(groww, access_token: str, ltp_buffer: deque) -> dict | None:
         "ts":          datetime.now(),
         "fib15m":      fib15m,
         "fib1h":       fib1h,
+        "fib_day":     fib_day,
         "pair15m":     pair15m,
         "pair1h":      pair1h,
         "confluence":  confluence,
         "pos15m":      pos15m,
-        "pos1h":       pos1h,
         "score15m":    sc15m,
         "score1h":     sc1h,
         "sup15m":      sup15m,
         "res15m":      res15m,
-        "sup1h":       sup1h,
-        "res1h":       res1h,
         "pattern":     pattern,
         "rsi":         rsi,
         "rsi_note":    rsi_note,
@@ -981,7 +1061,6 @@ def run_analysis(groww, access_token: str, ltp_buffer: deque) -> dict | None:
         "alerts":      alerts,
         "frozen":      frozen,
         "src_15m": f"LIVE ({len(c15m)}c)" if c15m and len(c15m) >= 5 else "LTP-buffer (building…)",
-        "src_1h":  f"LIVE ({len(c1h)}c)"  if c1h  and len(c1h)  >= 5 else "LTP-buffer (building…)",
     }
 
 
@@ -1009,14 +1088,14 @@ def generate_reading(r: dict) -> list[str]:
     """
     lines = []
     spot      = r["spot"]
-    fib       = r.get("fib1h") or r.get("fib15m")
+    fib       = r.get("fib15m")
     conf      = r.get("confluence", [])
     bias      = r.get("bias_score", 0)
-    pos       = r.get("pos1h") or r.get("pos15m", "NO DATA")
-    sup       = r.get("sup1h") or r.get("sup15m")
-    res       = r.get("res1h") or r.get("res15m")
+    pos       = r.get("pos15m", "NO DATA")
+    sup       = r.get("sup15m")
+    res       = r.get("res15m")
     pattern   = r.get("pattern", "NONE")
-    swing     = r.get("pair1h") or r.get("pair15m")
+    swing     = r.get("pair15m")
 
     if not fib or not swing:
         lines.append("⏳ Collecting data — check back in a few minutes.")
@@ -1155,6 +1234,268 @@ def generate_reading(r: dict) -> list[str]:
     return lines
 
 
+def _auto_summary(spot: float, sc1h: int, sc15m: int,
+                  fib_day: dict | None, fib15m: dict | None,
+                  conf: list) -> str:
+    """
+    Generate a 2-sentence plain-English summary of the current market state.
+    Sentence 1: WHERE is price (location + nearest key levels).
+    Sentence 2: WHAT to do (trigger to watch).
+    """
+    parts = []
+
+    # ── Sentence 1: location ──────────────────────────────
+    loc_parts = []
+
+    # Distance from day high / low
+    if fib_day:
+        dh = fib_day["_day_high"]
+        dl = fib_day["_day_low"]
+        pts_dl = spot - dl
+        pts_dh = dh - spot
+        if pts_dl <= 40:
+            loc_parts.append(f"{pts_dl:.0f} pts above day low ({dl:.0f})")
+        elif pts_dh <= 40:
+            loc_parts.append(f"{pts_dh:.0f} pts below day high ({dh:.0f})")
+        else:
+            pct = (spot - dl) / (dh - dl) * 100
+            loc_parts.append(f"{pct:.0f}% into day range  (H {dh:.0f}  L {dl:.0f})")
+
+    # Nearest confluence zone above and below
+    above_conf = [z for z in conf if z["price"] > spot]
+    below_conf = [z for z in conf if z["price"] < spot]
+    if above_conf:
+        z = above_conf[0]
+        loc_parts.append(f"{'*'*z['count']} resistance at {z['price']:.0f} (+{z['price']-spot:.0f} pts)")
+    if below_conf:
+        z = below_conf[-1]
+        loc_parts.append(f"{'*'*z['count']} support at {z['price']:.0f} ({z['price']-spot:+.0f} pts)")
+
+    # Fallback: nearest fib level
+    if not loc_parts and fib15m:
+        sh = fib15m["SWING_HIGH"]; sl = fib15m["SWING_LOW"]
+        loc_parts.append(f"between 15m swing {sl:.0f}–{sh:.0f}")
+
+    s1 = "Spot " + spot.__format__(".0f") + ":  " + "  |  ".join(loc_parts) + "."
+
+    # ── Sentence 2: action ────────────────────────────────
+    combined = sc1h + sc15m
+    h1 = ("bullish" if sc1h >= 2 else "mildly bullish" if sc1h == 1
+          else "bearish" if sc1h <= -2 else "mildly bearish" if sc1h == -1 else "neutral")
+    m15 = ("bullish" if sc15m >= 2 else "mildly bullish" if sc15m == 1
+           else "bearish" if sc15m <= -2 else "mildly bearish" if sc15m == -1 else "neutral")
+
+    fib = fib_day or fib15m
+    r236 = fib.get("R23.6%") if fib else None
+    r382 = fib.get("R38.2%") if fib else None
+    r618 = fib.get("R61.8%") if fib else None
+    e1272 = fib.get("E127.2%") if fib else None
+    dh   = fib.get("_day_high") or (fib["SWING_HIGH"] if fib else None)
+    dl   = fib.get("_day_low")  or (fib["SWING_LOW"]  if fib else None)
+
+    # Nearest resistance ABOVE spot (sort ascending → first item > spot)
+    _res_above = sorted([p for p in [r236, r382, r618, dh] if p and p > spot])
+    _sup_below = sorted([p for p in [r236, r382, r618, dl] if p and p < spot], reverse=True)
+    nearest_res = _res_above[0] if _res_above else None
+    nearest_sup = _sup_below[0] if _sup_below else None
+
+    # Extended bearish target: use E127.2% if day low already nearly hit
+    _pe_target = dl
+    if dl and e1272 and (spot - dl) < 20:
+        _pe_target = e1272  # price is basically AT day low — next extension is the real target
+
+    at_day_low  = bool(dl and (spot - dl) < 30)
+    at_day_high = bool(dh and (dh - spot) < 30)
+
+    if combined <= -2:
+        tgt_s = f"{_pe_target:.0f}" if _pe_target else "swing low"
+        label = "STRONG PE" if combined <= -4 else "PE setup"
+        if at_day_low:
+            # Already at day low — entry trigger is the breakdown, not a bounce to resistance
+            s2 = f"1-hr {h1} + 15m {m15} = {label}.  Break below day low {dl:.0f} → PE, target {tgt_s}."
+        else:
+            entry_s = f"{nearest_res:.0f}" if nearest_res else "current levels"
+            s2 = f"1-hr {h1} + 15m {m15} = {label}.  Enter near {entry_s} (resistance rejection), target {tgt_s}."
+    elif combined >= 2:
+        tgt_s = f"{dh:.0f}" if dh else "swing high"
+        label = "STRONG CE" if combined >= 4 else "CE setup"
+        if at_day_high:
+            # Already at day high — entry trigger is the breakout, not a dip to support
+            s2 = f"1-hr {h1} + 15m {m15} = {label}.  Break above day high {dh:.0f} → CE, target {tgt_s}."
+        else:
+            entry_s = f"{nearest_sup:.0f}" if nearest_sup else "current levels"
+            s2 = f"1-hr {h1} + 15m {m15} = {label}.  Enter near {entry_s} (support bounce), target {tgt_s}."
+    elif combined <= -1:
+        triggers = []
+        if not at_day_low and nearest_res:
+            triggers.append(f"bounce to {nearest_res:.0f} then rejection → PE")
+        if dl:
+            triggers.append(f"break below {dl:.0f} → PE")
+        trig_s = "  OR  ".join(triggers) if triggers else "bearish candle confirm"
+        s2 = f"1-hr {h1} + 15m {m15} = lean PE.  Wait for: {trig_s}."
+    elif combined >= 1:
+        triggers = []
+        if not at_day_high and nearest_sup:
+            triggers.append(f"dip to {nearest_sup:.0f} then bounce → CE")
+        if dh:
+            triggers.append(f"break above {dh:.0f} → CE")
+        trig_s = "  OR  ".join(triggers) if triggers else "bullish candle confirm"
+        s2 = f"1-hr {h1} + 15m {m15} = lean CE.  Wait for: {trig_s}."
+    else:
+        res_s = f"{nearest_res:.0f}" if nearest_res else "resistance"
+        sup_s = f"{nearest_sup:.0f}" if nearest_sup else "support"
+        s2 = (f"1-hr {h1} + 15m {m15} = no edge.  "
+              f"PE trigger: break below {sup_s}  |  CE trigger: close above {res_s}.")
+
+    return f"{s1}\n  {s2}"
+
+
+def _fib_grid_with_spot(fib: dict, spot: float, title: str) -> None:
+    """Print a Fibonacci grid with the SPOT line inserted at the right position."""
+    W = 62
+    entries = sorted(
+        [(lb, px) for lb, px in fib.items()
+         if not lb.startswith("_") and isinstance(px, float)],
+        key=lambda x: x[1], reverse=True,
+    )
+    print(f"{C.YELLOW}─── {title} ───{C.RESET}")
+    spot_printed = False
+    for lb, px in entries:
+        if not spot_printed and px < spot:
+            print(f"  {C.BOLD}{C.WHITE} {'─'*20} SPOT {spot:.0f} {'─'*20}{C.RESET}")
+            spot_printed = True
+        dist = px - spot
+        color = C.GREEN if px > spot else C.RED
+        if lb in ("SWING_HIGH", "SWING_LOW"):
+            color = C.CYAN
+        golden = f" {C.YELLOW}★{C.RESET}" if lb in ("R50.0%", "R61.8%") else ""
+        near = ""
+        pct = abs(dist / spot * 100)
+        if pct < 0.10:                          # ~24 pts at 23600
+            near = f"  {C.YELLOW}{C.BOLD}◄◄ HERE{C.RESET}"
+        elif pct < 0.25:                        # ~60 pts at 23600
+            near = f"  {C.YELLOW}◄ NEAR{C.RESET}"
+        print(f"  {color}  {px:>7.0f}  {lb:<14}{C.RESET}  {dist:>+6.0f} pts{golden}{near}")
+    if not spot_printed:
+        print(f"  {C.BOLD}{C.WHITE} {'─'*20} SPOT {spot:.0f} {'─'*20}{C.RESET}")
+
+
+def _hr1_line(sc1h: int, fib1h: dict | None, spot: float) -> str:
+    """Single compact line: 1-hr bias + directive."""
+    if sc1h >= 2:
+        bias_s, directive, col = "⬆ BULLISH", "TRADE CE SIDE", C.GREEN
+    elif sc1h <= -2:
+        bias_s, directive, col = "⬇ BEARISH", "TRADE PE SIDE", C.RED
+    elif sc1h == 1:
+        bias_s, directive, col = "↗ MILD BULLISH", "LEAN CE  (wait for 15m confirm)", C.GREEN
+    elif sc1h == -1:
+        bias_s, directive, col = "↘ MILD BEARISH", "LEAN PE  (wait for 15m confirm)", C.YELLOW
+    else:
+        bias_s, directive, col = "→ NEUTRAL", "BOTH SIDES — wait for clarity", C.YELLOW
+
+    ctx = ""
+    if fib1h:
+        sh = fib1h["SWING_HIGH"]; sl = fib1h["SWING_LOW"]
+        r618 = fib1h.get("R61.8%"); r382 = fib1h.get("R38.2%")
+        if spot > sh:
+            ctx = f"above 1-hr swing high {sh:.0f}"
+        elif spot < sl:
+            ctx = f"below 1-hr swing low {sl:.0f}"
+        elif r618 and spot < r618:
+            ctx = f"below 1-hr R61.8% {r618:.0f}"
+        elif r382 and spot > r382:
+            ctx = f"above 1-hr R38.2% {r382:.0f}"
+    ctx_s = f"  {C.DIM}[{ctx}]{C.RESET}" if ctx else ""
+    return (f"  1-HR  {col}{C.BOLD}{bias_s}{C.RESET}{ctx_s}"
+            f"   →   {col}{C.BOLD}{directive}{C.RESET}")
+
+
+def _setup_block(spot: float, sc1h: int, sc15m: int,
+                 fib_day: dict | None, fib15m: dict | None) -> None:
+    """Print the combined trade setup block."""
+    combined = sc1h + sc15m
+    h1 = "⬆" if sc1h >= 1 else ("⬇" if sc1h <= -1 else "→")
+    m15 = "⬆" if sc15m >= 1 else ("⬇" if sc15m <= -1 else "→")
+
+    if combined >= 4:
+        sig, col = "STRONG CE  ✅", C.GREEN
+    elif combined <= -4:
+        sig, col = "STRONG PE  ✅", C.RED
+    elif combined >= 2:
+        sig, col = "CE  (good setup)", C.GREEN
+    elif combined <= -2:
+        sig, col = "PE  (good setup)", C.RED
+    elif combined >= 1:
+        sig, col = "LEAN CE — wait for candle confirm", C.YELLOW
+    elif combined <= -1:
+        sig, col = "LEAN PE — wait for candle confirm", C.YELLOW
+    else:
+        sig, col = "NO TRADE — timeframes conflict", C.YELLOW
+
+    print(f"{C.YELLOW}─── 🎯 TRADE SETUP ───{C.RESET}")
+    print(f"  1-hr {h1}  +  15m {m15}   →   {col}{C.BOLD}{sig}{C.RESET}")
+
+    fib = fib_day or fib15m
+    if not fib:
+        print(f"  {C.DIM}(waiting for data){C.RESET}")
+        return
+
+    sh    = fib.get("_day_high") or fib["SWING_HIGH"]
+    sl    = fib.get("_day_low")  or fib["SWING_LOW"]
+    e1272 = fib.get("E127.2%")
+    r236  = fib.get("R23.6%"); r382 = fib.get("R38.2%"); r618 = fib.get("R61.8%")
+
+    def _fib_label(px):
+        return next((k for k, v in fib.items()
+                     if isinstance(v, float) and abs(v - px) < 0.5
+                     and not k.startswith("_")), "")
+
+    bearish_trade = combined <= -2
+    bullish_trade = combined >= 2
+
+    if bearish_trade:
+        res_candidates = sorted([p for p in [r236, r382, r618, sh] if p and p > spot])
+        entry_px = res_candidates[0] if res_candidates else None
+
+        # If spot is already at/below day low, target is next extension
+        if e1272 and (spot - sl) < 20:
+            target_px = e1272
+        else:
+            target_px = sl
+
+        sl_cands = sorted([p for p in [r382, r618, sh] if p and p > (entry_px or spot)])
+        sl_px = sl_cands[0] if sl_cands else sh
+
+        ref = entry_px or spot     # measure pts from entry if known, else from spot
+        if entry_px:
+            print(f"  Entry   reject from {entry_px:.0f}  [{_fib_label(entry_px)}]")
+        print(f"  Target  {target_px:.0f}  ({target_px - ref:+.0f} pts from entry)")
+        print(f"  SL      above {sl_px:.0f}  [{_fib_label(sl_px)}]   Risk: {abs(sl_px - ref):.0f} pts   R:R {abs(target_px-ref)/max(abs(sl_px-ref),1):.1f}:1")
+
+    elif bullish_trade:
+        sup_candidates = sorted([p for p in [r236, r382, r618, sl] if p and p < spot], reverse=True)
+        entry_px = sup_candidates[0] if sup_candidates else None
+
+        # If spot is already at/above day high, target is next extension
+        e1272_up = fib.get("E127.2%") if not fib.get("_day_bullish", True) else None
+        if e1272_up and (sh - spot) < 20:
+            target_px = e1272_up
+        else:
+            target_px = sh
+
+        sl_cands = sorted([p for p in [r382, r618, sl] if p and p < (entry_px or spot)], reverse=True)
+        sl_px = sl_cands[0] if sl_cands else sl
+
+        ref = entry_px or spot
+        if entry_px:
+            print(f"  Entry   bounce from {entry_px:.0f}  [{_fib_label(entry_px)}]")
+        print(f"  Target  {target_px:.0f}  ({target_px - ref:+.0f} pts from entry)")
+        print(f"  SL      below {sl_px:.0f}  [{_fib_label(sl_px)}]   Risk: {abs(sl_px - ref):.0f} pts   R:R {abs(target_px-ref)/max(abs(sl_px-ref),1):.1f}:1")
+
+    else:
+        print(f"  Wait for both timeframes to agree before entering.")
+
+
 def print_dashboard(r: dict) -> None:
     clear_cmd = "cls" if os.name == "nt" else "clear"
     os.system(clear_cmd)
@@ -1164,176 +1505,81 @@ def print_dashboard(r: dict) -> None:
     ts    = r["ts"].strftime("%Y-%m-%d %H:%M:%S")
     rsi_s = f"{r['rsi']:.1f}  [{r['rsi_note']}]" if r["rsi"] else "calculating…"
     src_15m = r["src_15m"]
-    src_1h  = r["src_1h"]
     src_15m_color = C.GREEN if "LIVE" in src_15m else C.YELLOW
-    src_1h_color  = C.GREEN if "LIVE" in src_1h  else C.YELLOW
 
-    print(f"{C.CYAN}{'═'*68}{C.RESET}")
-    print(f"{C.BOLD}{C.WHITE}  📐 FIBONACCI TREND ANALYZER  │  {idx}  │  {ts}{C.RESET}")
-    print(f"{C.CYAN}{'═'*68}{C.RESET}")
-
-    print(f"  {C.BOLD}Spot Price : {C.WHITE}{spot:>10.2f}{C.RESET}")
-    print(f"  {C.BOLD}15m data   : {src_15m_color}{src_15m}{C.RESET}")
-    print(f"  {C.BOLD}1hr data   : {src_1h_color}{src_1h}{C.RESET}")
-    print(f"  {C.BOLD}Trend Bias : {r['bias_color']}{C.BOLD}{r['bias_label']}{C.RESET}")
-    print(f"  {C.BOLD}RSI (15m)  : {C.RESET}{rsi_s}")
-    print(f"  {C.BOLD}Pattern    : {C.RESET}{r['pattern']}")
-
+    W = 68
     frozen = r.get("frozen", False)
-    if frozen:
-        market_s = f"{C.YELLOW}⚠️  MARKET CLOSED / HOLIDAY  (price frozen — Telegram alerts suppressed){C.RESET}"
-    elif is_market_open():
-        market_s = f"{C.GREEN}MARKET OPEN{C.RESET}"
+    market_s = (f"{C.YELLOW}CLOSED/HOLIDAY{C.RESET}" if frozen
+                else f"{C.GREEN}OPEN{C.RESET}" if is_market_open()
+                else f"{C.DIM}closed{C.RESET}")
+    print(f"{C.CYAN}{'='*W}{C.RESET}")
+    print(f"{C.BOLD}{C.WHITE}  FIBONACCI ANALYZER  |  {idx}  |  {ts}"
+          f"  |  Spot {C.YELLOW}{spot:.0f}{C.WHITE}  |  {C.RESET}{market_s}")
+    print(f"{C.CYAN}{'='*W}{C.RESET}")
+    print(f"  RSI  {rsi_s}   |   Pattern  {r['pattern']}   |   {src_15m_color}{src_15m}{C.RESET}")
+    print()
+
+    # ── 1-hr directive (one line) ─────────────────────────
+    sc1h  = r.get("score1h", 0)
+    sc15m = r.get("score15m", 0)
+    print(_hr1_line(sc1h, r.get("fib1h"), spot))
+    print(f"  {'─'*64}")
+    print()
+
+    # ── Day Fibonacci Grid ────────────────────────────────
+    fib_day = r.get("fib_day")
+    if fib_day:
+        dh      = fib_day["_day_high"]
+        dl      = fib_day["_day_low"]
+        drng    = dh - dl
+        day_dir = "bullish day" if fib_day["_day_bullish"] else "bearish day"
+        _fib_grid_with_spot(
+            fib_day, spot,
+            f"DAY FIB   H {dh:.0f}  L {dl:.0f}  ({drng:.0f} pts  {day_dir})"
+        )
     else:
-        market_s = f"{C.DIM}market closed{C.RESET}"
-    print(f"  {C.BOLD}Market     : {C.RESET}{market_s}")
+        print(f"{C.DIM}  Day Fib building — market may just have opened{C.RESET}")
     print()
 
     # ── 15-min Fibonacci Grid ─────────────────────────────
-    fib  = r.get("fib15m")
-    pair = r.get("pair15m")
-    if fib and pair:
-        print(f"{C.YELLOW}─── 15-min Fibonacci Grid  [{pair['description']}] ───{C.RESET}")
-        entries = sorted(
-            [(lb, px) for lb, px in fib.items()
-             if not lb.startswith("_") and isinstance(px, float)],
-            key=lambda x: x[1], reverse=True,
+    fib15m  = r.get("fib15m")
+    pair15m = r.get("pair15m")
+    if fib15m and pair15m:
+        _fib_grid_with_spot(
+            fib15m, spot,
+            f"15-MIN FIB  [{pair15m['description']}  {fib15m['_range']:.0f} pts]"
         )
-        for lb, px in entries:
-            print(_level_row(lb, px, spot))
-        sup = r.get("sup15m")
-        res = r.get("res15m")
-        if sup and res:
-            print(
-                f"\n  Support: {C.GREEN}{sup[0]} @ {sup[1]:.0f}{C.RESET}   "
-                f"Resistance: {C.RED}{res[0]} @ {res[1]:.0f}{C.RESET}"
-            )
-        print(f"  15-min position: {C.WHITE}{r['pos15m']}{C.RESET}  (score: {r['score15m']:+d})")
+        print(f"  {C.DIM}15m score: {sc15m:+d}   1h score: {sc1h:+d}   pos: {r['pos15m']}{C.RESET}")
     else:
-        print(f"{C.DIM}  15-min data not yet available (building history…){C.RESET}")
-
+        print(f"{C.DIM}  15-min data building — check back in 1-2 cycles{C.RESET}")
     print()
 
-    # ── 1-hr Fibonacci Grid ───────────────────────────────
-    fib1h  = r.get("fib1h")
-    pair1h = r.get("pair1h")
-    if fib1h and pair1h:
-        print(f"{C.YELLOW}─── 1-hr Fibonacci Grid  [{pair1h['description']}] ───{C.RESET}")
-        entries = sorted(
-            [(lb, px) for lb, px in fib1h.items()
-             if not lb.startswith("_") and isinstance(px, float)],
-            key=lambda x: x[1], reverse=True,
-        )
-        for lb, px in entries:
-            print(_level_row(lb, px, spot))
-        sup = r.get("sup1h")
-        res = r.get("res1h")
-        if sup and res:
-            print(
-                f"\n  Support: {C.GREEN}{sup[0]} @ {sup[1]:.0f}{C.RESET}   "
-                f"Resistance: {C.RED}{res[0]} @ {res[1]:.0f}{C.RESET}"
-            )
-        print(f"  1-hr position:   {C.WHITE}{r['pos1h']}{C.RESET}  (score: {r['score1h']:+d})")
-    else:
-        print(f"{C.DIM}  1-hr data not yet available (building history…){C.RESET}")
-
-    print()
-
-    # ── Confluence Zones ──────────────────────────────────
+    # ── Confluence ────────────────────────────────────────
     conf = r.get("confluence", [])
     if conf:
-        print(f"{C.YELLOW}─── 🎯 Confluence Zones (strongest first) ───{C.RESET}")
-        for z in conf[:6]:
-            dist   = z["price"] - spot
-            dist_s = f"{dist:+.0f}"
-            stars  = "★" * z["count"]
-            color  = C.GREEN if z["price"] > spot else C.RED
-            zone_w = round(z["max_price"] - z["min_price"], 0)
-            lbls   = ", ".join(z["labels"][:3])
-            print(
-                f"  {color}{stars:<5}{C.RESET}  {z['price']:>10.2f}  "
-                f"({dist_s:>6} pts)  [{lbls}]  ±{zone_w:.0f}pts"
-            )
-    else:
-        print(f"{C.DIM}  No multi-level confluence found yet{C.RESET}")
+        print(f"{C.YELLOW}--- Confluence  (day fib + 15m overlap) ---{C.RESET}")
+        for z in conf[:4]:
+            dist = z["price"] - spot
+            col  = C.GREEN if z["price"] > spot else C.RED
+            lbls = ", ".join(z["labels"][:3])
+            print(f"  {col}{'*'*z['count']:<4}  {z['price']:>7.0f}  {dist:>+6.0f} pts  [{lbls}]{C.RESET}")
+        print()
 
+    # ── Trade Setup ───────────────────────────────────────
+    _setup_block(spot, sc1h, sc15m, fib_day, fib15m)
+
+    # ── Auto Summary ──────────────────────────────────────
     print()
+    print(f"{C.YELLOW}--- SUMMARY ---{C.RESET}")
+    summary = _auto_summary(spot, sc1h, sc15m, fib_day, fib15m, conf)
+    print(f"  {C.WHITE}{summary}{C.RESET}")
 
-    # ── Next Move Prediction ──────────────────────────────
-    pred = r.get("prediction")
-    if pred:
-        print(f"{C.YELLOW}─── 🎯 Predicted Next Move ───{C.RESET}")
-        d = pred["direction"]
-        d_color = C.GREEN if d == "UP" else C.RED if d == "DOWN" else C.YELLOW
-        print(
-            f"  Direction : {d_color}{C.BOLD}{d}{C.RESET}\n"
-            f"  Target    : {pred['target']:.0f}  ({pred['label']} pts)\n"
-            f"  Probability: ~{pred['probability']*100:.0f}%\n"
-            f"\n  {C.DIM}Interpretation:{C.RESET}"
-        )
-        if d == "UP":
-            print(f"  {C.GREEN}→ Bias is bullish. Look to BUY CE options in main bot.{C.RESET}")
-            print(f"  {C.GREEN}  Enter near support levels. SL below swing low.{C.RESET}")
-        elif d == "DOWN":
-            print(f"  {C.RED}→ Bias is bearish. Look to BUY PE options in main bot.{C.RESET}")
-            print(f"  {C.RED}  Enter near resistance levels. SL above swing high.{C.RESET}")
-        else:
-            print(f"  {C.YELLOW}→ Neutral / range-bound. Wait for breakout direction.{C.RESET}")
-
-    # ── Chart Setup (copy these to TradingView / charting tool) ──
+    # ── Footer ────────────────────────────────────────────
     print()
-    print(f"{C.YELLOW}─── 📊 CHART SETUP  (draw these on your chart) ───{C.RESET}")
-
-    fib15m_d  = r.get("fib15m")
-    pair15m_d = r.get("pair15m")
-    fib1h_d   = r.get("fib1h")
-    pair1h_d  = r.get("pair1h")
-
-    def _chart_block(label: str, pair: dict | None, fib: dict | None) -> None:
-        if not pair or not fib:
-            print(f"  {C.DIM}{label}: data not yet ready{C.RESET}")
-            return
-        sl   = fib["SWING_LOW"]
-        sh   = fib["SWING_HIGH"]
-        rng  = fib["_range"]
-        bull = fib["_bullish"]
-        arrow = "↑" if bull else "↓"
-        direction_word = "BULLISH" if bull else "BEARISH"
-        print(f"  {C.BOLD}{C.CYAN}{label} Fibonacci ({direction_word} swing){C.RESET}")
-        print(f"    Draw fib FROM  : {C.GREEN if bull else C.RED}{sl:.2f}  (swing low){C.RESET}")
-        print(f"    Draw fib TO    : {C.RED if bull else C.GREEN}{sh:.2f}  (swing high){C.RESET}")
-        print(f"    Swing range    : {rng:.0f} pts  {arrow}")
-        print(f"    Key levels to mark on chart:")
-        all_entries = sorted(
-            [(lb, px) for lb, px in fib.items()
-             if not lb.startswith("_") and lb not in ("SWING_HIGH", "SWING_LOW")
-             and isinstance(px, float)],
-            key=lambda x: x[1], reverse=True,
-        )
-        for lb, px in all_entries:
-            dist     = px - spot
-            near_tag = f"  {C.YELLOW}◄ NEAR{C.RESET}" if abs(dist / spot * 100) < 0.5 else ""
-            golden   = f"  {C.YELLOW}★ GOLDEN ZONE{C.RESET}" if lb in ("R50.0%", "R61.8%") else ""
-            color    = C.GREEN if px > spot else C.RED
-            print(f"      {color}{lb:<12}{C.RESET}  {px:>10.2f}{golden}{near_tag}")
-
-    _chart_block("15-min", pair15m_d, fib15m_d)
-    print()
-    _chart_block("1-hour ", pair1h_d,  fib1h_d)
-
-    # ── Market Reading ───────────────────────────────────
-    print()
-    print(f"{C.YELLOW}─── 📖 MARKET READING ───{C.RESET}")
-    for line in generate_reading(r):
-        print(f"  {line}")
-
-    print()
-    print(f"{C.CYAN}{'═'*68}{C.RESET}")
-    print(
-        f"{C.DIM}  📌 Read-only  │  No orders placed  │  "
-        f"Refreshing every {FIBO_CONFIG['REFRESH_SEC']}s{C.RESET}"
-    )
-    print(f"{C.CYAN}{'═'*68}{C.RESET}")
+    print(f"{C.CYAN}{'='*W}{C.RESET}")
+    print(f"{C.DIM}  Read-only  |  No orders  |  "
+          f"Refreshing every {FIBO_CONFIG['REFRESH_SEC']}s{C.RESET}")
+    print(f"{C.CYAN}{'='*W}{C.RESET}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1341,7 +1587,7 @@ def print_dashboard(r: dict) -> None:
 # ─────────────────────────────────────────────────────────────
 def setup_logger():
     base   = os.path.dirname(os.path.abspath(__file__))
-    log_d  = os.path.join(base, "logs")
+    log_d  = os.path.join(base, "logs", "fibo_analyzer")
     os.makedirs(log_d, exist_ok=True)
     ts     = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path   = os.path.join(log_d, f"Fibo_Analyzer_{ts}.log")
