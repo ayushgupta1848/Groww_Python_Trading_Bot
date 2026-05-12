@@ -1,16 +1,22 @@
+#!/Users/ayush/Documents/eclipse-workspace/Groww_Python_Trading_Bot-main/.venv/bin/python3
 import requests
 import time
 from datetime import datetime
 from openpyxl import Workbook, load_workbook
 from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
 from openpyxl.styles import PatternFill
+import os
+
+# Set your Anthropic API key as an environment variable before running:
+#   export ANTHROPIC_API_KEY="your-key-here"
+
 
 # ================= CONFIG =================
 URL = "https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi"
 PARAMS = {
     "functionName": "getOptionChainData",
     "symbol": "NIFTY",
-    "params": "expiryDate=24-Feb-2026"
+    "params": "expiryDate=12-May-2026"
 }
 
 HEADERS = {
@@ -21,6 +27,7 @@ HEADERS = {
 
 REFRESH_SECONDS = 60
 EXCEL_FILE = "oi_pcr_dashboard.xlsx"
+LOT_SIZE = 75  # NIFTY lot size (change to 20 for SENSEX, 35 for BANKNIFTY, etc.)
 
 session = requests.Session()
 session.headers.update(HEADERS)
@@ -62,6 +69,63 @@ def power(price, prev_price, chg):
     if chg > 0 and price > prev_price:
         return "BUYERS"
     return "NEUTRAL"
+
+# ================= RULE-BASED TRADING SUMMARY =================
+def generate_trading_summary(m, price_change):
+    ce = m["total_oi_ce"]
+    pe = m["total_oi_pe"]
+    ce_chg = m["total_chg_ce"]
+    pe_chg = m["total_chg_pe"]
+
+    # 1. Market bias
+    if pe > ce * 1.1:
+        bias_line = "Bullish bias — Put OI dominates Call OI."
+        bias = "BULLISH"
+    elif ce > pe * 1.1:
+        bias_line = "Bearish bias — Call OI dominates Put OI."
+        bias = "BEARISH"
+    else:
+        bias_line = "Neutral — Call and Put OI are balanced."
+        bias = "NEUTRAL"
+
+    # 2. Writing activity (change OI)
+    if pe_chg > 0 and ce_chg <= 0:
+        writing_line = "Strong put writing with call unwinding — support forming."
+        bias = "BULLISH"
+    elif ce_chg > 0 and pe_chg <= 0:
+        writing_line = "Strong call writing with put unwinding — resistance forming."
+        bias = "BEARISH"
+    elif pe_chg > ce_chg and pe_chg > 0:
+        writing_line = "Put writing observed — support building up."
+    elif ce_chg > pe_chg and ce_chg > 0:
+        writing_line = "Call writing observed — resistance building up."
+    else:
+        writing_line = "No significant writing activity detected."
+
+    # 3. Price-OI confirmation
+    if price_change > 0 and pe_chg > 0:
+        price_line = "Price up with OI build-up — uptrend confirmed."
+    elif price_change < 0 and ce_chg > 0:
+        price_line = "Price down with OI build-up — downtrend continuation."
+    elif price_change > 0 and ce_chg < 0:
+        price_line = "Price up with call OI falling — short covering rally."
+    elif price_change < 0 and pe_chg < 0:
+        price_line = "Price down with put OI falling — long unwinding."
+    else:
+        price_line = "Price movement not showing strong OI confirmation."
+
+    # 4. ATM strike diff dominance
+    atm_d = m["atm_strikes_oi"].get(m["atm"], {})
+    atm_diff = atm_d.get("pe_oi", 0) - atm_d.get("ce_oi", 0)
+    if atm_diff > 0:
+        final_bias = "Bias: Prefer CALL side — PE dominant at ATM."
+    elif atm_diff < 0:
+        final_bias = "Bias: Prefer PUT side — CE dominant at ATM."
+    else:
+        final_bias = f"Bias: Prefer {'CALL' if bias == 'BULLISH' else 'PUT' if bias == 'BEARISH' else 'WAIT'} side."
+
+    return f"{bias_line}\n{writing_line}\n{price_line}\n{final_bias}"
+
 
 # ================= CONDITIONAL FORMATTING =================
 def apply_conditional_formatting(ws):
@@ -214,7 +278,9 @@ def calculate(j):
     price = j["underlyingValue"]
     data = j["data"]
 
-    strikes = sorted(i["strikePrice"] for i in data)
+    strikes = sorted(i["strikePrice"] for i in data if "strikePrice" in i)
+    if not strikes:
+        raise ValueError("No strike data returned — expiry date may be wrong or market is closed.")
     atm = min(strikes, key=lambda x: abs(x - price))
     idx = strikes.index(atm)
     atm_range = strikes[max(0, idx-3): idx+4]
@@ -229,10 +295,10 @@ def calculate(j):
         ce = i.get("CE", {})
         pe = i.get("PE", {})
 
-        ce_oi = ce.get("openInterest", 0)
-        pe_oi = pe.get("openInterest", 0)
-        ce_chg = ce.get("changeinOpenInterest", 0)
-        pe_chg = pe.get("changeinOpenInterest", 0)
+        ce_oi = ce.get("openInterest", 0) * LOT_SIZE
+        pe_oi = pe.get("openInterest", 0) * LOT_SIZE
+        ce_chg = ce.get("changeinOpenInterest", 0) * LOT_SIZE
+        pe_chg = pe.get("changeinOpenInterest", 0) * LOT_SIZE
 
         ce_map[s] = ce_oi
         pe_map[s] = pe_oi
@@ -247,6 +313,8 @@ def calculate(j):
             a_oi_pe += pe_oi
             a_chg_ce += ce_chg
             a_chg_pe += pe_chg
+
+    atm_strikes_oi = {s: {"ce_oi": ce_map.get(s, 0), "pe_oi": pe_map.get(s, 0)} for s in atm_range}
 
     # Calculate level strength for resistance/support
     resistance_levels = sorted(ce_map, key=ce_map.get, reverse=True)[:3]
@@ -270,6 +338,7 @@ def calculate(j):
         "support": support_levels,
         "resistance_strength": resistance_strength,
         "support_strength": support_strength,
+        "atm_strikes_oi": atm_strikes_oi,
     }
 
 # ================= MAIN LOOP =================
@@ -281,6 +350,8 @@ ws = wb["DATA"]
 candle_history = {}
 candle_interval = 900  # 15 min in seconds
 last_candle_close_time = None
+
+atm_strike_history = {}  # {strike: [(time, ce_oi, pe_oi), ...]}
 
 while True:
     try:
@@ -302,6 +373,12 @@ while True:
 
         sentiment = "BULLISH" if pcr_atm > 1.1 else "BEARISH" if pcr_atm < 0.9 else "NEUTRAL"
 
+        # Store ATM strike history (last 5)
+        atm = m["atm"]
+        atm_strike_history.setdefault(atm, []).append((m["time"], m["atm_strikes_oi"][atm]["ce_oi"], m["atm_strikes_oi"][atm]["pe_oi"]))
+        if len(atm_strike_history[atm]) > 5:
+            atm_strike_history[atm].pop(0)
+
         # ================= PRINT =================
         print("\n" + "="*75)
         print(f"Time                         : {m['time']}")
@@ -319,6 +396,23 @@ while True:
         print(f"6. Total OI PE (ATM ±3)       : {m['atm_oi_pe']:,}")
         print(f"7. Change OI CE (ATM ±3)      : {m['atm_chg_ce']:,}")
         print(f"8. Change OI PE (ATM ±3)      : {m['atm_chg_pe']:,}")
+
+        print("\n  Strike-wise OI (ATM ±3):")
+        print(f"  {'Strike':>8} | {'CE OI':>14} | {'PE OI':>14} | {'Diff (PE-CE)':>16}")
+        print(f"  {'-'*8}-+-{'-'*14}-+-{'-'*14}-+-{'-'*16}")
+        for strike in sorted(m["atm_strikes_oi"]):
+            marker = " <-- ATM" if strike == m["atm"] else ""
+            d = m["atm_strikes_oi"][strike]
+            diff = d["pe_oi"] - d["ce_oi"]
+            print(f"  {strike:>8} | {d['ce_oi']:>14,} | {d['pe_oi']:>14,} | {diff:>+16,}{marker}")
+
+        hist = atm_strike_history.get(m["atm"], [])
+        if len(hist) > 1:
+            print(f"\n  ATM Strike {m['atm']} — Last {len(hist)} readings:")
+            print(f"  {'Time':>10} | {'CE OI':>14} | {'PE OI':>14} | {'Diff (PE-CE)':>16}")
+            print(f"  {'-'*10}-+-{'-'*14}-+-{'-'*14}-+-{'-'*16}")
+            for t, c, p in hist:
+                print(f"  {t:>10} | {c:>14,} | {p:>14,} | {(p - c):>+16,}")
 
         print("\n--- PCR ---")
         print(f"9. PCR (All Strikes)          : {pcr_all:.2f}")
@@ -402,6 +496,11 @@ while True:
                 print(f"\n🚀 BREAKOUT SIGNAL: Price closed above resistance {breakout_signal[0]} | Market Direction: UP | Target: Next resistance")
             if breakdown_signal:
                 print(f"\n🔻 BREAKDOWN SIGNAL: Price closed below support {breakdown_signal[0]} | Market Direction: DOWN | Target: Next support")
+
+        # === AI Trading Summary ===
+        price_change = (m["price"] - prev_price) if prev_price is not None else 0.0
+        print("\n--- AI OI SUMMARY ---")
+        print(generate_trading_summary(m, price_change))
 
         # === Save to Excel ===
         ws.append([
