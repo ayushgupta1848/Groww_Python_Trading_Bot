@@ -178,29 +178,39 @@ def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit):
     }
     print(f"[TRADE_RECORD] {json.dumps(_rec)}")
 
-    if not os.path.exists(file_name):
-        wb = Workbook()
+    try:
+        if not os.path.exists(file_name):
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Lakshmi"
+            ws.append(["DateTime", "Symbol", "Buy Price", "Sell Price", "Quantity", "Profit ₹", "Capital Used", "Result", "Mode"])
+            wb.save(file_name)
+
+        wb = load_workbook(file_name)
         ws = wb.active
-        ws.title = "Trades"
-        ws.append(["DateTime", "Symbol", "Buy Price", "Sell Price", "Quantity", "Profit", "Mode"])
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        capital_used = round(float(buy_price) * int(quantity), 2) if buy_price and quantity else None
+        result_label = "PROFIT" if profit >= 0 else "LOSS"
+
+        # Find first truly empty row (guards against ghost rows from Excel formatting)
+        next_row = ws.max_row + 1
+        while next_row > 2 and ws.cell(row=next_row - 1, column=1).value is None:
+            next_row -= 1
+
+        ws.cell(row=next_row, column=1).value = now
+        ws.cell(row=next_row, column=2).value = symbol
+        ws.cell(row=next_row, column=3).value = buy_price
+        ws.cell(row=next_row, column=4).value = sell_price
+        ws.cell(row=next_row, column=5).value = quantity
+        ws.cell(row=next_row, column=6).value = round(profit, 2)
+        ws.cell(row=next_row, column=7).value = capital_used
+        ws.cell(row=next_row, column=8).value = result_label
+        ws.cell(row=next_row, column=9).value = mode
         wb.save(file_name)
-
-    # Load existing workbook
-    wb = load_workbook(file_name)
-    ws = wb.active
-
-    # Find the next empty row
-    next_row = ws.max_row + 1
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    ws.cell(row=next_row, column=1).value = now
-    ws.cell(row=next_row, column=2).value = symbol
-    ws.cell(row=next_row, column=3).value = buy_price
-    ws.cell(row=next_row, column=4).value = sell_price
-    ws.cell(row=next_row, column=5).value = quantity
-    ws.cell(row=next_row, column=6).value = round(profit, 2)
-    ws.cell(row=next_row, column=7).value = mode
-    wb.save(file_name)
+        print(f"📊 Excel logged: {symbol}  {result_label}  ₹{profit:.0f}  row {next_row}")
+    except Exception as exc:
+        print(f"⚠️  Excel log failed: {exc}")
 
 
 # ----------------- CSV -> JSON loader -----------------

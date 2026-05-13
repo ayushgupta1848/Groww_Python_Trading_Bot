@@ -964,6 +964,43 @@ def print_top_trades(trades: list[dict], n: int = 5):
         xr   = t.get("exit_reason", "")[:12]
         print(f"  {i}. {dt_s}  {sym:<14}  {xr:<12}  {C.RED}₹{t['pnl']:>+9,.2f}{C.RST}  [{t.get('mode','?')}]")
 
+# ── 11b. ALL TRADES — CHRONOLOGICAL ─────────────────────────────────────────
+def print_all_trades_chrono(trades: list[dict]):
+    valid = sorted(
+        [t for t in trades if t.get("pnl") is not None and t.get("dt")],
+        key=lambda t: t["dt"],
+    )
+    if not valid:
+        return
+    section(f"📋  ALL TRADES — CHRONOLOGICAL  ({len(valid)} trades)")
+    header = f"  {'#':<3}  {'Time':<8}  {'Symbol':<20}  {'Type':<4}  {'Buy':>7}  {'Sell':>7}  {'Qty':>5}  {'P&L':>11}  {'Mode':<5}"
+    print(f"  {C.DIM}{header.strip()}{C.RST}")
+    print(f"  {C.DIM}{'─'*90}{C.RST}")
+    running = 0.0
+    for i, t in enumerate(valid, 1):
+        pnl    = t["pnl"]
+        running += pnl
+        time_s = t["dt"].strftime("%H:%M:%S")
+        sym    = (t.get("symbol") or "")[-20:]
+        otype  = t.get("opt_type") or "?"
+        buy_s  = f"{t['buy_px']:.1f}"  if t.get("buy_px")  is not None else "—"
+        sell_s = f"{t['sell_px']:.1f}" if t.get("sell_px") is not None else "—"
+        qty_s  = str(t.get("qty") or "—")
+        mode_s = t.get("mode", "?")[:5]
+        col    = C.GRN if pnl >= 0 else C.RED
+        run_col = C.GRN if running >= 0 else C.RED
+        print(
+            f"  {C.DIM}{i:<3}{C.RST}  {C.DIM}{time_s}{C.RST}  "
+            f"{sym:<20}  {C.BLD}{otype:<4}{C.RST}  "
+            f"{C.DIM}{buy_s:>7}  {sell_s:>7}  {qty_s:>5}{C.RST}  "
+            f"{col}₹{pnl:>+9,.0f}{C.RST}  "
+            f"{C.DIM}{mode_s:<5}  running: {run_col}₹{running:>+10,.0f}{C.RST}"
+        )
+    print(f"  {C.DIM}{'─'*90}{C.RST}")
+    net_col = C.GRN if running >= 0 else C.RED
+    print(f"  {' '*57}{net_col}{C.BLD}NET  ₹{running:>+10,.0f}{C.RST}")
+
+
 # ── 12. SESSION NARRATIVE ────────────────────────────────────────────────────
 def print_session_narrative(trades: list[dict]):
     section("📖  SESSION NARRATIVE — What Actually Happened")
@@ -1357,8 +1394,8 @@ def save_ai_summary(trades: list[dict], date_from=None, date_to=None) -> str:
     for i, t in enumerate(
             sorted(valid, key=lambda x: x.get("dt") or datetime.min), 1):
         sym     = (t.get("symbol") or "")[-20:]
-        buy_px  = f"{t['buy_price']:.2f}"  if t.get("buy_price")  is not None else "—"
-        sell_px = f"{t['sell_price']:.2f}" if t.get("sell_price") is not None else "—"
+        buy_px  = f"{t['buy_px']:.2f}"  if t.get("buy_px")  is not None else "—"
+        sell_px = f"{t['sell_px']:.2f}" if t.get("sell_px") is not None else "—"
         qty     = str(t.get("qty") or "—")
         hold    = f"{t['hold_secs']/60:.1f}" if t.get("hold_secs") else "—"
         aligned = ("YES"    if t.get("fibo_aligned") is True
@@ -1431,7 +1468,7 @@ def save_ai_summary(trades: list[dict], date_from=None, date_to=None) -> str:
         lines += [
             f"### Trade {i} — {t.get('date','?')} {(t.get('time','?'))[:8]}",
             f"- Symbol: {t.get('symbol','?')}  |  Type: {t.get('opt_type','?')}  |  Mode: {t.get('mode','?')}",
-            f"- Buy: ₹{t.get('buy_price') or '—'}  |  Sell: ₹{t.get('sell_price') or '—'}  |  Qty: {t.get('qty') or '—'}",
+            f"- Buy: ₹{t.get('buy_px') or '—'}  |  Sell: ₹{t.get('sell_px') or '—'}  |  Qty: {t.get('qty') or '—'}",
             f"- **P&L: {pnl_word} ₹{t['pnl']:+,.2f}**  |  Hold: {hold_s}  |  Exit: {t.get('exit_reason','—')}",
             f"- Fibo Signal: {t.get('fibo_signal','—')}  |  Trend: {t.get('fibo_trend_bias','—')}  |  Pattern: {t.get('fibo_pattern','—')}",
             f"- 15m Candles: {t.get('fibo_candles_15m','—')}  |  1h Candles: {t.get('fibo_candles_1h','—')}  |  Aligned: {('YES' if t.get('fibo_aligned') is True else 'NO' if t.get('fibo_aligned') is False else 'NO SIG')}",
@@ -1607,6 +1644,7 @@ def run_analysis(trades: list[dict], save: bool = True):
     print_streak_analysis(trades)
     print_index_breakdown(trades)
     print_top_trades(trades)
+    print_all_trades_chrono(trades)
     print_loss_diagnosis(trades)
     print_recommendations(trades)
     print(f"\n{C.CYN}{'═'*W}{C.RST}\n")

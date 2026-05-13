@@ -46,15 +46,106 @@ except ImportError:
 #  ANSI COLORS  (works on macOS / Linux terminal)
 # ─────────────────────────────────────────────────────────────
 class C:
-    RESET  = "\033[0m"
-    BOLD   = "\033[1m"
-    DIM    = "\033[2m"
-    RED    = "\033[91m"
-    GREEN  = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE   = "\033[94m"
-    CYAN   = "\033[96m"
-    WHITE  = "\033[97m"
+    RESET    = "\033[0m"
+    BOLD     = "\033[1m"
+    DIM      = "\033[2m"
+    RED      = "\033[91m"
+    GREEN    = "\033[92m"
+    YELLOW   = "\033[93m"
+    BLUE     = "\033[94m"
+    CYAN     = "\033[96m"
+    WHITE    = "\033[97m"
+    MAGENTA  = "\033[95m"
+    B_RED    = "\033[1;91m"
+    B_GREEN  = "\033[1;92m"
+    B_YELLOW = "\033[1;93m"
+    B_CYAN   = "\033[1;96m"
+    B_WHITE  = "\033[1;97m"
+    B_MAGENTA= "\033[1;95m"
+    ORANGE   = "\033[38;5;214m"
+    B_ORANGE = "\033[1;38;5;214m"
+    LIME     = "\033[38;5;154m"
+    B_LIME   = "\033[1;38;5;154m"
+    PINK     = "\033[38;5;213m"
+
+
+# ─────────────────────────────────────────────────────────────
+#  COLOR CONFIG  — edit hex values to customise any color
+#  Use any web color picker (e.g. https://www.color-hex.com/)
+# ─────────────────────────────────────────────────────────────
+COLOR_CONFIG = {
+    # ── Bias / direction ─────────────────────────────────────
+    "BIAS_STRONG_BULL":  "#00ff00",   # ⬆⬆ STRONG BULLISH
+    "BIAS_BULL":         "#00ee00",   # ⬆  BULLISH
+    "BIAS_MILD_BULL":    "#88ff44",   # ↗  MILD BULLISH
+    "BIAS_NEUTRAL":      "#ffff00",   # →  NEUTRAL
+    "BIAS_MILD_BEAR":    "#ff8844",   # ↘  MILD BEARISH
+    "BIAS_BEAR":         "#ff4444",   # ⬇  BEARISH
+    "BIAS_STRONG_BEAR":  "#ff0000",   # ⬇⬇ STRONG BEARISH
+
+    # ── Fib grid — levels above/below spot ───────────────────
+    "FIB_ABOVE":         "#ff4444",   # resistance levels (above spot)
+    "FIB_BELOW":         "#00ff00",   # support levels (below spot)
+    "FIB_SWING":         "#00ffff",   # SWING_HIGH / SWING_LOW lines
+    "GOLDEN_ZONE":       "#ffcc00",   # ★ star on R50%/R61.8%
+    "SPOT_LINE":         "#ffffff",   # ─── SPOT xxxx ─── line
+    "NEAR_HERE":         "#ffff00",   # ◄◄ HERE  (price very close)
+    "NEAR_CLOSE":        "#ffaa00",   # ◄ NEAR   (price moderately close)
+
+    # ── Setup signals ─────────────────────────────────────────
+    "SETUP_STRONG_BULL": "#00ff00",   # STRONG CE ✅
+    "SETUP_STRONG_BEAR": "#ff0000",   # STRONG PE ✅
+    "SETUP_LEAN_BULL":   "#00ff00",   # CE (good setup)
+    "SETUP_LEAN_BEAR":   "#ff4444",   # PE (good setup)
+    "SETUP_WAIT":        "#ffff00",   # lean / no clear edge
+
+    # ── 1-hr directive ────────────────────────────────────────
+    "HR1_BULL":          "#00ff00",   # 1-hr bullish
+    "HR1_BEAR":          "#ff4444",   # 1-hr bearish
+    "HR1_LEAN_BEAR":     "#ffaa00",   # 1-hr mild bearish
+    "HR1_NEUTRAL":       "#ffff00",   # 1-hr neutral
+
+    # ── Dashboard headers & chrome ────────────────────────────
+    "DASH_BORDER":       "#00ffff",   # ══════ separator lines
+    "DASH_HEADER":       "#ffffff",   # main header text
+    "DASH_SPOT":         "#ffff00",   # spot price value
+    "MARKET_OPEN":       "#00ff00",   # OPEN label
+    "MARKET_CLOSED":     "#ffff00",   # CLOSED/HOLIDAY label
+    "SECTION_HEADER":    "#ffff00",   # ─── section titles
+    "SRC_LIVE":          "#00ff00",   # LIVE data source label
+    "SRC_STALE":         "#ffff00",   # stale/cached data label
+    "CONFLUENCE_ABOVE":  "#ff4444",   # confluence zone above spot
+    "CONFLUENCE_BELOW":  "#00ff00",   # confluence zone below spot
+    "SUMMARY_TEXT":      "#ffffff",   # summary paragraph
+
+    # ── Startup messages ──────────────────────────────────────
+    "API_OK":            "#00ff00",   # ✅ API initialized
+    "STARTUP_BANNER":    "#00ffff",   # startup box border color
+    "STATUS_DIM":        "#666666",   # footer dim text
+}
+
+_COLOR_MAP = {
+    "red": C.RED, "green": C.GREEN, "yellow": C.YELLOW,
+    "blue": C.BLUE, "cyan": C.CYAN, "white": C.WHITE,
+    "magenta": C.MAGENTA, "orange": C.ORANGE, "lime": C.LIME,
+    "pink": C.PINK, "dim": C.DIM,
+}
+
+
+def _hex_to_ansi(hex_color: str) -> str:
+    h = hex_color.lstrip("#")
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"\033[1;38;2;{r};{g};{b}m"
+    except Exception:
+        return C.WHITE
+
+
+def _cc(key: str) -> str:
+    val = COLOR_CONFIG.get(key, "#ffffff")
+    if val.startswith("#"):
+        return _hex_to_ansi(val)
+    return _COLOR_MAP.get(val, C.WHITE)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -138,7 +229,7 @@ def init_groww():
     totp = pyotp.TOTP(TOTP_SECRET).now()
     access_token = GrowwAPI.get_access_token(api_key=API_KEY, totp=totp)
     client = GrowwAPI(access_token)
-    print(f"{C.GREEN}✅ Fibonacci Analyzer: Groww API initialized{C.RESET}")
+    print(f"{_cc('API_OK')}✅ Fibonacci Analyzer: Groww API initialized{C.RESET}")
     return client, access_token
 
 
@@ -835,15 +926,18 @@ def analyze_position(spot: float, fib: dict | None) -> tuple:
 # ─────────────────────────────────────────────────────────────
 #  TREND BIAS
 # ─────────────────────────────────────────────────────────────
-BIAS_MAP = {
-     3: ("⬆⬆ STRONG BULLISH", C.GREEN),
-     2: ("⬆  BULLISH",         C.GREEN),
-     1: ("↗  MILD BULLISH",    "\033[92m"),
-     0: ("→  NEUTRAL",          C.YELLOW),
-    -1: ("↘  MILD BEARISH",    "\033[91m"),
-    -2: ("⬇  BEARISH",         C.RED),
-    -3: ("⬇⬇ STRONG BEARISH",  C.RED),
-}
+def _build_bias_map():
+    return {
+         3: ("⬆⬆ STRONG BULLISH", _cc("BIAS_STRONG_BULL")),
+         2: ("⬆  BULLISH",         _cc("BIAS_BULL")),
+         1: ("↗  MILD BULLISH",    _cc("BIAS_MILD_BULL")),
+         0: ("→  NEUTRAL",          _cc("BIAS_NEUTRAL")),
+        -1: ("↘  MILD BEARISH",    _cc("BIAS_MILD_BEAR")),
+        -2: ("⬇  BEARISH",         _cc("BIAS_BEAR")),
+        -3: ("⬇⬇ STRONG BEARISH",  _cc("BIAS_STRONG_BEAR")),
+    }
+
+BIAS_MAP = _build_bias_map()
 
 PATTERN_SCORE = {
     "HAMMER 🔨  (bullish reversal)":     +1.0,
@@ -865,7 +959,7 @@ def get_final_bias(score_15m: int, pattern: str) -> tuple:
     p_adj = PATTERN_SCORE.get(pattern, 0.0)
     raw   = score_15m * 0.90 + p_adj * 0.10
     score = int(max(-3, min(3, round(raw))))
-    label, color = BIAS_MAP.get(score, ("→  NEUTRAL", C.YELLOW))
+    label, color = BIAS_MAP.get(score, ("→  NEUTRAL", _cc("BIAS_NEUTRAL")))
     return score, label, color
 
 
@@ -1072,12 +1166,11 @@ def _level_row(label: str, price: float, spot: float, width: int = 10) -> str:
     dist_s    = f"{dist:+.0f}"
     dist_pct  = dist / spot * 100
     near      = abs(dist_pct) < 0.5
-    color     = C.GREEN if price > spot else C.RED
+    color     = _cc("FIB_ABOVE") if price > spot else _cc("FIB_BELOW")
     if label in ("SWING_HIGH", "SWING_LOW"):
-        color = C.CYAN
-    # Golden Zone labels get a distinct yellow marker
-    golden_tag = f"  {C.YELLOW}🟡 GOLDEN ZONE{C.RESET}" if label in ("R50.0%", "R61.8%") else ""
-    near_tag   = f"  {C.YELLOW}◄ NEAR ({dist_pct:+.2f}%){C.RESET}" if near else ""
+        color = _cc("FIB_SWING")
+    golden_tag = f"  {_cc('GOLDEN_ZONE')}🟡 GOLDEN ZONE{C.RESET}" if label in ("R50.0%", "R61.8%") else ""
+    near_tag   = f"  {_cc('NEAR_CLOSE')}◄ NEAR ({dist_pct:+.2f}%){C.RESET}" if near else ""
     return f"  {color}{label:<12}{C.RESET}  {price:>10.2f}  ({dist_s:>6} pts){golden_tag}{near_tag}"
 
 
@@ -1358,40 +1451,40 @@ def _fib_grid_with_spot(fib: dict, spot: float, title: str) -> None:
          if not lb.startswith("_") and isinstance(px, float)],
         key=lambda x: x[1], reverse=True,
     )
-    print(f"{C.YELLOW}─── {title} ───{C.RESET}")
+    print(f"{_cc('SECTION_HEADER')}─── {title} ───{C.RESET}")
     spot_printed = False
     for lb, px in entries:
         if not spot_printed and px < spot:
-            print(f"  {C.BOLD}{C.WHITE} {'─'*20} SPOT {spot:.0f} {'─'*20}{C.RESET}")
+            print(f"  {C.BOLD}{_cc('SPOT_LINE')} {'─'*20} SPOT {spot:.0f} {'─'*20}{C.RESET}")
             spot_printed = True
         dist = px - spot
-        color = C.GREEN if px > spot else C.RED
+        color = _cc("FIB_ABOVE") if px > spot else _cc("FIB_BELOW")
         if lb in ("SWING_HIGH", "SWING_LOW"):
-            color = C.CYAN
-        golden = f" {C.YELLOW}★{C.RESET}" if lb in ("R50.0%", "R61.8%") else ""
+            color = _cc("FIB_SWING")
+        golden = f" {_cc('GOLDEN_ZONE')}★{C.RESET}" if lb in ("R50.0%", "R61.8%") else ""
         near = ""
         pct = abs(dist / spot * 100)
         if pct < 0.10:                          # ~24 pts at 23600
-            near = f"  {C.YELLOW}{C.BOLD}◄◄ HERE{C.RESET}"
+            near = f"  {_cc('NEAR_HERE')}{C.BOLD}◄◄ HERE{C.RESET}"
         elif pct < 0.25:                        # ~60 pts at 23600
-            near = f"  {C.YELLOW}◄ NEAR{C.RESET}"
+            near = f"  {_cc('NEAR_CLOSE')}◄ NEAR{C.RESET}"
         print(f"  {color}  {px:>7.0f}  {lb:<14}{C.RESET}  {dist:>+6.0f} pts{golden}{near}")
     if not spot_printed:
-        print(f"  {C.BOLD}{C.WHITE} {'─'*20} SPOT {spot:.0f} {'─'*20}{C.RESET}")
+        print(f"  {C.BOLD}{_cc('SPOT_LINE')} {'─'*20} SPOT {spot:.0f} {'─'*20}{C.RESET}")
 
 
 def _hr1_line(sc1h: int, fib1h: dict | None, spot: float) -> str:
     """Single compact line: 1-hr bias + directive."""
     if sc1h >= 2:
-        bias_s, directive, col = "⬆ BULLISH", "TRADE CE SIDE", C.GREEN
+        bias_s, directive, col = "⬆ BULLISH", "TRADE CE SIDE", _cc("HR1_BULL")
     elif sc1h <= -2:
-        bias_s, directive, col = "⬇ BEARISH", "TRADE PE SIDE", C.RED
+        bias_s, directive, col = "⬇ BEARISH", "TRADE PE SIDE", _cc("HR1_BEAR")
     elif sc1h == 1:
-        bias_s, directive, col = "↗ MILD BULLISH", "LEAN CE  (wait for 15m confirm)", C.GREEN
+        bias_s, directive, col = "↗ MILD BULLISH", "LEAN CE  (wait for 15m confirm)", _cc("HR1_BULL")
     elif sc1h == -1:
-        bias_s, directive, col = "↘ MILD BEARISH", "LEAN PE  (wait for 15m confirm)", C.YELLOW
+        bias_s, directive, col = "↘ MILD BEARISH", "LEAN PE  (wait for 15m confirm)", _cc("HR1_LEAN_BEAR")
     else:
-        bias_s, directive, col = "→ NEUTRAL", "BOTH SIDES — wait for clarity", C.YELLOW
+        bias_s, directive, col = "→ NEUTRAL", "BOTH SIDES — wait for clarity", _cc("HR1_NEUTRAL")
 
     ctx = ""
     if fib1h:
@@ -1405,7 +1498,7 @@ def _hr1_line(sc1h: int, fib1h: dict | None, spot: float) -> str:
             ctx = f"below 1-hr R61.8% {r618:.0f}"
         elif r382 and spot > r382:
             ctx = f"above 1-hr R38.2% {r382:.0f}"
-    ctx_s = f"  {C.DIM}[{ctx}]{C.RESET}" if ctx else ""
+    ctx_s = f"  {_cc('STATUS_DIM')}[{ctx}]{C.RESET}" if ctx else ""
     return (f"  1-HR  {col}{C.BOLD}{bias_s}{C.RESET}{ctx_s}"
             f"   →   {col}{C.BOLD}{directive}{C.RESET}")
 
@@ -1418,26 +1511,26 @@ def _setup_block(spot: float, sc1h: int, sc15m: int,
     m15 = "⬆" if sc15m >= 1 else ("⬇" if sc15m <= -1 else "→")
 
     if combined >= 4:
-        sig, col = "STRONG CE  ✅", C.GREEN
+        sig, col = "STRONG CE  ✅", _cc("SETUP_STRONG_BULL")
     elif combined <= -4:
-        sig, col = "STRONG PE  ✅", C.RED
+        sig, col = "STRONG PE  ✅", _cc("SETUP_STRONG_BEAR")
     elif combined >= 2:
-        sig, col = "CE  (good setup)", C.GREEN
+        sig, col = "CE  (good setup)", _cc("SETUP_LEAN_BULL")
     elif combined <= -2:
-        sig, col = "PE  (good setup)", C.RED
+        sig, col = "PE  (good setup)", _cc("SETUP_LEAN_BEAR")
     elif combined >= 1:
-        sig, col = "LEAN CE — wait for candle confirm", C.YELLOW
+        sig, col = "LEAN CE — wait for candle confirm", _cc("SETUP_WAIT")
     elif combined <= -1:
-        sig, col = "LEAN PE — wait for candle confirm", C.YELLOW
+        sig, col = "LEAN PE — wait for candle confirm", _cc("SETUP_WAIT")
     else:
-        sig, col = "NO TRADE — timeframes conflict", C.YELLOW
+        sig, col = "NO TRADE — timeframes conflict", _cc("SETUP_WAIT")
 
-    print(f"{C.YELLOW}─── 🎯 TRADE SETUP ───{C.RESET}")
+    print(f"{_cc('SECTION_HEADER')}─── 🎯 TRADE SETUP ───{C.RESET}")
     print(f"  1-hr {h1}  +  15m {m15}   →   {col}{C.BOLD}{sig}{C.RESET}")
 
     fib = fib_day or fib15m
     if not fib:
-        print(f"  {C.DIM}(waiting for data){C.RESET}")
+        print(f"  {_cc('STATUS_DIM')}(waiting for data){C.RESET}")
         return
 
     sh    = fib.get("_day_high") or fib["SWING_HIGH"]
@@ -1496,6 +1589,116 @@ def _setup_block(spot: float, sc1h: int, sc15m: int,
         print(f"  Wait for both timeframes to agree before entering.")
 
 
+def _draw_guide(fib_day: dict | None, fib15m: dict | None,
+                fib1h: dict | None, conf: list, spot: float) -> None:
+    """Print step-by-step Fib drawing instructions based on current live data."""
+    H = _cc("SECTION_HEADER")
+    G = _cc("FIB_BELOW")       # green
+    R = _cc("FIB_ABOVE")       # red
+    Y = _cc("GOLDEN_ZONE")     # yellow/gold
+    D = _cc("STATUS_DIM")
+    W = _cc("DASH_HEADER")
+    RST = C.RESET
+
+    print(f"{H}─── 📐 HOW TO DRAW ON CHART  (TradingView / Zerodha Kite) ───{RST}")
+    print(f"{D}  Tool: Fib Retracement  |  Step 1 = first click  |  Step 2 = drag & release{RST}")
+    print()
+
+    step = 1
+
+    # ── Day Fibonacci ───────────────────────────────────────
+    if fib_day:
+        dh   = fib_day["_day_high"]
+        dl   = fib_day["_day_low"]
+        bull = fib_day["_day_bullish"]
+        if bull:
+            s1_px, s1_lbl = dl, "Day LOW  (0%)"
+            s2_px, s2_lbl = dh, "Day HIGH (100%)"
+            arrow = f"{G}LOW → HIGH{RST}"
+            why   = "bullish day — low formed first, then rallied"
+        else:
+            s1_px, s1_lbl = dh, "Day HIGH (0%)"
+            s2_px, s2_lbl = dl, "Day LOW  (100%)"
+            arrow = f"{R}HIGH → LOW{RST}"
+            why   = "bearish day — high formed first, then fell"
+
+        print(f"  {W}[{step}] DAY FIB{RST}  ({arrow}  |  {D}{why}{RST})")
+        print(f"      Step 1 → click  {G}{s1_px:.0f}{RST}  ({s1_lbl})")
+        print(f"      Step 2 → drag   {R}{s2_px:.0f}{RST}  ({s2_lbl})")
+        print(f"      {D}Key levels: R23.6%={fib_day.get('R23.6%', 0):.0f}  "
+              f"R38.2%={fib_day.get('R38.2%', 0):.0f}  "
+              f"R61.8%={fib_day.get('R61.8%', 0):.0f}  "
+              f"R78.6%={fib_day.get('R78.6%', 0):.0f}{RST}")
+        step += 1
+        print()
+
+    # ── 15-Min Fibonacci ────────────────────────────────────
+    if fib15m:
+        sh15  = fib15m["SWING_HIGH"]
+        sl15  = fib15m["SWING_LOW"]
+        bull15 = fib15m.get("_bullish", True)
+        rng15  = fib15m.get("_range", abs(sh15 - sl15))
+        if bull15:
+            s1_px, s1_lbl = sl15, "Swing LOW  (0%)"
+            s2_px, s2_lbl = sh15, "Swing HIGH (100%)"
+            arrow = f"{G}LOW → HIGH{RST}"
+            why   = "bullish swing on 15-min"
+        else:
+            s1_px, s1_lbl = sh15, "Swing HIGH (0%)"
+            s2_px, s2_lbl = sl15, "Swing LOW  (100%)"
+            arrow = f"{R}HIGH → LOW{RST}"
+            why   = "bearish swing on 15-min"
+
+        print(f"  {W}[{step}] 15-MIN FIB{RST}  ({arrow}  |  {D}{why}  |  range {rng15:.0f} pts{RST})")
+        print(f"      Step 1 → click  {G}{s1_px:.0f}{RST}  ({s1_lbl})")
+        print(f"      Step 2 → drag   {R}{s2_px:.0f}{RST}  ({s2_lbl})")
+        print(f"      {D}Key levels: R38.2%={fib15m.get('R38.2%', 0):.0f}  "
+              f"R61.8%={fib15m.get('R61.8%', 0):.0f}  "
+              f"R78.6%={fib15m.get('R78.6%', 0):.0f}{RST}")
+        step += 1
+        print()
+
+    # ── 1-Hr Fibonacci ──────────────────────────────────────
+    if fib1h:
+        sh1h  = fib1h["SWING_HIGH"]
+        sl1h  = fib1h["SWING_LOW"]
+        bull1h = fib1h.get("_bullish", True)
+        if bull1h:
+            s1_px, s1_lbl = sl1h, "Swing LOW  (0%)"
+            s2_px, s2_lbl = sh1h, "Swing HIGH (100%)"
+            arrow = f"{G}LOW → HIGH{RST}"
+            why   = "bullish swing on 1-hr"
+        else:
+            s1_px, s1_lbl = sh1h, "Swing HIGH (0%)"
+            s2_px, s2_lbl = sl1h, "Swing LOW  (100%)"
+            arrow = f"{R}HIGH → LOW{RST}"
+            why   = "bearish swing on 1-hr"
+
+        print(f"  {W}[{step}] 1-HR FIB{RST}   ({arrow}  |  {D}{why}{RST})")
+        print(f"      Step 1 → click  {G}{s1_px:.0f}{RST}  ({s1_lbl})")
+        print(f"      Step 2 → drag   {R}{s2_px:.0f}{RST}  ({s2_lbl})")
+        step += 1
+        print()
+
+    # ── Confluence zones to mark ────────────────────────────
+    strong = [z for z in conf if z["count"] >= 3]
+    if strong:
+        print(f"  {W}[{step}] MARK THESE CONFLUENCE ZONES  (horizontal lines){RST}")
+        for z in strong[:4]:
+            dist   = z["price"] - spot
+            col    = G if z["price"] > spot else R
+            side   = "resistance ↑" if z["price"] > spot else "support ↓"
+            stars  = "*" * z["count"]
+            lbls   = ", ".join(z["labels"][:3])
+            print(f"      {col}{stars:<7}  {z['price']:>7.0f}  ({dist:>+5.0f} pts)  {side}  [{lbls}]{RST}")
+        print(f"  {D}  More stars = stronger zone — price likely to react here{RST}")
+        print()
+
+    # ── Tip ─────────────────────────────────────────────────
+    print(f"  {Y}💡 TIP:{RST}  {D}On TradingView: use 'Fib Retracement' from the left toolbar.")
+    print(f"         On Kite: Chart → Drawing tools → Fibonacci Retracement.{RST}")
+
+
 def print_dashboard(r: dict) -> None:
     clear_cmd = "cls" if os.name == "nt" else "clear"
     os.system(clear_cmd)
@@ -1505,17 +1708,17 @@ def print_dashboard(r: dict) -> None:
     ts    = r["ts"].strftime("%Y-%m-%d %H:%M:%S")
     rsi_s = f"{r['rsi']:.1f}  [{r['rsi_note']}]" if r["rsi"] else "calculating…"
     src_15m = r["src_15m"]
-    src_15m_color = C.GREEN if "LIVE" in src_15m else C.YELLOW
+    src_15m_color = _cc("SRC_LIVE") if "LIVE" in src_15m else _cc("SRC_STALE")
 
     W = 68
     frozen = r.get("frozen", False)
-    market_s = (f"{C.YELLOW}CLOSED/HOLIDAY{C.RESET}" if frozen
-                else f"{C.GREEN}OPEN{C.RESET}" if is_market_open()
+    market_s = (f"{_cc('MARKET_CLOSED')}CLOSED/HOLIDAY{C.RESET}" if frozen
+                else f"{_cc('MARKET_OPEN')}OPEN{C.RESET}" if is_market_open()
                 else f"{C.DIM}closed{C.RESET}")
-    print(f"{C.CYAN}{'='*W}{C.RESET}")
-    print(f"{C.BOLD}{C.WHITE}  FIBONACCI ANALYZER  |  {idx}  |  {ts}"
-          f"  |  Spot {C.YELLOW}{spot:.0f}{C.WHITE}  |  {C.RESET}{market_s}")
-    print(f"{C.CYAN}{'='*W}{C.RESET}")
+    print(f"{_cc('DASH_BORDER')}{'='*W}{C.RESET}")
+    print(f"{C.BOLD}{_cc('DASH_HEADER')}  FIBONACCI ANALYZER  |  {idx}  |  {ts}"
+          f"  |  Spot {_cc('DASH_SPOT')}{spot:.0f}{_cc('DASH_HEADER')}  |  {C.RESET}{market_s}")
+    print(f"{_cc('DASH_BORDER')}{'='*W}{C.RESET}")
     print(f"  RSI  {rsi_s}   |   Pattern  {r['pattern']}   |   {src_15m_color}{src_15m}{C.RESET}")
     print()
 
@@ -1538,7 +1741,7 @@ def print_dashboard(r: dict) -> None:
             f"DAY FIB   H {dh:.0f}  L {dl:.0f}  ({drng:.0f} pts  {day_dir})"
         )
     else:
-        print(f"{C.DIM}  Day Fib building — market may just have opened{C.RESET}")
+        print(f"{_cc('STATUS_DIM')}  Day Fib building — market may just have opened{C.RESET}")
     print()
 
     # ── 15-min Fibonacci Grid ─────────────────────────────
@@ -1549,18 +1752,18 @@ def print_dashboard(r: dict) -> None:
             fib15m, spot,
             f"15-MIN FIB  [{pair15m['description']}  {fib15m['_range']:.0f} pts]"
         )
-        print(f"  {C.DIM}15m score: {sc15m:+d}   1h score: {sc1h:+d}   pos: {r['pos15m']}{C.RESET}")
+        print(f"  {_cc('STATUS_DIM')}15m score: {sc15m:+d}   1h score: {sc1h:+d}   pos: {r['pos15m']}{C.RESET}")
     else:
-        print(f"{C.DIM}  15-min data building — check back in 1-2 cycles{C.RESET}")
+        print(f"{_cc('STATUS_DIM')}  15-min data building — check back in 1-2 cycles{C.RESET}")
     print()
 
     # ── Confluence ────────────────────────────────────────
     conf = r.get("confluence", [])
     if conf:
-        print(f"{C.YELLOW}--- Confluence  (day fib + 15m overlap) ---{C.RESET}")
+        print(f"{_cc('SECTION_HEADER')}--- Confluence  (day fib + 15m overlap) ---{C.RESET}")
         for z in conf[:4]:
             dist = z["price"] - spot
-            col  = C.GREEN if z["price"] > spot else C.RED
+            col  = _cc("CONFLUENCE_BELOW") if z["price"] > spot else _cc("CONFLUENCE_ABOVE")
             lbls = ", ".join(z["labels"][:3])
             print(f"  {col}{'*'*z['count']:<4}  {z['price']:>7.0f}  {dist:>+6.0f} pts  [{lbls}]{C.RESET}")
         print()
@@ -1570,43 +1773,48 @@ def print_dashboard(r: dict) -> None:
 
     # ── Auto Summary ──────────────────────────────────────
     print()
-    print(f"{C.YELLOW}--- SUMMARY ---{C.RESET}")
+    print(f"{_cc('SECTION_HEADER')}--- SUMMARY ---{C.RESET}")
     summary = _auto_summary(spot, sc1h, sc15m, fib_day, fib15m, conf)
-    print(f"  {C.WHITE}{summary}{C.RESET}")
+    print(f"  {_cc('SUMMARY_TEXT')}{summary}{C.RESET}")
+
+    # ── Draw Guide ───────────────────────────────────────
+    print()
+    _draw_guide(fib_day, fib15m, r.get("fib1h"), conf, spot)
 
     # ── Footer ────────────────────────────────────────────
     print()
-    print(f"{C.CYAN}{'='*W}{C.RESET}")
-    print(f"{C.DIM}  Read-only  |  No orders  |  "
+    print(f"{_cc('DASH_BORDER')}{'='*W}{C.RESET}")
+    print(f"{_cc('STATUS_DIM')}  Read-only  |  No orders  |  "
           f"Refreshing every {FIBO_CONFIG['REFRESH_SEC']}s{C.RESET}")
-    print(f"{C.CYAN}{'='*W}{C.RESET}")
+    print(f"{_cc('DASH_BORDER')}{'='*W}{C.RESET}")
 
 
 # ─────────────────────────────────────────────────────────────
 #  LOGGING
 # ─────────────────────────────────────────────────────────────
 def setup_logger():
-    base   = os.path.dirname(os.path.abspath(__file__))
-    log_d  = os.path.join(base, "logs", "fibo_analyzer")
+    import builtins as _builtins, re as _re
+    base  = os.path.dirname(os.path.abspath(__file__))
+    log_d = os.path.join(base, "logs", "fibo_analyzer")
     os.makedirs(log_d, exist_ok=True)
-    ts     = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    path   = os.path.join(log_d, f"Fibo_Analyzer_{ts}.log")
+    ts    = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    path  = os.path.join(log_d, f"Fibo_Analyzer_{ts}.log")
 
-    class Tee:
-        def __init__(self, *s):
-            self.streams = s
-        def write(self, d):
-            for s in self.streams:
-                try:    s.write(d); s.flush()
-                except: pass
-        def flush(self):
-            for s in self.streams:
-                try:    s.flush()
-                except: pass
+    _ANSI_STRIP = _re.compile(r'\033\[[0-9;]*[mKHFABCDEFGJRSTihlnpu]')
+    lf          = open(path, "a", buffering=1, encoding="utf-8")
+    _real       = sys.__stdout__
+    _orig_print = _builtins.print
 
-    lf = open(path, "a", buffering=1, encoding="utf-8")
-    sys.stdout = Tee(sys.stdout, lf)
-    sys.stderr = Tee(sys.stderr, lf)
+    def _tee_print(*args, sep=' ', end='\n', file=None, flush=False):
+        if file is None:
+            _orig_print(*args, sep=sep, end=end, file=_real, flush=True)
+            text = sep.join(str(a) for a in args) + end
+            try:    lf.write(_ANSI_STRIP.sub('', text)); lf.flush()
+            except: pass
+        else:
+            _orig_print(*args, sep=sep, end=end, file=file, flush=flush)
+
+    _builtins.print = _tee_print
     print(f"📝 Log: {path}")
     return path
 
@@ -1617,7 +1825,7 @@ def setup_logger():
 def main():
     setup_logger()
 
-    print(f"{C.CYAN}")
+    print(f"{_cc('STARTUP_BANNER')}")
     print("  ╔══════════════════════════════════════════════╗")
     print("  ║   FIBONACCI TREND ANALYZER  (read-only)      ║")
     print("  ║   Parallel companion to PROD10FEB ManualBOT  ║")
