@@ -1383,8 +1383,8 @@ def _auto_summary(spot: float, sc1h: int, sc15m: int,
     r382 = fib.get("R38.2%") if fib else None
     r618 = fib.get("R61.8%") if fib else None
     e1272 = fib.get("E127.2%") if fib else None
-    dh   = fib.get("_day_high") or (fib["SWING_HIGH"] if fib else None)
-    dl   = fib.get("_day_low")  or (fib["SWING_LOW"]  if fib else None)
+    dh   = (fib.get("_day_high") or fib.get("SWING_HIGH")) if fib else None
+    dl   = (fib.get("_day_low")  or fib.get("SWING_LOW"))  if fib else None
 
     # Nearest resistance ABOVE spot (sort ascending → first item > spot)
     _res_above = sorted([p for p in [r236, r382, r618, dh] if p and p > spot])
