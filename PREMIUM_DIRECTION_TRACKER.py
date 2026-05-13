@@ -54,21 +54,28 @@ def setup_logger():
     ts    = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path  = os.path.join(log_d, f"Premium_Tracker_{ts}.log")
 
-    class Tee:
-        def __init__(self, *s):
-            self.streams = s
-        def write(self, d):
-            for s in self.streams:
-                try:    s.write(d); s.flush()
-                except: pass
-        def flush(self):
-            for s in self.streams:
-                try:    s.flush()
-                except: pass
-
+    import builtins as _builtins, re as _re
+    _ANSI_STRIP = _re.compile(r'\033\[[0-9;]*[mKHFABCDEFGJRSTihlnpu]')
     lf = open(path, "a", buffering=1, encoding="utf-8")
-    sys.stdout = Tee(sys.stdout, lf)
-    sys.stderr = Tee(sys.stderr, lf)
+
+    # Do NOT replace sys.stdout — that path causes colorama / library wrappers
+    # to intercept stdout and strip ANSI codes, breaking all colors.
+    # Instead, hook builtins.print so every print() call writes:
+    #   1) full ANSI text straight to sys.__stdout__ (the real TTY fd, always)
+    #   2) stripped plain text to the log file
+    _real = sys.__stdout__
+    _orig_print = _builtins.print
+
+    def _tee_print(*args, sep=' ', end='\n', file=None, flush=False):
+        if file is None:
+            _orig_print(*args, sep=sep, end=end, file=_real, flush=True)
+            text = sep.join(str(a) for a in args) + end
+            try:    lf.write(_ANSI_STRIP.sub('', text)); lf.flush()
+            except: pass
+        else:
+            _orig_print(*args, sep=sep, end=end, file=file, flush=flush)
+
+    _builtins.print = _tee_print
     print(f"📝 Log: {path}")
     return path
 
@@ -118,6 +125,64 @@ CONFIG = {
     "FIB_VOICE":          True,
     # macOS say command speech rate (words per minute). 160 = clear & natural.
     "FIB_VOICE_RATE":     160,
+}
+
+# ─────────────────────────────────────────────────────────────
+#  COLOR CONFIG  ← paste any hex color code you like (#rrggbb)
+#
+#  Use any web/design tool hex picker, e.g. https://htmlcolorcodes.com
+#  Just replace the value with your chosen hex, e.g. "#00ff00"
+# ─────────────────────────────────────────────────────────────
+COLOR_CONFIG = {
+    # ── Live ticker ─────────────────────────────────────────
+    "UP":             "#00ff00",   # premium going UP          ← bright green
+    "DOWN":           "#ff0000",   # premium going DOWN        ← bright red
+    "STABLE":         "#ffff00",   # premium STABLE            ← yellow
+    "SPOT":           "#00ffff",   # spot price label          ← cyan
+    # ── Zone / Trend ────────────────────────────────────────
+    "BULLISH":        "#00ff00",   # bullish zone or trend
+    "BEARISH":        "#ff0000",   # bearish zone or trend
+    "NEUTRAL":        "#ffff00",   # neutral zone or trend
+    # ── Key levels ──────────────────────────────────────────
+    "BREAKOUT":       "#00ff00",   # breakout resistance level
+    "SUPPORT":        "#ff4444",   # support level
+    "TARGET":         "#ffaa00",   # pts annotation (orange)
+    # ── Day High / Low distance ──────────────────────────────
+    "DAY_H_NEAR":     "#ff0000",   # < 15 pts to Day High  (imminent)   ← red
+    "DAY_H_MID":      "#ff8800",   # 15–40 pts to Day High (approaching) ← orange
+    "DAY_H_FAR":      "#aaaaaa",   # > 40 pts to Day High  (safe)        ← gray
+    "DAY_L_NEAR":     "#00ff00",   # < 15 pts to Day Low   (support near) ← green
+    "DAY_L_MID":      "#ffff00",   # 15–40 pts to Day Low  (watch)       ← yellow
+    "DAY_L_FAR":      "#aaaaaa",   # > 40 pts to Day Low   (safe)        ← gray
+    # ── Score bar ───────────────────────────────────────────
+    "SCORE_HIGH":     "#00ff00",   # score 7–10
+    "SCORE_MID":      "#ffff00",   # score 5–6
+    "SCORE_LOW":      "#ff0000",   # score 0–4
+    # ── CE / PE probability bars ────────────────────────────
+    "CE_HIGH":        "#00ff00",   # CE% ≥ 60
+    "CE_MID":         "#ffff00",   # CE% 45–59
+    "CE_LOW":         "#ff4444",   # CE% < 45
+    "PE_HIGH":        "#ff0000",   # PE% ≥ 60
+    "PE_MID":         "#ffff00",   # PE% 45–59
+    "PE_LOW":         "#00cc44",   # PE% < 45  (good — PE is weak)
+    # ── Action / Mentor ─────────────────────────────────────
+    "ACTION_BULL":    "#00ff00",   # CE action text
+    "ACTION_BEAR":    "#ff0000",   # PE action text
+    "ACTION_NEUTRAL": "#ffff00",   # neutral action
+    "MENTOR_NOTES":   "#dddddd",   # mentor guidance lines     ← light gray
+    # ── Flow chart ──────────────────────────────────────────
+    "FLOW_BULL":      "#00ff00",   # chart dot/trend > 55% CE
+    "FLOW_BEAR":      "#ff0000",   # chart dot/trend < 45% CE
+    "FLOW_NEUTRAL":   "#ffff00",   # chart dot/trend 45–55%
+    # ── Startup messages ────────────────────────────────────
+    "API_OK":         "#00ff00",   # ✅ Groww API initialized
+    "INSTRUMENTS_OK": "#00cc44",   # ✅ Loaded N instruments
+    "TRACKING_LABEL": "#00ffff",   # 📅 Tracking NIFTY expiry …
+    "SPOT_LABEL":     "#ffaa00",   # 📊 Spot: … ATM strike: …
+    "FIB_START":      "#888888",   # 🔢 Fibonacci worker started
+    "TRACKER_HEADER": "#00ffff",   # ━━━ PREMIUM DIRECTION TRACKER ━━━
+    "TRACKING_LINE":  "#ffffff",   # ▶  Tracking (CE) & (PE) — refresh
+    "STATUS_DIM":     "#666666",   # Read-only | Threshold | Ctrl-C
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -200,14 +265,76 @@ _live_data_limiter = _RateLimiter(rate=1.0)  # 1 req/sec = 60 req/min from this 
 #  ANSI COLORS
 # ─────────────────────────────────────────────────────────────
 class C:
-    RESET  = "\033[0m"
-    BOLD   = "\033[1m"
-    RED    = "\033[91m"
-    GREEN  = "\033[92m"
-    YELLOW = "\033[93m"
-    CYAN   = "\033[96m"
-    WHITE  = "\033[97m"
-    DIM    = "\033[2m"
+    RESET   = "\033[0m"
+    BOLD    = "\033[1m"
+    DIM     = "\033[2m"
+    # Base colors
+    RED     = "\033[91m"
+    GREEN   = "\033[92m"
+    YELLOW  = "\033[93m"
+    BLUE    = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN    = "\033[96m"
+    WHITE   = "\033[97m"
+    # Bold+bright combos — maximum visibility
+    B_RED    = "\033[1;91m"
+    B_GREEN  = "\033[1;92m"
+    B_YELLOW = "\033[1;93m"
+    B_CYAN   = "\033[1;96m"
+    B_WHITE  = "\033[1;97m"
+    # 256-color extras
+    ORANGE   = "\033[38;5;214m"
+    B_ORANGE = "\033[1;38;5;214m"
+    LIME     = "\033[38;5;154m"
+    B_LIME   = "\033[1;38;5;154m"
+    MAGENTA  = "\033[95m"
+    B_MAGENTA= "\033[1;95m"
+    PINK     = "\033[38;5;213m"
+
+
+# Maps COLOR_CONFIG name strings → actual ANSI codes
+_COLOR_MAP: dict[str, str] = {}
+def _build_color_map() -> None:
+    _COLOR_MAP.update({
+        "BRIGHT_GREEN":   C.B_GREEN,
+        "BRIGHT_RED":     C.B_RED,
+        "BRIGHT_YELLOW":  C.B_YELLOW,
+        "BRIGHT_CYAN":    C.B_CYAN,
+        "BRIGHT_WHITE":   C.B_WHITE,
+        "BRIGHT_ORANGE":  C.B_ORANGE,
+        "BRIGHT_MAGENTA": C.B_MAGENTA,
+        "BRIGHT_LIME":    C.B_LIME,
+        "GREEN":          C.GREEN,
+        "RED":            C.RED,
+        "YELLOW":         C.YELLOW,
+        "CYAN":           C.CYAN,
+        "MAGENTA":        C.MAGENTA,
+        "WHITE":          C.WHITE,
+        "ORANGE":         C.ORANGE,
+        "LIME":           C.LIME,
+        "DIM":            C.DIM,
+    })
+_build_color_map()
+
+
+def _hex_to_ansi(hex_color: str) -> str:
+    """Convert #rrggbb → ANSI 24-bit true-color bold escape code."""
+    h = hex_color.lstrip("#")
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"\033[1;38;2;{r};{g};{b}m"  # bold + true color
+    except Exception:
+        return C.WHITE
+
+
+def _cc(key: str) -> str:
+    """Return the ANSI code for a COLOR_CONFIG slot.
+    Accepts either a hex string '#rrggbb' or a legacy name like 'BRIGHT_GREEN'.
+    """
+    val = COLOR_CONFIG.get(key, "#ffffff")
+    if val.startswith("#"):
+        return _hex_to_ansi(val)
+    return _COLOR_MAP.get(val, C.WHITE)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -254,7 +381,7 @@ def load_instruments() -> list[dict]:
     with open(_CSV_PATH, encoding="utf-8") as f:
         for row in csv.DictReader(f):
             rows.append(row)
-    print(f"✅ Loaded {len(rows):,} instruments")
+    print(f"{_cc('INSTRUMENTS_OK')}✅ Loaded {len(rows):,} instruments{C.RESET}")
     return rows
 
 
@@ -1110,16 +1237,16 @@ def _print_prob_chart() -> None:
     diff   = recent - older
     if diff > 3:
         trend_str = f"↑ BULLISH  CE +{diff:.0f}%"
-        t_col = C.GREEN
+        t_col = _cc("FLOW_BULL")
     elif diff < -3:
         trend_str = f"↓ BEARISH  CE {diff:.0f}%"
-        t_col = C.RED
+        t_col = _cc("FLOW_BEAR")
     else:
         trend_str = f"→ NEUTRAL  CE {recent:.0f}%"
-        t_col = C.YELLOW
+        t_col = _cc("FLOW_NEUTRAL")
 
     current = hist[-1]
-    c_col   = C.GREEN if current > 55 else (C.RED if current < 45 else C.YELLOW)
+    c_col   = _cc("FLOW_BULL") if current > 55 else (_cc("FLOW_BEAR") if current < 45 else _cc("FLOW_NEUTRAL"))
 
     print(f"\n  {C.BOLD}LIVE PREMIUM FLOW CHART{C.RESET}"
           f"  {C.DIM}(CE÷(CE+PE) ratio — independent of Fibonacci){C.RESET}")
@@ -1132,7 +1259,7 @@ def _print_prob_chart() -> None:
         for val in hist:
             val_row = round((100 - val) / 10)
             if val_row == r:
-                dot_col = C.GREEN if val > 55 else (C.RED if val < 45 else C.YELLOW)
+                dot_col = _cc("FLOW_BULL") if val > 55 else (_cc("FLOW_BEAR") if val < 45 else _cc("FLOW_NEUTRAL"))
                 chars.append(f"{dot_col}●{C.RESET}")
             elif r == 5:
                 chars.append(f"{C.DIM}─{C.RESET}")
@@ -1162,9 +1289,9 @@ def _print_fib_panel() -> None:
     pe_bars = round(pe_p * bar_w / 100)
     ce_bar  = "█" * ce_bars + "░" * (bar_w - ce_bars)
     pe_bar  = "█" * pe_bars + "░" * (bar_w - pe_bars)
-    ce_col  = C.GREEN  if ce_p >= 60 else (C.YELLOW if ce_p >= 45 else C.RED)
-    pe_col  = C.RED    if pe_p >= 60 else (C.YELLOW if pe_p >= 45 else C.GREEN)
-    act_col = C.GREEN  if ce_p >= 60 else (C.RED    if pe_p >= 60 else C.YELLOW)
+    ce_col  = _cc("CE_HIGH")  if ce_p >= 60 else (_cc("CE_MID")  if ce_p >= 45 else _cc("CE_LOW"))
+    pe_col  = _cc("PE_HIGH")  if pe_p >= 60 else (_cc("PE_MID")  if pe_p >= 45 else _cc("PE_LOW"))
+    act_col = _cc("ACTION_BULL") if ce_p >= 60 else (_cc("ACTION_BEAR") if pe_p >= 60 else _cc("ACTION_NEUTRAL"))
 
     spot_val = s.get("spot") or 0
     tgt      = s.get("target")
@@ -1182,7 +1309,7 @@ def _print_fib_panel() -> None:
     ce_score, score_breakdown = _calc_composite_score()
     score_filled = round(ce_score * bar_w / 10)
     score_bar    = "█" * score_filled + "░" * (bar_w - score_filled)
-    score_col    = C.GREEN if ce_score >= 7 else (C.YELLOW if ce_score >= 5 else C.RED)
+    score_col    = _cc("SCORE_HIGH") if ce_score >= 7 else (_cc("SCORE_MID") if ce_score >= 5 else _cc("SCORE_LOW"))
 
     # ── Divergence ────────────────────────────────────────────
     div_sig, div_desc = _calc_divergence()
@@ -1220,15 +1347,23 @@ def _print_fib_panel() -> None:
             # Spot inside day range — show distance to each level
             to_h   = dh - spot_val
             to_l   = spot_val - dl
-            h_col  = C.RED    if to_h < 15 else (C.YELLOW if to_h < 40 else C.DIM)
-            l_col  = C.GREEN  if to_l < 15 else (C.YELLOW if to_l < 40 else C.DIM)
+            h_col  = _cc("DAY_H_NEAR") if to_h < 15 else (_cc("DAY_H_MID") if to_h < 40 else _cc("DAY_H_FAR"))
+            l_col  = _cc("DAY_L_NEAR") if to_l < 15 else (_cc("DAY_L_MID") if to_l < 40 else _cc("DAY_L_FAR"))
+            h_warn = " ⚠" if to_h < 15 else (" ↗" if to_h < 40 else "")
+            l_warn = " ⚠" if to_l < 15 else ""
             print(f"  {C.BOLD}Day{C.RESET}   "
-                  f"{h_col}H {dh:.0f}  (↑{to_h:.0f} to break){C.RESET}"
+                  f"{h_col}H {dh:.0f}  (+{to_h:.0f} to break{h_warn}){C.RESET}"
                   f"   │   "
-                  f"{l_col}L {dl:.0f}  (↓{to_l:.0f} support){C.RESET}")
+                  f"{l_col}L {dl:.0f}  (-{to_l:.0f} support{l_warn}){C.RESET}")
     print(thin)
-    print(f"  Zone   {C.BOLD}{s.get('zone','')}{C.RESET}")
-    print(f"  Trend  {s.get('trend','')}")
+    zone_txt = s.get('zone', '')
+    zone_col = _cc("BULLISH") if "BULLISH" in zone_txt or "BREAKOUT" in zone_txt else (
+               _cc("BEARISH") if "BEARISH" in zone_txt or "BREAKDOWN" in zone_txt else _cc("NEUTRAL"))
+    print(f"  {C.BOLD}Zone   {zone_col}{zone_txt}{C.RESET}")
+    trend_txt = s.get('trend', '')
+    trend_col = _cc("BULLISH") if "BULLISH" in trend_txt or "⬆" in trend_txt else (
+                _cc("BEARISH") if "BEARISH" in trend_txt or "⬇" in trend_txt else _cc("NEUTRAL"))
+    print(f"  {C.BOLD}Trend  {trend_col}{trend_txt}{C.RESET}")
     # Composite score line
     print(f"  {C.BOLD}Score  {score_col}{score_bar}  CE {ce_score}/10{C.RESET}  "
           f"{C.DIM}[{score_breakdown}]{C.RESET}")
@@ -1243,18 +1378,20 @@ def _print_fib_panel() -> None:
               f"{C.DIM}{div_desc}{C.RESET}")
     print(thin)
     if s.get("res_price") is not None:
-        print(f"  {C.GREEN}BREAKOUT  → {s['res_price']:.0f}  "
-              f"{C.DIM}[{s['res_label']}]{C.RESET}")
+        pts_to_res = s['res_price'] - spot_val if spot_val else 0
+        print(f"  {_cc('BREAKOUT')}BREAKOUT  ↗ {s['res_price']:.0f}  "
+              f"{_cc('TARGET')}(+{pts_to_res:.0f} pts)  {C.DIM}[{s['res_label']}]{C.RESET}")
     if s.get("sup_price") is not None:
-        print(f"  {C.RED}SUPPORT   ↓ {s['sup_price']:.0f}  "
-              f"{C.DIM}[{s['sup_label']}]{C.RESET}")
+        pts_to_sup = spot_val - s['sup_price'] if spot_val else 0
+        print(f"  {_cc('SUPPORT')}SUPPORT   ↙ {s['sup_price']:.0f}  "
+              f"{_cc('TARGET')}(-{pts_to_sup:.0f} pts)  {C.DIM}[{s['sup_label']}]{C.RESET}")
     if tgt_str:
         stp_str = f"{stp_px:.0f}" if stp_px else "?"
         print(f"  Target  {tgt_str}   │   Stop  {s.get('stop_label','?')} = {stp_str}")
     print(thin)
     print(f"  {C.BOLD}ACTION  {act_col}{s.get('action','')}{C.RESET}")
     for line in s.get("mentor", []):
-        print(f"  {C.DIM}{line}{C.RESET}")
+        print(f"  {_cc('MENTOR_NOTES')}{line}{C.RESET}")
 
     # ── Momentum conflict block ───────────────────────────────
     mom_dir, mom_pts, mom_mins = _calc_momentum()
@@ -1331,12 +1468,12 @@ def direction(prev: float | None, curr: float, threshold: float) -> str:
 
 def direction_color(d: str) -> str:
     if d == "UP":
-        return C.GREEN
+        return _cc("UP")
     if d == "DOWN":
-        return C.RED
+        return _cc("DOWN")
     if d == "STABLE":
-        return C.YELLOW
-    return C.WHITE
+        return _cc("STABLE")
+    return C.DIM
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1449,9 +1586,9 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
     threshold = CONFIG["DIRECTION_THRESHOLD"]
     refresh   = CONFIG["REFRESH_SEC"]
 
-    print(f"\n{C.BOLD}▶  Tracking  {ce_label}  &  {pe_label}  — refresh every {refresh}s{C.RESET}")
+    print(f"\n{_cc('TRACKING_LINE')}▶  Tracking  {ce_label}  &  {pe_label}  — refresh every {refresh}s{C.RESET}")
     sound_info = f"🔔 sound on {sound_track}" if sound_enabled else "🔕 sound off"
-    print(f"{C.DIM}   Threshold ₹{threshold}   |   {sound_info}   |   Ctrl-C to stop{C.RESET}\n")
+    print(f"{_cc('STATUS_DIM')}   Threshold ₹{threshold}   |   {sound_info}   |   Ctrl-C to stop{C.RESET}\n")
 
     prev_ce: float | None = None
     prev_pe: float | None = None
@@ -1478,8 +1615,7 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
                 col_ce = direction_color(d_ce)
                 ce_arrow = "↑" if d_ce == "UP" else ("↓" if d_ce == "DOWN" else "→")
                 ce_str = (
-                    f"{col_ce}{ce_label} {ce_arrow} {d_ce:<6} "
-                    f"{C.BOLD}₹{ce_ltp:>7.2f}{C.RESET}"
+                    f"{col_ce}{ce_label} {ce_arrow} {d_ce:<6} ₹{ce_ltp:>7.2f}{C.RESET}"
                 )
                 if sound_enabled and sound_track == "CE" and d_ce not in ("INIT", prev_dir_ce):
                     play_sound(d_ce)
@@ -1502,8 +1638,7 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
                 col_pe = direction_color(d_pe)
                 pe_arrow = "↑" if d_pe == "UP" else ("↓" if d_pe == "DOWN" else "→")
                 pe_str = (
-                    f"{col_pe}{pe_label} {pe_arrow} {d_pe:<6} "
-                    f"{C.BOLD}₹{pe_ltp:>7.2f}{C.RESET}"
+                    f"{col_pe}{pe_label} {pe_arrow} {d_pe:<6} ₹{pe_ltp:>7.2f}{C.RESET}"
                 )
                 if sound_enabled and sound_track == "PE" and d_pe not in ("INIT", prev_dir_pe):
                     play_sound(d_pe)
@@ -1596,7 +1731,7 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
 
             prev_spot = spot_val
 
-            spot_str = (f"  {C.CYAN}SPOT {C.BOLD}{spot_val:.1f}{C.RESET}" if spot_val else "")
+            spot_str = (f"  {_cc('SPOT')}SPOT {spot_val:.1f}{C.RESET}" if spot_val else "")
             print(f"[{C.DIM}{ts}{C.RESET}]{spot_str}  {ce_str}   |   {pe_str}")
             time.sleep(refresh)
 
@@ -1612,7 +1747,7 @@ def run_loop(ce_label: str, pe_label: str, get_ce_ltp, get_pe_ltp,
 #  MAIN LOOP
 # ─────────────────────────────────────────────────────────────
 def main():
-    print(f"\n{C.BOLD}{C.CYAN}━━━ PREMIUM DIRECTION TRACKER ━━━{C.RESET}")
+    print(f"\n{_cc('TRACKER_HEADER')}━━━ PREMIUM DIRECTION TRACKER ━━━{C.RESET}")
 
     # ── TEST MODE ────────────────────────────────────────────
     if TEST_MODE:
@@ -1668,7 +1803,7 @@ def main():
 
     try:
         groww_client, access_token = init_groww()
-        print(f"{C.GREEN}✅ Groww API initialized{C.RESET}")
+        print(f"{_cc('API_OK')}✅ Groww API initialized{C.RESET}")
     except Exception as e:
         print(f"❌ Auth failed: {e}")
         sys.exit(1)
@@ -1687,7 +1822,7 @@ def main():
 
     expiry = ask_expiry(current_exp, next_exp)
     exp_display = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d %b %Y")
-    print(f"\n📅 Tracking  {C.BOLD}{index_name}{C.RESET}  expiry  {C.BOLD}{exp_display}{C.RESET}")
+    print(f"\n{_cc('TRACKING_LABEL')}📅 Tracking  {index_name}  expiry  {exp_display}{C.RESET}")
 
     print("📡 Fetching spot price ...")
     spot = get_spot(index_name, expiry, access_token)
@@ -1699,7 +1834,7 @@ def main():
     _spot_cache["ts"]    = time.time()
     step = 100 if index_name.upper() == "SENSEX" else 50
     atm  = round(spot / step) * step
-    print(f"📊 Spot: {C.BOLD}{spot:.2f}{C.RESET}   ATM strike: {C.BOLD}{int(atm)}{C.RESET}")
+    print(f"{_cc('SPOT_LABEL')}📊 Spot: {spot:.2f}   ATM strike: {int(atm)}{C.RESET}")
 
     chosen_strike, ce_inst, pe_inst = select_strike(
         instruments, index_name, expiry, spot, access_token
@@ -1724,7 +1859,7 @@ def main():
         daemon=True,
     )
     fib_thread.start()
-    print(f"{C.DIM}🔢 Fibonacci worker started (refresh every {CONFIG['FIB_REFRESH_SEC']}s){C.RESET}")
+    print(f"{_cc('FIB_START')}🔢 Fibonacci worker started (refresh every {CONFIG['FIB_REFRESH_SEC']}s){C.RESET}")
 
     snd_on, snd_track = ask_sound_settings()
     run_loop(
