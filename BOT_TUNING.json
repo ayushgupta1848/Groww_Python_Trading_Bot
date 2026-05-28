@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-05-22T14:01:12.610998",
+  "generated_by": "SIGNAL_ANALYZER",
+  "confidence_threshold": 65,
+  "excluded_zones": [],
+  "excluded_patterns": [],
+  "ce_multiplier": 0.65,
+  "pe_multiplier": 1.0,
+  "notes": [
+    "DAMPEN CE  confidence \u00d70.65  (CE win-rate 32.1% < 45%, n=28)",
+    "RELIABLE zones  'RETRACE @ 23.6-38.2%' (100.0%) \u2014 signals here are working well"
+  ]
+}

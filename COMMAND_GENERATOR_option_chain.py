@@ -12,6 +12,7 @@ Usage: python COMMAND_GENERATOR_option_chain.py
 import os
 import json
 import csv
+import glob
 from datetime import datetime, timedelta
 import pyotp
 import requests
@@ -249,14 +250,13 @@ def generate_command(option, quantity):
 # ==================== DISPLAY FUNCTIONS ====================
 def save_all_commands_to_file(index_name, expiry_label, options_data, quantity, spot_price):
     """Save commands to HTML file with colors - FORMAT: STRIKE == QTY CE | QTY PE"""
-    html_filename = f"commands_{index_name}_{expiry_label.replace(' ', '_')}.html"
-    
-    # Determine strike step for spot detection (SENSEX uses 100, NIFTY uses 50)
+    html_filename = os.path.join(PROJECT_ROOT, f"commands_{index_name}_{expiry_label.replace(' ', '_')}.html")
+
     step = 100 if "SENSEX" in index_name.upper() else 50
-    
-    sorted_strikes = sorted(options_data.keys(), reverse=True)
-    
-    # Write HTML file with colors
+
+    # Ascending order: low strikes on top (matches real option chain display)
+    sorted_strikes = sorted(options_data.keys())
+
     with open(html_filename, 'w') as f:
         f.write("""<!DOCTYPE html>
 <html>
@@ -264,61 +264,136 @@ def save_all_commands_to_file(index_name, expiry_label, options_data, quantity, 
     <meta charset="UTF-8">
     <title>""" + f"{index_name} Commands - {expiry_label}" + """</title>
     <style>
-        body { 
-            background-color: #1e1e1e; 
-            color: #d4d4d4; 
-            font-family: 'Courier New', monospace; 
+        body {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
             padding: 20px;
             font-size: 14px;
+        }
+        h2, h3 { margin: 4px 0; }
+        /* Classic option-chain layout: CE ── strike ── PE */
+        .row { display: flex; align-items: center; margin: 3px 0; }
+        .ce-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            padding-right: 14px;
+        }
+        .strike-col {
+            width: 100px;
+            text-align: center;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .pe-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            padding-left: 14px;
         }
         .ce { color: #0dc710; font-weight: bold; }
         .pe { color: #e51717; font-weight: bold; }
         .spot { color: #ffd700; font-weight: bold; }
-        pre { line-height: 1.6; }
+        .dim { color: #555; }
+        .sep { color: #444; }
+        .copy-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #777;
+            cursor: pointer;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            line-height: 1.4;
+            flex-shrink: 0;
+        }
+        .copy-btn:hover { color: #ccc; border-color: #aaa; }
+        .copy-btn.copied { color: #0dc710; border-color: #0dc710; }
     </style>
+    <script>
+    function cp(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '✓';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+        });
+    }
+    </script>
 </head>
 <body>
-<h2>""" + f"{index_name} Option Commands - {expiry_label}" + """</h2>
-<h3>Spot Price: """ + f"{spot_price:.2f}" + """</h3>
-<pre>""")
-        
+<h2>""" + f"{index_name} Option Commands — {expiry_label}" + """</h2>
+<h3 style="color:#ffd700">Spot: """ + f"{spot_price:.2f}" + """</h3>
+<br>
+""")
+
         for strike in sorted_strikes:
             ce_option = options_data[strike].get("CE")
             pe_option = options_data[strike].get("PE")
-            
+
             ce_cmd = generate_command(ce_option, quantity) if ce_option else ""
             pe_cmd = generate_command(pe_option, quantity) if pe_option else ""
-            
-            if ce_cmd and pe_cmd:
-                strike_int = int(float(strike))
-                spot_marker = "📍" if abs(strike_int - spot_price) < (step / 2) else "  "
-                
-                # Calculate strikes from spot (±10 strikes)
-                strikes_from_spot = abs(strike_int - spot_price) / step
-                
-                # Apply color coding for ±10 strikes from spot
-                if strikes_from_spot <= 10:
-                    ce_html = f'<span class="ce">{ce_cmd}</span>'
-                    pe_html = f'<span class="pe">{pe_cmd}</span>'
-                else:
-                    ce_html = ce_cmd
-                    pe_html = pe_cmd
-                
-                # Highlight strike if it's spot
-                strike_html = f'<span class="spot">{strike_int}</span>' if spot_marker == "📍" else str(strike_int)
-                
-                f.write(f"{strike_html} {spot_marker} == {ce_html}   |    {pe_html}\n")
-        
-        f.write("""</pre>
-</body>
-</html>""")
-    
+
+            if not ce_cmd and not pe_cmd:
+                continue
+
+            strike_int = int(float(strike))
+            is_spot = abs(strike_int - spot_price) < (step / 2)
+            strikes_from_spot = abs(strike_int - spot_price) / step
+            in_range = strikes_from_spot <= 10
+
+            spot_marker = " 📍" if is_spot else ""
+            strike_cls = "spot" if is_spot else ("dim" if not in_range else "")
+            strike_html = f'<span class="{strike_cls}">{strike_int}{spot_marker}</span>' if strike_cls else f'{strike_int}{spot_marker}'
+
+            def ce_html(cmd):
+                if not cmd:
+                    return ''
+                escaped = cmd.replace("'", "\\'")
+                color_cls = "ce" if in_range else "dim"
+                # CE: command text first, copy button on the right (nearest the center)
+                return (
+                    f'<span class="{color_cls}">{cmd}</span>'
+                    f'<button class="copy-btn" onclick="cp(\'{escaped}\', this)">📋</button>'
+                )
+
+            def pe_html(cmd):
+                if not cmd:
+                    return ''
+                escaped = cmd.replace("'", "\\'")
+                color_cls = "pe" if in_range else "dim"
+                # PE: copy button on the left (nearest the center), command text after
+                return (
+                    f'<button class="copy-btn" onclick="cp(\'{escaped}\', this)">📋</button>'
+                    f'<span class="{color_cls}">{cmd}</span>'
+                )
+
+            f.write(
+                f'<div class="row">'
+                f'<span class="ce-group">{ce_html(ce_cmd)}</span>'
+                f'<span class="strike-col sep">|&nbsp;{strike_html}&nbsp;|</span>'
+                f'<span class="pe-group">{pe_html(pe_cmd)}</span>'
+                f'</div>\n'
+            )
+
+        f.write("</body>\n</html>")
+
     return html_filename
 
 # ==================== MAIN EXECUTION ====================
 def main():
-    # Suppress all banner output - just load and generate
-    
+    # Clear any previously generated command sheets
+    for old_file in glob.glob(os.path.join(PROJECT_ROOT, "commands_*.html")):
+        try:
+            os.remove(old_file)
+        except OSError:
+            pass
+
     # Load instruments
     instruments = load_instruments_from_csv()
     

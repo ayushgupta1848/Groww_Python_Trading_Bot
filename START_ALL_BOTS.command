@@ -2,6 +2,9 @@
 DIR="/Users/ayush/Documents/eclipse-workspace/Groww_Python_Trading_Bot-main"
 PY="/Library/Developer/CommandLineTools/usr/bin/python3"
 
+# ── Command Generator: runs in background, no Terminal window ──────────────
+"$PY" "$DIR/COMMAND_GENERATOR_option_chain.py" > /dev/null 2>&1 &
+
 osascript << EOF
 tell application "Terminal"
     activate
@@ -28,20 +31,30 @@ tell application "Terminal"
     end try
     set bounds of w2 to {735, 25, 1470, 490}
 
-    -- ── Window 3 : PROD10FEB MANUAL BOT  (bottom, full width) ─────
+    -- ── Window 3 : PROD10FEB MANUAL BOT  (bottom-left) ──────────
     do script "cd '$DIR' && clear && echo '🔵  PROD10FEB MANUAL BOT' && '$PY' PROD10FEB_ManualBOT_groww_option_trading_final_bot.py"
     delay 1.2
     set w3 to front window
     try
         set current settings of w3 to settings set "Pro"
     end try
-    set bounds of w3 to {0, 490, 1470, 874}
+    set bounds of w3 to {0, 490, 980, 874}
+
+    -- ── Window 4 : MASTER SIGNAL BOT  (bottom-right) ──────────
+    do script "cd '$DIR' && clear && echo '🎯  MASTER SIGNAL BOT' && '$PY' MASTER_SIGNAL_BOT.py"
+    delay 1.2
+    set w4 to front window
+    try
+        set current settings of w4 to settings set "Pro"
+    end try
+    set bounds of w4 to {980, 490, 1470, 874}
 
     -- Re-apply bounds after settle (Terminal sometimes needs this)
     delay 1
     set bounds of w1 to {0, 25, 735, 490}
     set bounds of w2 to {735, 25, 1470, 490}
-    set bounds of w3 to {0, 490, 1470, 874}
+    set bounds of w3 to {0, 490, 980, 874}
+    set bounds of w4 to {980, 490, 1470, 874}
 
 end tell
 EOF
