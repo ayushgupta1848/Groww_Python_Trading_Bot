@@ -2,8 +2,12 @@
 DIR="/Users/ayush/Documents/eclipse-workspace/Groww_Python_Trading_Bot-main"
 PY="/Library/Developer/CommandLineTools/usr/bin/python3"
 
-# ── Command Generator: runs in background, no Terminal window ──────────────
+# ── Background processes (no Terminal window) ──────────────────────────────
+# Command Generator: generates option chain HTML files
 "$PY" "$DIR/COMMAND_GENERATOR_option_chain.py" > /dev/null 2>&1 &
+
+# Live Dashboard: serves HTML at http://localhost:8765
+"$PY" "$DIR/LIVE_DASHBOARD.py" > /dev/null 2>&1 &
 
 osascript << EOF
 tell application "Terminal"
@@ -13,48 +17,80 @@ tell application "Terminal"
     -- Minimise the launcher window (this .command file's own window)
     set miniaturized of front window to true
 
-    -- ── Window 1 : PREMIUM DIRECTION TRACKER  (top-left) ──────────
+    -- ════════════════════════════════════════════════════════
+    --  TOP ROW  (3 analysis bots)  y: 25 → 400
+    -- ════════════════════════════════════════════════════════
+
+    -- ── Window 1 : PREMIUM DIRECTION TRACKER  (top-left) ──
     do script "cd '$DIR' && clear && echo '🟢  PREMIUM DIRECTION TRACKER' && '$PY' PREMIUM_DIRECTION_TRACKER.py"
     delay 1.2
     set w1 to front window
     try
         set current settings of w1 to settings set "Pro"
     end try
-    set bounds of w1 to {0, 25, 735, 490}
+    set bounds of w1 to {0, 25, 490, 400}
 
-    -- ── Window 2 : FIBONACCI TREND ANALYZER  (top-right) ──────────
+    -- ── Window 2 : FIBONACCI TREND ANALYZER  (top-centre) ──
     do script "cd '$DIR' && clear && echo '🟡  FIBONACCI TREND ANALYZER' && '$PY' FIBONACCI_TREND_ANALYZER.py"
     delay 1.2
     set w2 to front window
     try
         set current settings of w2 to settings set "Pro"
     end try
-    set bounds of w2 to {735, 25, 1470, 490}
+    set bounds of w2 to {490, 25, 980, 400}
 
-    -- ── Window 3 : PROD10FEB MANUAL BOT  (bottom-left) ──────────
-    do script "cd '$DIR' && clear && echo '🔵  PROD10FEB MANUAL BOT' && '$PY' PROD10FEB_ManualBOT_groww_option_trading_final_bot.py"
+    -- ── Window 3 : MASTER SIGNAL BOT  (top-right) ──────────
+    do script "cd '$DIR' && clear && echo '🎯  MASTER SIGNAL BOT' && '$PY' MASTER_SIGNAL_BOT.py"
     delay 1.2
     set w3 to front window
     try
         set current settings of w3 to settings set "Pro"
     end try
-    set bounds of w3 to {0, 490, 980, 874}
+    set bounds of w3 to {980, 25, 1470, 400}
 
-    -- ── Window 4 : MASTER SIGNAL BOT  (bottom-right) ──────────
-    do script "cd '$DIR' && clear && echo '🎯  MASTER SIGNAL BOT' && '$PY' MASTER_SIGNAL_BOT.py"
+    -- ════════════════════════════════════════════════════════
+    --  BOTTOM ROW  (3 more bots)  y: 400 → 874
+    -- ════════════════════════════════════════════════════════
+
+    -- ── Window 4 : CHART LEVEL ANALYZER  (bottom-left) ─────
+    do script "cd '$DIR' && clear && echo '📊  CHART LEVEL ANALYZER' && '$PY' CHART_LEVEL_ANALYZER.py"
     delay 1.2
     set w4 to front window
     try
         set current settings of w4 to settings set "Pro"
     end try
-    set bounds of w4 to {980, 490, 1470, 874}
+    set bounds of w4 to {0, 400, 490, 874}
 
-    -- Re-apply bounds after settle (Terminal sometimes needs this)
-    delay 1
-    set bounds of w1 to {0, 25, 735, 490}
-    set bounds of w2 to {735, 25, 1470, 490}
-    set bounds of w3 to {0, 490, 980, 874}
-    set bounds of w4 to {980, 490, 1470, 874}
+    -- ── Window 5 : SIGNAL MONITOR  (bottom-centre) ──────────
+    do script "cd '$DIR' && clear && echo '🔍  SIGNAL MONITOR' && '$PY' SIGNAL_MONITOR.py"
+    delay 1.2
+    set w5 to front window
+    try
+        set current settings of w5 to settings set "Pro"
+    end try
+    set bounds of w5 to {490, 400, 980, 874}
+
+    -- ── Window 6 : PROD10FEB MANUAL BOT  (bottom-right, widest) ──
+    do script "cd '$DIR' && clear && echo '🔵  PROD10FEB MANUAL BOT' && '$PY' PROD10FEB_ManualBOT_groww_option_trading_final_bot.py"
+    delay 1.2
+    set w6 to front window
+    try
+        set current settings of w6 to settings set "Pro"
+    end try
+    set bounds of w6 to {980, 400, 1470, 874}
+
+    -- Re-apply bounds after settle (Terminal sometimes shifts them)
+    delay 1.5
+    set bounds of w1 to {0,   25,  490, 400}
+    set bounds of w2 to {490,  25,  980, 400}
+    set bounds of w3 to {980,  25, 1470, 400}
+    set bounds of w4 to {0,   400,  490, 874}
+    set bounds of w5 to {490, 400,  980, 874}
+    set bounds of w6 to {980, 400, 1470, 874}
+
+    -- Open Live Dashboard in default browser
+    delay 2
+    do script "open http://localhost:8765"
 
 end tell
 EOF
