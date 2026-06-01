@@ -161,7 +161,7 @@ FIBO_CONFIG = {
     "SWING_WINDOW_1H":  3,       # Bars each side for 1-hr swing (used only for trend direction)
 
     # ── Candle lookback ──────────────────────────────────────
-    "LOOKBACK_15M_HRS": 10,      # Hours of 15-min candle history to fetch (covers full trading day)
+    "LOOKBACK_15M_HRS": 26,      # Hours of 15-min candle history — today + yesterday (matches 1h lookback)
     "LOOKBACK_1H_HRS":  26,      # Hours of 1-hr candle history — today + yesterday only (trend direction only)
 
     # ── Alert thresholds ─────────────────────────────────────

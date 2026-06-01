@@ -588,8 +588,8 @@ CONFIG = {
     "POLL_INTERVAL": 0.15,  # Poll interval in seconds (Optimized for speed)
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
-    "VALIDATE_ORDERS": True,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
-    "PAPER_TRADING": True,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
+    "VALIDATE_ORDERS": False,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
+    "PAPER_TRADING": False,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
     "user_confirmation_needed": False,   # or False
     "ENABLE_EMA_CHECK": False,
     "ENABLE_ADX_CHECK": False,
