@@ -122,7 +122,7 @@ CONFIG = {
     # ── Fib Mentor voice ────────────────────────────────────────
     # Speak the mentor guidance aloud when the zone changes.
     # Set False to disable voice entirely.
-    "FIB_VOICE":          True,
+    "FIB_VOICE":          False,
     # macOS say command speech rate (words per minute). 160 = clear & natural.
     "FIB_VOICE_RATE":     160,
 }
@@ -1519,6 +1519,14 @@ def play_sound(d: str) -> None:
         )
 
 def ask_sound_settings() -> tuple[bool, str | None]:
+    env_sound = os.environ.get("BOT_SOUND", "").strip().lower()
+    if env_sound == "n":
+        return False, None
+    if env_sound == "y":
+        track = os.environ.get("BOT_SOUND_TRACK", "CE").strip().upper()
+        if track in ("CE", "PE"):
+            print(f"  Sound (env): ON for {track}")
+            return True, track
     print(f"\n{C.BOLD}Sound alerts?{C.RESET}  (y/n): ", end="", flush=True)
     ans = input().strip().lower()
     if ans != "y":
@@ -1536,6 +1544,10 @@ def ask_sound_settings() -> tuple[bool, str | None]:
 #  USER PROMPTS
 # ─────────────────────────────────────────────────────────────
 def ask_index() -> str:
+    env_index = os.environ.get("BOT_INDEX", "").strip().upper()
+    if env_index in ("NIFTY", "SENSEX"):
+        print(f"  Index (env): {env_index}")
+        return env_index
     print(f"\n{C.BOLD}Select Index:{C.RESET}")
     print("  1. NIFTY")
     print("  2. SENSEX")
@@ -1549,6 +1561,14 @@ def ask_index() -> str:
 
 
 def ask_expiry(current: str | None, nxt: str | None) -> str:
+    env_expiry = os.environ.get("BOT_EXPIRY", "").strip().lower()
+    if env_expiry == "current" and current:
+        print(f"  Expiry (env): current → {current}")
+        return current
+    if env_expiry == "next" and nxt:
+        print(f"  Expiry (env): next → {nxt}")
+        return nxt
+
     def fmt(d: str) -> str:
         return datetime.strptime(d, "%Y-%m-%d").strftime("%d %b %Y")
 

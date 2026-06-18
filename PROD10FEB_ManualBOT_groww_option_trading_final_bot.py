@@ -102,6 +102,10 @@ SOUND_PROFIT = "coin.mp3"
 SOUND_SL = "SL_HIT.mp3"
 SOUND_user_input = "User_input.WAV"
 
+# Runtime quick-mode target override — set by dashboard bridge, consumed by place_quick_order loop
+_QUICK_RUNTIME_TARGET: list  = [None]   # [0] = new target pts or None
+_QUICK_RUNTIME_PARTIAL: list = [None]   # [0] = {"partial":bool,"partial_pct":int} or None
+
 # Trade defaults for Groww
 DEFAULT_PRODUCT = "MIS"   # intraday; change to "NRML" if you want positional
 ORDER_PRODUCT_MAP = {
@@ -164,7 +168,7 @@ def play_sound_async(filename):
 
 def log_trade_to_excel(symbol, buy_price, sell_price, quantity, profit):
     file_name = "Lakshmi.xlsx"
-    mode = "PAPER" if CONFIG.get("PAPER_TRADING", False) else "LIVE"
+    mode = "PAPER" if CONFIG.get("PAPER_TRADING", False) else ("MOCK" if CONFIG.get("MOCK_LTP_RUN", False) else "LIVE")
 
     # Emit machine-parseable record for ANALYZE_BOT
     _rec = {
@@ -585,11 +589,13 @@ CONFIG = {
     "TRAIL_STEP": .75,  # Trailing step (in points) — used when TRAIL_SL_ATR_BASED is False
     "TRAIL_SL_ATR_BASED": False,     # If True, trail step = ATR × TRAIL_SL_ATR_MULTIPLIER (adapts to volatility)
     "TRAIL_SL_ATR_MULTIPLIER": 1.0,  # How many ATRs to use as the trail distance (0.5=tight, 1.5=loose)
-    "POLL_INTERVAL": 0.15,  # Poll interval in seconds (Optimized for speed)
+    "POLL_INTERVAL": 0.50,  # Poll interval in seconds (Optimized for speed)
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
     "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
-    "VALIDATE_ORDERS": False,  # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
-    "PAPER_TRADING": False,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
+    "VALIDATE_ORDERS": False,   # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
+    "PAPER_TRADING": True,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
+    "QUICK_TRAIL_BUFFER": 1.0,  # pts above target before cancelling limit sell and switching to trailing stop
+    "QUICK_TRAIL_GAP": 1.5,     # pts below peak to place the trailing stop (same as default target gap)
     "user_confirmation_needed": False,   # or False
     "ENABLE_EMA_CHECK": False,
     "ENABLE_ADX_CHECK": False,
@@ -1723,8 +1729,9 @@ def _fetch_atr_sync(instrument, timeout=3):
     return q.get() if not q.empty() else None
 
 # ----------------- Place CP order workflow (mirrors AngelOne logic) -----------------
-def place_quick_order(command):
-    """Quick mode: Buy at market and instantly set limit sell at +1.5 points"""
+def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle", partial=False, partial_pct=50):
+    """Quick mode: Buy at market, set limit sell at +quick_pts, ATR-based hard SL + full trail.
+    partial=True: sell partial_pct% of qty when price reverses from 60%-of-target sub-peak."""
     global buy_status, instruments_data, CONFIG
     
     parsed_command = parse_cp_command(command)
@@ -1771,8 +1778,9 @@ def place_quick_order(command):
         return
 
     entry_price = round(float(ltp_before), 2)
-    target_price = round(entry_price + 1.5, 2)  # +1.5 points target
-    print(f"⚡ QUICK MODE: Entry={entry_price} | Target={target_price} (+1.5)")
+    target_price = round(entry_price + quick_pts, 2)
+    _atr_src_label = ('HIST ATR' if atr_source=='candle' else 'TICK RNG') if atr_based else 'OFF'
+    print(f"⚡ QUICK MODE: Entry={entry_price} | Target={target_price} (+{quick_pts}pt)  ATR-SL={_atr_src_label}")
 
     # Place BUY order
     try:
@@ -1799,47 +1807,86 @@ def place_quick_order(command):
                 print(f"❌ Could not get executed price/qty for BUY order {order_id}.")
                 return
             quantity = executed_qty
-            target_price = round(avg_price + 1.5, 2)  # Recalculate target based on actual buy price
-            print(f"🎯 BUY EXECUTED @ ₹{avg_price} | New Target: ₹{target_price}")
+            target_price = round(avg_price + quick_pts, 2)  # Recalculate based on actual buy price
+            print(f"🎯 BUY EXECUTED @ ₹{avg_price} | New Target: ₹{target_price} (+{quick_pts}pt)")
         else:
             print("❌ No BUY order ID received.")
             return
     else:
         # Testing mode: Use entry price estimate, skip validation
         avg_price = entry_price
-        target_price = round(entry_price + 1.5, 2)
+        target_price = round(entry_price + quick_pts, 2)
         print(f"⚠️ Testing mode: Using entry price estimate ₹{avg_price}, target ₹{target_price}")
 
-    # Fetch ATR for dynamic SL
-    atr = CONFIG.get("HARD_SL_POINTS", 5)  # Default SL
-    try:
-        from threading import Thread
-        import queue
-        
-        result_queue = queue.Queue()
-        
-        def fetch_technicals():
+    # ── SL calculation — supports HIST ATR (candle) and TICK RNG (scan) ──
+    atr_val     = 0.0
+    hard_sl_pts = CONFIG.get("HARD_SL_POINTS", 5)
+    mult        = CONFIG.get("HARD_SL_ATR_MULTIPLIER", 1.5)
+
+    if atr_based:
+        if atr_source == "scan":
+            # ── TICK RNG: sample LTP for ~8 s, compute high-low range ────────
+            print(f"📡 TICK RNG: sampling LTP for ~8 seconds…")
+            import queue as _q
+            _scan_q = _q.Queue()
+            def _do_tick_scan():
+                _ticks = []
+                for _ in range(8):
+                    try:
+                        _v = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+                        if _v: _ticks.append(float(_v))
+                    except Exception:
+                        pass
+                    time.sleep(1)
+                _scan_q.put(_ticks)
+            threading.Thread(target=_do_tick_scan, daemon=True).start()
             try:
-                techs = get_technicals(instrument['groww_symbol'], groww, segment="FNO", instrument=instrument)
-                result_queue.put(techs)
-            except Exception as e:
-                result_queue.put(None)
-        
-        thread = Thread(target=fetch_technicals, daemon=True)
-        thread.start()
-        thread.join(timeout=3)  # Wait max 3 seconds
-        
-        if not result_queue.empty():
-            techs = result_queue.get()
-            if techs and techs.get("atr"):
-                atr = techs["atr"]
-                print(f"✅ ATR fetched: {atr:.2f}")
-    except:
-        pass
-    
-    # Calculate SL based on ATR
-    sl_price = round(avg_price - (1.5 * atr), 2)
-    print(f"🛡️ Dynamic SL: ₹{sl_price} (based on 1.5x ATR={atr:.2f})")
+                _ticks = _scan_q.get(timeout=10)
+                if len(_ticks) >= 2:
+                    atr_val = round(max(_ticks) - min(_ticks), 2)
+                    print(f"✅ Tick range sampled: {atr_val:.2f}  (hi={max(_ticks):.2f} lo={min(_ticks):.2f} n={len(_ticks)})")
+            except Exception:
+                pass
+            if atr_val > 0:
+                raw = round(atr_val * mult, 2)
+                sl_pts = max(3.0, raw)   # 3-pt floor for tick range (same as MOMENTUM_AUTO_BOT)
+                sl_price = round(avg_price - sl_pts, 2)
+                print(f"🛡️ TICK RNG Hard SL: ₹{sl_price}  (range={atr_val:.2f} × {mult:.1f}={raw:.2f}, floor=3.0)")
+            else:
+                sl_price = round(avg_price - hard_sl_pts, 2)
+                print(f"🛡️ Tick range unavailable → Fixed Hard SL: ₹{sl_price}  ({hard_sl_pts}pts)")
+        else:
+            # ── HIST ATR: 14-period EMA ATR from 1-min candles (same as manual mode) ──
+            try:
+                from threading import Thread
+                import queue
+                result_queue = queue.Queue()
+                def fetch_technicals():
+                    try:
+                        techs = get_technicals(instrument['groww_symbol'], groww, segment="FNO", instrument=instrument)
+                        result_queue.put(techs)
+                    except Exception:
+                        result_queue.put(None)
+                thread = Thread(target=fetch_technicals, daemon=True)
+                thread.start()
+                thread.join(timeout=3)
+                if not result_queue.empty():
+                    techs = result_queue.get()
+                    if techs and techs.get("atr"):
+                        atr_val = float(techs["atr"])
+                        print(f"✅ Hist ATR fetched: {atr_val:.2f}")
+            except Exception:
+                pass
+            if atr_val > 0:
+                sl_price = round(avg_price - (mult * atr_val), 2)
+                print(f"🛡️ HIST ATR Hard SL: ₹{sl_price}  ({mult:.1f} × ATR {atr_val:.2f})")
+            else:
+                sl_price = round(avg_price - hard_sl_pts, 2)
+                print(f"🛡️ Hist ATR unavailable → Fixed Hard SL: ₹{sl_price}  ({hard_sl_pts}pts)")
+    else:
+        # ATR-SL OFF — use fixed points directly
+        sl_price = round(avg_price - hard_sl_pts, 2)
+        print(f"🛡️ Fixed Hard SL: ₹{sl_price}  ({hard_sl_pts}pts, ATR-SL OFF)")
 
     # Place LIMIT SELL order instantly at target
     try:
@@ -1862,30 +1909,267 @@ def place_quick_order(command):
         send_telegram(f"❌ Limit SELL failed: {e}")
         return
 
-    # Monitor price until target or SL is hit
-    print(f"⏳ Monitoring price... Target: ₹{target_price} | SL: ₹{sl_price}")
+    # Trail configuration — matches manual mode (ATR-based or CONFIG["TRAIL_STEP"])
+    trail_buffer  = CONFIG.get("QUICK_TRAIL_BUFFER", 1.0)   # pts above target to confirm run
+    trail_gap     = _resolve_trail_step(atr_val)              # full trail: ATR-based or fixed step
+    trail_trigger = round(target_price + trail_buffer, 2)
+    _trail_src = ('ATR×'+str(CONFIG.get('TRAIL_SL_ATR_MULTIPLIER',1.0))) if CONFIG.get('TRAIL_SL_ATR_BASED') and atr_val>0 else 'fixed CONFIG[TRAIL_STEP]'
+    print(f"📐 Trail step: ₹{trail_gap:.2f}  ({_trail_src})")
+
+    # Monitor price until target / trail stop / SL is hit
+    print(f"⏳ Monitoring price... Target: ₹{target_price} | Trail trigger: ₹{trail_trigger} | SL: ₹{sl_price}")
     start_time = time.time()
     max_monitor_time = 3600  # 1 hour max
-    
+
+    trailing_active  = False
+    peak_ltp         = 0.0
+    trail_sl         = 0.0
+    limit_sell_alive = True   # False once we cancel the limit sell to start trailing
+
+    # ── Partial profit state ─────────────────────────────────────────────
+    lot_size         = int(instrument.get("lot_size", 1))
+    remaining_qty    = quantity
+    partial_booked   = False    # True after partial exit executed
+    partial_sub_peak = 0.0      # tracks local high once partial zone is entered
+    # Partial trigger = 60% of target pts from avg; on reversal drop by trail_gap → sell
+    partial_trigger_pts  = round(quick_pts * 0.60, 2)
+    partial_trigger_lvl  = round(avg_price + partial_trigger_pts, 2)
+    partial_qty_raw      = max(lot_size, round(quantity * (partial_pct / 100) / lot_size) * lot_size)
+    partial_qty          = partial_qty_raw if partial_qty_raw < quantity else 0  # 0 = disabled
+    if partial:
+        print(f"📊 PARTIAL mode ON | trigger≥₹{partial_trigger_lvl} (+{partial_trigger_pts}pt) "
+              f"| sell {partial_pct}% = {partial_qty} qty | drop = {trail_gap}pt")
+
     while True:
         if time.time() - start_time >= max_monitor_time:
             print("⏰ Max monitoring time reached (1 hour)")
             break
-            
+
         try:
             ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
             if ltp is None:
                 time.sleep(1)
                 continue
             ltp = float(ltp)
-            
-            # Check if target hit
+
+            # ── TRAILING PHASE ───────────────────────────────────────────────
+            if trailing_active:
+                if ltp > peak_ltp:
+                    peak_ltp = ltp
+                    trail_sl = round(peak_ltp - trail_gap, 2)
+                    print(f"📈 New peak: ₹{peak_ltp} | Trail SL: ₹{trail_sl}")
+
+                if ltp <= trail_sl:
+                    print(f"🎯 TRAIL STOP HIT! LTP: ₹{ltp} | Peak was: ₹{peak_ltp}")
+                    send_telegram(f"🎯 TRAIL STOP HIT @ ₹{ltp} | Peak ₹{peak_ltp}")
+                    play_sound_async(SOUND_PROFIT)
+                    try:
+                        trail_sell_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                        trail_sell_id = trail_sell_resp.get("payload", {}).get("groww_order_id") or trail_sell_resp.get("groww_order_id")
+                        if CONFIG.get("VALIDATE_ORDERS", True) and trail_sell_id:
+                            final_status = wait_for_order_status(trail_sell_id, access_token, "SELL")
+                            if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                                sell_price, sold_qty = get_order_executed_price(trail_sell_id, access_token)
+                                if sell_price and sold_qty:
+                                    profit = (sell_price - avg_price) * sold_qty
+                                    print(f"💰 TRAIL PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                    send_telegram(f"💰 TRAIL PROFIT: ₹{profit:.2f}")
+                                    log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
+                                    break
+                        # Fallback: use trail_sl as estimated exit (price was at trail_sl when triggered)
+                        profit = (trail_sl - avg_price) * quantity
+                        print(f"💰 Estimated TRAIL PROFIT: ₹{profit:.2f}")
+                        log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, trail_sl, quantity, profit)
+                    except Exception as e:
+                        print(f"❌ Trail sell failed: {e}")
+                    break
+
+                time.sleep(1)
+                continue
+
+            # ── RUNTIME PARTIAL UPDATE (dashboard SET button) ───────────────────
+            if _QUICK_RUNTIME_PARTIAL[0] is not None and not partial_booked:
+                _rp = _QUICK_RUNTIME_PARTIAL[0]
+                _QUICK_RUNTIME_PARTIAL[0] = None
+                partial     = bool(_rp.get("partial", False))
+                partial_pct = int(_rp.get("partial_pct", 50))
+                partial_qty_raw = max(lot_size, round(quantity * (partial_pct / 100) / lot_size) * lot_size)
+                partial_qty = partial_qty_raw if partial_qty_raw < quantity else 0
+                print(f"\n📊 [RUNTIME] Partial updated → {'ON' if partial else 'OFF'} {partial_pct}% = {partial_qty} qty")
+                if partial:
+                    print(f"   trigger≥₹{partial_trigger_lvl} | drop={trail_gap}pt")
+
+            # ── PARTIAL PROFIT EXIT ──────────────────────────────────────────────
+            if partial and not partial_booked and not trailing_active and limit_sell_alive and partial_qty > 0:
+                if ltp >= partial_trigger_lvl:
+                    # Price in partial zone — track local peak
+                    if ltp > partial_sub_peak:
+                        partial_sub_peak = ltp
+                    elif partial_sub_peak > 0 and ltp <= partial_sub_peak - trail_gap:
+                        # Reversal confirmed — execute partial exit
+                        print(f"\n📊 PARTIAL EXIT triggered | LTP ₹{ltp} dropped {trail_gap}pt from peak ₹{partial_sub_peak}")
+                        send_telegram(f"📊 PARTIAL EXIT @ ₹{ltp} | peak was ₹{partial_sub_peak:.2f} | selling {partial_qty} qty")
+                        try:
+                            # 1. Cancel existing full-qty limit sell
+                            if sell_order_id:
+                                _cs = get_order_status(sell_order_id, access_token) if CONFIG.get("VALIDATE_ORDERS", True) else None
+                                if _cs in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                                    print(f"ℹ️  Limit sell already filled before partial exit — skipping")
+                                    partial_booked = True
+                                    break
+                                cancel_order_groww(sell_order_id, access_token)
+                                limit_sell_alive = False
+
+                            # 2. Market sell partial qty
+                            _psell = place_market_order_groww(instrument, partial_qty, "SELL", "MIS")
+                            _psell_id = _psell.get("payload", {}).get("groww_order_id") or _psell.get("groww_order_id")
+                            _partial_sell_price = ltp
+                            if CONFIG.get("VALIDATE_ORDERS", True) and _psell_id:
+                                _pst = wait_for_order_status(_psell_id, access_token, "SELL")
+                                if _pst in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                                    _pp, _pq = get_order_executed_price(_psell_id, access_token)
+                                    if _pp: _partial_sell_price = _pp
+                            _partial_pnl = (_partial_sell_price - avg_price) * partial_qty
+                            print(f"💰 PARTIAL PROFIT: ₹{_partial_pnl:.2f} | {partial_qty} qty @ ₹{_partial_sell_price:.2f}")
+                            send_telegram(f"💰 PARTIAL PROFIT ₹{_partial_pnl:.2f} | {partial_qty}×₹{_partial_sell_price:.2f}")
+                            log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'),
+                                               avg_price, _partial_sell_price, partial_qty, _partial_pnl)
+
+                            # 3. Update remaining qty, raise SL to partial trigger, replace limit sell
+                            remaining_qty = quantity - partial_qty
+                            sl_price = max(sl_price, partial_trigger_lvl)   # raise SL floor
+                            print(f"🔼 SL raised to ₹{sl_price} (partial trigger level) | remaining qty: {remaining_qty}")
+                            _new_sell = place_limit_order_groww(instrument, remaining_qty, target_price, transaction_type="SELL", product="MIS")
+                            sell_order_id  = _new_sell.get("payload", {}).get("groww_order_id") or _new_sell.get("groww_order_id")
+                            limit_sell_alive = True
+                            quantity       = remaining_qty  # update qty for trail exits
+                            partial_booked = True
+                            print(f"✅ New limit sell ({remaining_qty} qty) @ ₹{target_price} placed")
+                        except Exception as _pe:
+                            print(f"❌ Partial exit failed: {_pe}")
+
+            # ── RUNTIME TARGET UPDATE (dashboard "SET" button mid-trade) ────────
+            if not trailing_active and limit_sell_alive and _QUICK_RUNTIME_TARGET[0] is not None:
+                _new_tgt_pts = float(_QUICK_RUNTIME_TARGET[0])
+                _QUICK_RUNTIME_TARGET[0] = None   # consume immediately
+                _new_target = round(avg_price + _new_tgt_pts, 2)
+                if _new_target != target_price:
+                    print(f"\n🔄 [RUNTIME] Target updated: ₹{target_price} → ₹{_new_target} (+{_new_tgt_pts}pt)")
+                    # Cancel old limit sell, replace with new target
+                    _cancelled = False
+                    if sell_order_id:
+                        try:
+                            if CONFIG.get("VALIDATE_ORDERS", True):
+                                _cur_st = get_order_status(sell_order_id, access_token)
+                                if _cur_st in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                                    print(f"⚠️  Limit sell already filled at old target ₹{target_price} — ignoring update")
+                                    continue
+                            cancel_order_groww(sell_order_id, access_token)
+                            _cancelled = True
+                        except Exception as _ce:
+                            print(f"⚠️  Cancel for target update failed: {_ce}")
+                    if _cancelled or not sell_order_id:
+                        target_price   = _new_target
+                        trail_trigger  = round(target_price + trail_buffer, 2)
+                        try:
+                            _new_sell_resp  = place_limit_order_groww(instrument, quantity, target_price, transaction_type="SELL", product="MIS")
+                            sell_order_id   = _new_sell_resp.get("payload", {}).get("groww_order_id") or _new_sell_resp.get("groww_order_id")
+                            send_telegram(f"🔄 Target updated → ₹{target_price} (+{_new_tgt_pts}pt)")
+                            print(f"✅ New LIMIT SELL @ ₹{target_price} placed | trail trigger: ₹{trail_trigger}")
+                        except Exception as _ne:
+                            print(f"❌ New limit sell failed after target update: {_ne}")
+
+            # ── SL CHECK ─────────────────────────────────────────────────────
+            if ltp <= sl_price:
+                print(f"🛑 SL HIT! LTP: ₹{ltp}")
+                send_telegram(f"🛑 SL HIT @ ₹{ltp}")
+                play_sound_async(SOUND_SL)
+                try:
+                    print(f"🔄 Cancelling target order and placing market SELL...")
+                    if sell_order_id and limit_sell_alive:
+                        cancel_success = cancel_order_groww(sell_order_id, access_token)
+                        if cancel_success:
+                            print(f"✅ Target order {sell_order_id} cancelled successfully")
+                            send_telegram(f"✅ Target order cancelled")
+                        else:
+                            print(f"⚠️ Could not cancel target order {sell_order_id}, it may have already executed")
+                    market_sell_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
+                    market_sell_id = market_sell_resp.get("payload", {}).get("groww_order_id") or market_sell_resp.get("groww_order_id")
+                    print(f"✅ Market SELL placed: {market_sell_id}")
+                    if CONFIG.get("VALIDATE_ORDERS", True) and market_sell_id:
+                        final_status = wait_for_order_status(market_sell_id, access_token, "SELL")
+                        if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                            sell_price, sold_qty = get_order_executed_price(market_sell_id, access_token)
+                            if sell_price and sold_qty:
+                                loss = (sell_price - avg_price) * sold_qty
+                                print(f"💸 LOSS: ₹{loss:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                send_telegram(f"💸 LOSS: ₹{loss:.2f}")
+                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, loss)
+                                break
+                    loss = (ltp - avg_price) * quantity
+                    print(f"💸 Estimated LOSS: ₹{loss:.2f}")
+                    log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, loss)
+                except Exception as e:
+                    print(f"❌ SL execution failed: {e}")
+                break
+
+            # ── TRAIL TRIGGER: price exceeded target + buffer ────────────────
+            if ltp >= trail_trigger and limit_sell_alive:
+                print(f"🚀 Price ₹{ltp} exceeded trail trigger ₹{trail_trigger} — switching to trailing stop")
+                switched = False
+                if sell_order_id:
+                    # In live mode check if limit already filled before we can cancel
+                    if CONFIG.get("VALIDATE_ORDERS", True):
+                        current_status = get_order_status(sell_order_id, access_token)
+                        if current_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                            print(f"ℹ️  Limit sell already filled before trail switch")
+                            sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                            if sell_price and sold_qty:
+                                profit = (sell_price - avg_price) * sold_qty
+                                print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
+                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
+                            else:
+                                profit = (target_price - avg_price) * quantity
+                                print(f"💰 Estimated PROFIT: ₹{profit:.2f} (filled at target)")
+                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, target_price, quantity, profit)
+                            break
+                    cancel_success = cancel_order_groww(sell_order_id, access_token)
+                    if cancel_success:
+                        limit_sell_alive = False
+                        switched = True
+                        print(f"✅ Limit sell cancelled — trailing stop active")
+                    else:
+                        # Cancel failed: order already filled at target
+                        print(f"⚠️ Limit sell cancel failed — likely filled at ₹{target_price}")
+                        if CONFIG.get("VALIDATE_ORDERS", True):
+                            sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                            if sell_price and sold_qty:
+                                profit = (sell_price - avg_price) * sold_qty
+                                print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
+                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
+                                break
+                        profit = (target_price - avg_price) * quantity
+                        print(f"💰 Estimated PROFIT: ₹{profit:.2f} (at target)")
+                        log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, target_price, quantity, profit)
+                        break
+                else:
+                    switched = True  # no limit order to cancel (VALIDATE_ORDERS=False paper path)
+
+                if switched:
+                    trailing_active = True
+                    peak_ltp = ltp
+                    trail_sl = round(peak_ltp - trail_gap, 2)
+                    print(f"🎯 TRAILING STOP ACTIVE | Peak: ₹{peak_ltp} | Trail SL: ₹{trail_sl} | Gap: {trail_gap}pts")
+                    send_telegram(f"🎯 TRAILING | Peak: ₹{peak_ltp} | Trail SL: ₹{trail_sl}")
+                continue
+
+            # ── NORMAL TARGET HIT (touched target, below trail trigger) ──────
             if ltp >= target_price:
                 print(f"🎯 TARGET HIT! LTP: ₹{ltp}")
                 send_telegram(f"🎯 TARGET HIT @ ₹{ltp}")
                 play_sound_async(SOUND_PROFIT)
-                
-                # Check SELL order status
                 if CONFIG.get("VALIDATE_ORDERS", True) and sell_order_id:
                     final_status = wait_for_order_status(sell_order_id, access_token, "SELL")
                     if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
@@ -1896,58 +2180,17 @@ def place_quick_order(command):
                             send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
                             log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
                         else:
-                            profit = (ltp - avg_price) * quantity
+                            profit = (target_price - avg_price) * quantity
                             print(f"💰 Estimated PROFIT: ₹{profit:.2f}")
-                            log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, profit)
+                            log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, target_price, quantity, profit)
                 else:
-                    profit = (ltp - avg_price) * quantity
+                    profit = (target_price - avg_price) * quantity
                     print(f"💰 Estimated PROFIT: ₹{profit:.2f}")
-                    log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, profit)
+                    log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, target_price, quantity, profit)
                 break
-                
-            # Check if SL hit
-            if ltp <= sl_price:
-                print(f"🛑 SL HIT! LTP: ₹{ltp}")
-                send_telegram(f"🛑 SL HIT @ ₹{ltp}")
-                play_sound_async(SOUND_SL)
-                
-                # Cancel pending target order and place market sell
-                try:
-                    print(f"🔄 Cancelling target order and placing market SELL...")
-                    
-                    # Cancel the pending limit sell order
-                    if sell_order_id:
-                        cancel_success = cancel_order_groww(sell_order_id, access_token)
-                        if cancel_success:
-                            print(f"✅ Target order {sell_order_id} cancelled successfully")
-                            send_telegram(f"✅ Target order cancelled")
-                        else:
-                            print(f"⚠️ Could not cancel target order {sell_order_id}, it may have already executed")
-                    
-                    # Place market sell
-                    market_sell_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                    market_sell_id = market_sell_resp.get("payload", {}).get("groww_order_id") or market_sell_resp.get("groww_order_id")
-                    print(f"✅ Market SELL placed: {market_sell_id}")
-                    
-                    if CONFIG.get("VALIDATE_ORDERS", True) and market_sell_id:
-                        final_status = wait_for_order_status(market_sell_id, access_token, "SELL")
-                        if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                            sell_price, sold_qty = get_order_executed_price(market_sell_id, access_token)
-                            if sell_price and sold_qty:
-                                loss = (sell_price - avg_price) * sold_qty
-                                print(f"💸 LOSS: ₹{loss:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
-                                send_telegram(f"💸 LOSS: ₹{loss:.2f}")
-                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, loss)
-                    else:
-                        loss = (ltp - avg_price) * quantity
-                        print(f"💸 Estimated LOSS: ₹{loss:.2f}")
-                        log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, ltp, quantity, loss)
-                except Exception as e:
-                    print(f"❌ SL execution failed: {e}")
-                break
-            
+
             time.sleep(1)  # Poll every second
-            
+
         except Exception as e:
             print(f"⚠️ Monitoring error: {e}")
             time.sleep(2)
@@ -2009,11 +2252,28 @@ def place_cp_order(command, is_auto=False):
         lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
         quantity = lots * lot_size
         
-        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 💰 Fetching LTP...")
-        ltp_before = get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
-        if ltp_before is None:
-            print("❌ Could not fetch LTP before placing order.")
-            return
+        # ⚡ Try option-chain cache first (instant) — prefetcher keeps it warm
+        _ltp_cache_hit = None
+        try:
+            _oc_payload, _oc_ts = _option_chain_cache.get(
+                (parsed_symbol_details["underlying"], parsed_symbol_details["expiry_date"]), (None, 0))
+            if _oc_payload and (time.time() - _oc_ts) < 10:
+                _sd = _oc_payload.get("strikes", {}).get(str(int(float(parsed_symbol_details["strike"]))), {})
+                _lv = float(_sd.get(parsed_symbol_details["opt_type"], {}).get("ltp", 0) or 0)
+                if _lv > 0:
+                    _ltp_cache_hit = _lv
+        except Exception:
+            pass
+
+        if _ltp_cache_hit:
+            print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 💰 LTP from cache: ₹{_ltp_cache_hit}")
+            ltp_before = _ltp_cache_hit
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 💰 Fetching LTP (cache miss)...")
+            ltp_before = get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
+            if ltp_before is None:
+                print("❌ Could not fetch LTP before placing order.")
+                return
 
         entry_price = round(float(ltp_before), 2)
         print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 💵 Entry price: ₹{entry_price}")
@@ -2121,24 +2381,55 @@ def place_cp_order(command, is_auto=False):
         # - Poll interval: 0.15s (fast response)
         # - Telegram: wrapped in try-except (won't block)
         # - Sell order: placed IMMEDIATELY when condition met (no pre-checks)
+        # ── Mock LTP simulation (used when CONFIG["MOCK_LTP_RUN"] is True) ──────
+        _mock_tick   = 0
+        _mock_entry  = avg_price
+        def _next_mock_ltp():
+            nonlocal _mock_tick
+            t = _mock_tick; _mock_tick += 1
+            # t 0-2 : stable at entry (trail not yet active)
+            # t 3-6 : rise +5 pts → trail activates, trail_exit = entry+5-trail_step
+            # t 7-8 : rise +8 pts → trail_exit = entry+8-trail_step
+            # t 9+  : drop to entry+3 → below trail_exit → TRAIL HIT
+            if   t <  3: offset = 0.0
+            elif t <  7: offset = 5.0
+            elif t <  9: offset = 8.0
+            else:         offset = 3.0
+            v = round(_mock_entry + offset, 2)
+            print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] 🎭 MOCK LTP tick={t}: ₹{v}")
+            time.sleep(1.0)   # 1s between ticks — makes timing visible
+            return v
+        # ─────────────────────────────────────────────────────────────────────
+
+        _ltp_fail_streak = 0
         while True:
             # Heartbeat every 30 seconds to show script is alive
             if time.time() - last_heartbeat >= 30:
                 print(f"💓 Monitoring... LTP last seen: ₹{ltp if 'ltp' in locals() else 'fetching...'}")
                 last_heartbeat = time.time()
-            
-            try:
-                # ⚡ Zero delay for fastest trailing response
-                ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
-            except Exception as e:
-                print(f"⚠️ LTP fetch error (retrying): {e}")
-                time.sleep(poll)
-                continue
-                
-            if ltp is None:
-                print("⚠️ LTP is None (retrying...)")
-                time.sleep(poll)
-                continue
+
+            if CONFIG.get("MOCK_LTP_RUN"):
+                ltp = _next_mock_ltp()
+            else:
+                try:
+                    # ⚡ Zero delay for fastest trailing response
+                    ltp = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+                except Exception as e:
+                    _ltp_fail_streak += 1
+                    _backoff = min(30, poll * (2 ** min(_ltp_fail_streak, 6)))
+                    if _ltp_fail_streak <= 3 or _ltp_fail_streak % 10 == 0:
+                        print(f"⚠️ LTP fetch error (streak={_ltp_fail_streak}, retry in {_backoff:.1f}s): {e}")
+                    time.sleep(_backoff)
+                    continue
+
+                if ltp is None:
+                    _ltp_fail_streak += 1
+                    _backoff = min(30, poll * (2 ** min(_ltp_fail_streak, 6)))
+                    if _ltp_fail_streak <= 3 or _ltp_fail_streak % 10 == 0:
+                        print(f"⚠️ LTP is None (streak={_ltp_fail_streak}, retry in {_backoff:.1f}s)")
+                    time.sleep(_backoff)
+                    continue
+                _ltp_fail_streak = 0
 
             ltp = float(ltp)
             sell_reason = None
@@ -2172,15 +2463,14 @@ def place_cp_order(command, is_auto=False):
                         last_trail_exit = trail_exit
                     
                     if ltp <= trail_exit:
-                        sell_reason = f"🔻 Trailing HIT @ {ltp}"
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                        sell_reason = f"🔻 Trailing HIT @ ₹{ltp}  (trail_exit=₹{trail_exit}  high=₹{highest_price})"
                         sell_price = ltp
                         sold_qty = quantity
 
             # 2. If an exit condition is met, place sell order IMMEDIATELY
             if sell_reason:
-                print(sell_reason)
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                _exit_ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                print(f"[{_exit_ts}] {sell_reason}")
                 
                 # 🔊 Play sound immediately on exit trigger
                 if "SL HIT" in sell_reason or "DYNAMIC SL" in sell_reason:
@@ -2192,11 +2482,13 @@ def place_cp_order(command, is_auto=False):
 
                 try:
                     # ⚡ IMMEDIATE SELL - No delays before this
-                    print(f"🔄 Placing SELL order for {quantity} units @ market price...")
+                    _sell_start = datetime.now()
+                    print(f"[{_sell_start.strftime('%H:%M:%S.%f')[:-3]}] 🔄 Placing SELL order for {quantity} units @ market price...")
                     order_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
                     sell_order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
-                    print(f"✅ SELL Order placed: {order_resp}")
-                    print(f"🆔 SELL Order ID: {sell_order_id} @ [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+                    _sell_placed = datetime.now()
+                    _sell_ms = (_sell_placed - _sell_start).total_seconds()
+                    print(f"[{_sell_placed.strftime('%H:%M:%S.%f')[:-3]}] ✅ SELL Order placed: {sell_order_id} (took {_sell_ms:.3f}s)")
                     
                     # Send notification AFTER order is placed (non-blocking)
                     try:
@@ -2210,9 +2502,10 @@ def place_cp_order(command, is_auto=False):
                         if sell_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
                             # Fetch actual executed price
                             sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                            _exec_ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
                             if sell_price and sold_qty:
                                 profit = (sell_price - avg_price) * sold_qty
-                                print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
+                                print(f"[{_exec_ts}] 💰 SELL EXECUTED @ ₹{sell_price} | P&L: ₹{profit:.2f} (Buy ₹{avg_price} → Sell ₹{sell_price})")
                                 send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
                                 play_sound_async(SOUND_PROFIT if profit > 0 else SOUND_SL)
                                 log_trade_to_excel(
@@ -2607,72 +2900,598 @@ def directional_mode():
             traceback.print_exc()
 
 
-# ----------------- Auto mode runner (momentum + premium) -----------------
+# ─────────────────────────────────────────────────────────────────────────────
+#  AUTO MODE v2 — Multi-signal consensus engine
+#  Sources: MASTER_SIGNAL_BOT log  +  Fibonacci (1h + 15m)  +  premium momentum
+#  Entry: minimum 4 agreeing votes before placing any order
+#  Exit:  %-based SL/target, signal-reversal detection, market-close gate
+# ─────────────────────────────────────────────────────────────────────────────
 
+AUTO_V2_CONFIG = {
+    # Signal thresholds
+    "MIN_MASTER_CONFIDENCE":   65,   # % — MASTER_SIGNAL_BOT minimum to count as a vote
+    "MIN_VOTES":                4,   # total votes needed (max attainable ~8)
+    "MASTER_SIGNAL_MAX_AGE_S": 90,   # seconds — ignore stale MASTER_SIGNAL entries
+    # Scan behaviour
+    "SCAN_WAIT_SEC":           15,   # wait between signal-check cycles when no trade
+    "SCAN_TIMEOUT_MIN":        25,   # report and pause after X min of no signal
+    # Risk — SL and target are % of entry premium
+    "SL_PCT_HIGH":            0.12,  # 12% SL for HIGH-confidence signal
+    "SL_PCT_MEDIUM":          0.09,  # 9% SL for MEDIUM-confidence signal
+    "TARGET_MULTIPLIER":       2.0,  # target = SL * multiplier  (enforces R:R ≥ 2)
+    # Trade duration
+    "MAX_TRADE_MIN":           75,   # hard max time in a single trade (minutes)
+    "SIGNAL_RECHECK_SEC":      30,   # re-check MASTER_SIGNAL during hold (seconds)
+    # Market-hours gate
+    "NO_TRADE_BEFORE": (9, 30),      # (hour, minute) — no entry before this time
+    "NO_TRADE_AFTER":  (15, 0),      # (hour, minute) — no entry after this time
+}
+
+
+def _read_master_signal_latest(index_name: str):
+    """
+    Return the most recent valid signal record from logs/master_signal/*.log.
+    Returns None if no file exists, file is empty, or signal is stale.
+    """
+    base    = os.path.dirname(os.path.abspath(__file__))
+    log_dir = os.path.join(base, "logs", "master_signal")
+    if not os.path.isdir(log_dir):
+        return None
+    files = sorted(
+        [f for f in os.listdir(log_dir)
+         if f.endswith(".log") and "Master_Signal" in f],
+        key=lambda f: os.path.getmtime(os.path.join(log_dir, f)),
+        reverse=True,
+    )
+    if not files:
+        return None
+    log_path = os.path.join(log_dir, files[0])
+    try:
+        with open(log_path, "r", encoding="utf-8") as fh:
+            lines = [l.strip() for l in fh if l.strip()]
+        for line in reversed(lines):
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("index", "").upper() != index_name.upper():
+                continue
+            try:
+                age = (datetime.now() - datetime.strptime(rec["ts"], "%Y-%m-%dT%H:%M:%S")).total_seconds()
+                if age > AUTO_V2_CONFIG["MASTER_SIGNAL_MAX_AGE_S"]:
+                    return None
+            except Exception:
+                pass
+            return rec
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_index_candles_auto(index_name: str, interval: str, hours_back: int) -> list:
+    """Fetch CASH candles for the index using the global groww client."""
+    idx = index_name.upper()
+    sym_map = {
+        "NIFTY":     ["NSE-NIFTY 50", "NSE-NIFTY"],
+        "SENSEX":    ["BSE-SENSEX"],
+        "BANKNIFTY": ["NSE-BANKNIFTY", "NSE-NIFTY BANK"],
+        "FINNIFTY":  ["NSE-NIFTY FIN SERVICE", "NSE-FINNIFTY"],
+    }
+    candidates = sym_map.get(idx, [f"NSE-{idx}"])
+    exc = groww.EXCHANGE_BSE if "SENSEX" in idx else groww.EXCHANGE_NSE
+    end_dt   = datetime.now()
+    start_dt = end_dt - timedelta(hours=hours_back)
+    for sym in candidates:
+        try:
+            r = groww.get_historical_candles(
+                groww_symbol=sym, exchange=exc, segment="CASH",
+                start_time=start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                end_time=end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                candle_interval=interval,
+            )
+            if r and r.get("candles") and len(r["candles"]) >= 5:
+                return [{"ts": c[0], "open": float(c[1]), "high": float(c[2]),
+                         "low": float(c[3]), "close": float(c[4])} for c in r["candles"]]
+        except Exception:
+            continue
+    return []
+
+
+def _fib_score_auto(spot: float, candles: list) -> int:
+    """
+    Fibonacci position score: -3 (price at/below swing low) to +3 (at/above swing high).
+    Uses most recent 20-candle swing high/low as the reference range.
+    """
+    if len(candles) < 10:
+        return 0
+    n  = min(20, len(candles))
+    sh = max(c["high"]  for c in candles[-n:])
+    sl = min(c["low"]   for c in candles[-n:])
+    rng = sh - sl
+    if rng < 1:
+        return 0
+    pos = (spot - sl) / rng   # 0.0 = at swing low, 1.0 = at swing high
+    if pos >= 0.786: return  3
+    if pos >= 0.618: return  2
+    if pos >= 0.500: return  1
+    if pos >= 0.382: return -1
+    if pos >= 0.236: return -2
+    return -3
+
+
+def _rsi_auto(candles: list, period: int = 14):
+    """Simple Wilder RSI from candle closes. Returns float or None."""
+    closes = [c["close"] for c in candles]
+    if len(closes) < period + 1:
+        return None
+    gains  = [max(closes[i] - closes[i-1], 0.0) for i in range(1, len(closes))]
+    losses = [max(closes[i-1] - closes[i], 0.0) for i in range(1, len(closes))]
+    avg_g  = sum(gains[:period])  / period
+    avg_l  = sum(losses[:period]) / period
+    for i in range(period, len(gains)):
+        avg_g = (avg_g * (period - 1) + gains[i])  / period
+        avg_l = (avg_l * (period - 1) + losses[i]) / period
+    return round(100.0 - 100.0 / (1.0 + avg_g / avg_l), 1) if avg_l else 100.0
+
+
+def _premium_momentum_dir(instrument, samples: int = 4, delay: float = 0.35) -> str:
+    """
+    Sample option LTP `samples` times and return 'UP', 'DOWN', or 'FLAT'.
+    """
+    prices = []
+    for _ in range(samples):
+        p = get_ltp_for_instrument(instrument, access_token, verbose=False, delay=0)
+        if p:
+            prices.append(float(p))
+        time.sleep(delay)
+    if len(prices) < 3:
+        return "FLAT"
+    changes  = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+    avg_ch   = sum(changes) / len(changes)
+    pos_frac = sum(1 for c in changes if c > 0) / len(changes)
+    if avg_ch > 0.1 and pos_frac >= 0.6:
+        return "UP"
+    if avg_ch < -0.1 and pos_frac <= 0.4:
+        return "DOWN"
+    return "FLAT"
+
+
+def _within_trading_hours_auto() -> bool:
+    """True when current time is inside the allowed entry window."""
+    now  = datetime.now()
+    h, m = now.hour, now.minute
+    cfg  = AUTO_V2_CONFIG
+    return cfg["NO_TRADE_BEFORE"] <= (h, m) < cfg["NO_TRADE_AFTER"]
+
+
+def _get_nearest_expiry_auto(index_name: str) -> str:
+    """
+    Scan instruments_data for the nearest upcoming expiry for the given index.
+    Falls back to CONFIG["expiry"] if nothing is found.
+    Guarantees auto mode always trades on a valid live expiry.
+    """
+    today  = datetime.now().date()
+    idx    = index_name.upper()
+    expiries = set()
+    for item in instruments_data:
+        if item.get("underlying_symbol", "").upper() != idx:
+            continue
+        ed = item.get("expiry_date", "").strip()
+        if not ed:
+            continue
+        try:
+            if datetime.strptime(ed, "%Y-%m-%d").date() >= today:
+                expiries.add(ed)
+        except ValueError:
+            continue
+    if expiries:
+        nearest = min(expiries, key=lambda e: datetime.strptime(e, "%Y-%m-%d").date())
+        return nearest
+    return CONFIG["expiry"]   # fallback to whatever is in CONFIG
+
+
+def _get_spot_via_chain(index_name: str, expiry: str) -> float:
+    """
+    Get live spot price from the option-chain API (reliable for all indices).
+    Falls back to 0 on error.
+    """
+    exc = "BSE" if "SENSEX" in index_name.upper() else "NSE"
+    url = (f"https://api.groww.in/v1/option-chain/exchange/{exc}"
+           f"/underlying/{index_name}?expiry_date={expiry}")
+    hdrs = {"Accept": "application/json",
+            "Authorization": f"Bearer {access_token}", "X-API-VERSION": "1.0"}
+    try:
+        resp = session.get(url, headers=hdrs, timeout=8)
+        if resp.status_code == 200:
+            ltp = resp.json().get("payload", {}).get("underlying_ltp")
+            if ltp:
+                return float(ltp)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _find_option_quiet(direction: str, index_name: str, expiry: str,
+                        min_p: float, max_p: float, lots: int):
+    """
+    Silently find the best option in premium range — NO momentum sampling,
+    NO print output. Used by auto mode to avoid verbose momentum spam.
+    Returns (instrument, ltp, lot_size) or (None, 0.0, 1).
+    """
+    idx = index_name.upper()
+    mid = (min_p + max_p) / 2
+    candidates = []
+    for item in instruments_data:
+        if item.get("underlying_symbol", "").upper() != idx:
+            continue
+        if item.get("instrument_type", "").upper() != direction.upper():
+            continue
+        if item.get("expiry_date", "").strip() != expiry:
+            continue
+        ltp = get_ltp_for_instrument(item, access_token, verbose=False)
+        if ltp is None:
+            continue
+        if not (min_p <= ltp <= max_p):
+            continue
+        lot_size = int(item.get("lot_size") or item.get("lotsize") or 1)
+        if lots * lot_size * ltp > get_available_margin(access_token) * 0.9:
+            continue
+        candidates.append((abs(ltp - mid), item, ltp, lot_size))
+    if not candidates:
+        return None, 0.0, 1
+    candidates.sort(key=lambda x: x[0])
+    _, best_inst, best_ltp, best_lot = candidates[0]
+    return best_inst, best_ltp, best_lot
+
+
+def _quick_ltp_direction(instrument) -> str:
+    """
+    Two LTP samples 1.5 s apart — returns 'UP', 'DOWN', or 'FLAT'.
+    Threshold: 0.20% move. Silent (no prints).
+    """
+    if not instrument:
+        return "FLAT"
+    try:
+        ltp1 = get_ltp_for_instrument(instrument, access_token, verbose=False)
+        time.sleep(1.5)
+        ltp2 = get_ltp_for_instrument(instrument, access_token, verbose=False)
+        if ltp1 and ltp2 and ltp1 > 0:
+            chg = (ltp2 - ltp1) / ltp1
+            if chg >= 0.002:
+                return "UP"
+            if chg <= -0.002:
+                return "DOWN"
+    except Exception:
+        pass
+    return "FLAT"
+
+
+def _collect_signals_auto(index_name: str, expiry: str,
+                           lots: int, min_p: float, max_p: float) -> dict:
+    """
+    Gather all available signals and compute a vote-weighted consensus.
+
+    Vote sources (max attainable ≈ 8):
+      MASTER_SIGNAL_BOT  →  +3 if conf ≥ 75%, +2 if conf ≥ 65%
+                            −1 each side if WAIT AND conf ≥ 50%
+                            (ignored if conf < 50% — no strong opinion)
+      Fibonacci 1-hour   →  +1 or +2 per side
+      Fibonacci 15-min   →  +1 or +2 per side
+      Premium momentum   →  +1 (silent 2-sample LTP check)
+
+    RSI dampening: −1 from over-extended side (RSI ≥ 72 or ≤ 28).
+
+    Returns dict with keys: direction, confidence, votes_ce, votes_pe,
+                             instrument, ltp, lot_size, detail, sl_pct, master
+    """
+    lines    = []
+    votes_ce = 0
+    votes_pe = 0
+
+    # ── 1. MASTER SIGNAL BOT ────────────────────────────────────────────────
+    master = _read_master_signal_latest(index_name)
+    if master:
+        m_dir  = master.get("direction", "WAIT")
+        m_conf = float(master.get("confidence", 0))
+        thr    = AUTO_V2_CONFIG["MIN_MASTER_CONFIDENCE"]
+        lines.append(
+            f"  📡 MASTER: {m_dir}  conf={m_conf:.0f}%  "
+            f"1h={master.get('s1h',0):+}  15m={float(master.get('s15m',0)):+.1f}  "
+            f"5m={master.get('s5m',0):+}  R:R={master.get('rr',0):.1f}"
+        )
+        if m_dir == "CE" and m_conf >= thr:
+            w = 3 if m_conf >= 75 else 2
+            votes_ce += w
+        elif m_dir == "PE" and m_conf >= thr:
+            w = 3 if m_conf >= 75 else 2
+            votes_pe += w
+        elif m_dir == "WAIT" and m_conf >= 50:
+            # Only penalise when MASTER is reasonably confident about WAIT.
+            # At conf < 50% it has no strong opinion — ignoring is safer than
+            # penalising, otherwise FIBO signals get unfairly blocked.
+            votes_ce -= 1; votes_pe -= 1
+            lines.append(f"  ⚠️  MASTER WAIT (conf={m_conf:.0f}% ≥ 50) → both sides −1")
+        else:
+            lines.append(f"  ℹ️  MASTER WAIT at low conf ({m_conf:.0f}%) — ignored")
+    else:
+        lines.append("  📡 MASTER: no recent signal (start MASTER_SIGNAL_BOT)")
+
+    # ── 2. Fibonacci scores — use option-chain spot (works for all indices) ──
+    spot = _get_spot_via_chain(index_name, expiry)
+    if spot:
+        for tf_label, interval, hours in [("1h", "1hour", 48), ("15m", "15minute", 26)]:
+            candles = _fetch_index_candles_auto(index_name, interval, hours)
+            if candles:
+                sc  = _fib_score_auto(spot, candles)
+                rsi = _rsi_auto(candles)
+                rsi_str = f"{rsi:.0f}" if rsi else "N/A"
+                lines.append(
+                    f"  📐 FIBO {tf_label}: score={sc:+d}  "
+                    f"RSI={rsi_str}  spot={spot:.0f}")
+                if sc >= 2:    votes_ce += 2
+                elif sc == 1:  votes_ce += 1
+                elif sc <= -2: votes_pe += 2
+                elif sc == -1: votes_pe += 1
+                if rsi:
+                    if rsi >= 72:
+                        votes_ce -= 1
+                        lines.append(f"    ⚠️  {tf_label} RSI overbought ({rsi:.0f}) → CE −1")
+                    elif rsi <= 28:
+                        votes_pe -= 1
+                        lines.append(f"    ⚠️  {tf_label} RSI oversold ({rsi:.0f}) → PE −1")
+            else:
+                lines.append(f"  📐 FIBO {tf_label}: candle data unavailable")
+    else:
+        lines.append(f"  📐 FIBO: spot unavailable for {index_name} {expiry}")
+
+    # ── 3. Premium momentum — silent 2-sample check, no verbose output ───────
+    # Find best CE and PE instruments quietly (no momentum spam).
+    ce_inst, ce_ltp, ce_lot = _find_option_quiet("CE", index_name, expiry, min_p, max_p, lots)
+    pe_inst, pe_ltp, pe_lot = _find_option_quiet("PE", index_name, expiry, min_p, max_p, lots)
+
+    # 2-sample direction check: compare which side is rising
+    ce_dir = _quick_ltp_direction(ce_inst)
+    pe_dir = _quick_ltp_direction(pe_inst)
+
+    prem_note = f"CE={ce_dir}(₹{ce_ltp:.0f})  PE={pe_dir}(₹{pe_ltp:.0f})"
+    if ce_dir == "UP" and pe_dir != "UP":
+        votes_ce += 1
+        lines.append(f"  📊 Premium momentum: CE rising → CE +1  [{prem_note}]")
+        opt_instrument, opt_ltp, lot_size = ce_inst, ce_ltp, ce_lot
+    elif pe_dir == "UP" and ce_dir != "UP":
+        votes_pe += 1
+        lines.append(f"  📊 Premium momentum: PE rising → PE +1  [{prem_note}]")
+        opt_instrument, opt_ltp, lot_size = pe_inst, pe_ltp, pe_lot
+    else:
+        lines.append(f"  📊 Premium momentum: flat / no clear winner  [{prem_note}]")
+        # Use whichever side votes favour so far
+        if votes_ce >= votes_pe:
+            opt_instrument, opt_ltp, lot_size = ce_inst, ce_ltp, ce_lot
+        else:
+            opt_instrument, opt_ltp, lot_size = pe_inst, pe_ltp, pe_lot
+
+    # ── 4. Resolve direction ─────────────────────────────────────────────────
+    min_v = AUTO_V2_CONFIG["MIN_VOTES"]
+    if votes_ce >= min_v and votes_ce >= votes_pe:
+        direction = "CE"
+        if opt_instrument and \
+                opt_instrument.get("instrument_type", "").upper() != "CE":
+            opt_instrument, opt_ltp, lot_size = ce_inst, ce_ltp, ce_lot
+    elif votes_pe >= min_v and votes_pe > votes_ce:
+        direction = "PE"
+        if opt_instrument and \
+                opt_instrument.get("instrument_type", "").upper() != "PE":
+            opt_instrument, opt_ltp, lot_size = pe_inst, pe_ltp, pe_lot
+    else:
+        direction      = "WAIT"
+        opt_instrument = None
+        opt_ltp        = 0.0
+        lot_size       = 1
+
+    winning_votes = votes_ce if direction == "CE" else (votes_pe if direction == "PE" else 0)
+    losing_votes  = votes_pe if direction == "CE" else (votes_ce if direction == "PE" else 0)
+    margin        = winning_votes - max(losing_votes, 0)
+
+    if direction != "WAIT":
+        confidence = "HIGH"   if (winning_votes >= 7 or margin >= 4) else \
+                     "MEDIUM" if (winning_votes >= 5 or margin >= 2) else "LOW"
+    else:
+        confidence = "NONE"
+
+    sl_pct = (AUTO_V2_CONFIG["SL_PCT_HIGH"] if confidence == "HIGH"
+              else AUTO_V2_CONFIG["SL_PCT_MEDIUM"])
+
+    lines.append(
+        f"  🗳  VOTES  CE={votes_ce}  PE={votes_pe}  →  {direction}  [{confidence}]"
+    )
+
+    return {
+        "direction":   direction,
+        "confidence":  confidence,
+        "votes_ce":    votes_ce,
+        "votes_pe":    votes_pe,
+        "instrument":  opt_instrument,
+        "ltp":         opt_ltp,
+        "lot_size":    lot_size,
+        "detail":      "\n".join(lines),
+        "sl_pct":      sl_pct,
+        "master":      master,
+    }
+
+
+_AUTO_STATUS_FILE = os.path.join(PROJECT_ROOT, ".auto_mode_status.json")
+
+
+def _write_auto_status(state: str, **kwargs):
+    """
+    Write a lightweight JSON status file that the Live Dashboard can poll
+    to display auto-mode activity without scanning the raw log stream.
+
+    Fields always written: state, ts, mode_label (PAPER / LIVE)
+    Optional kwargs are merged in (direction, confidence, votes_ce, votes_pe,
+    instrument_symbol, ltp, total_pnl, trade_count, detail_line, etc.)
+    """
+    payload = {"state": state, "ts": time.time()}
+    payload.update(kwargs)
+    try:
+        with open(_AUTO_STATUS_FILE, "w") as _f:
+            import json as _json
+            _json.dump(payload, _f)
+    except Exception:
+        pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 def auto_mode_runner():
-    cfg = CONFIG
-    paper = cfg.get("PAPER_TRADING", False)
-    mode_label = "PAPER" if paper else "LIVE"
+    """
+    AUTO MODE v2 — multi-signal consensus before every entry.
 
-    print("\n" + "="*60)
-    print(f"🤖 AUTO MODE [{mode_label}] (momentum + premium)")
-    print("="*60)
-    send_telegram(f"🤖 AUTO MODE [{mode_label}] started")
-
-    index  = cfg["index"]
-    expiry = cfg["expiry"]
-    min_p  = cfg["min_premium"]
-    max_p  = cfg["max_premium"]
-    lots   = cfg["lots"]
+    Entry gate: MASTER_SIGNAL + Fibonacci (1h + 15m) + premium momentum
+                must reach MIN_VOTES consensus threshold.
+    Exit gates: %-based SL / target, trailing stop, MASTER_SIGNAL direction
+                reversal, max-trade-time, market-close guard.
+    """
+    cfg       = CONFIG
+    paper     = cfg.get("PAPER_TRADING", False)
+    mode_lbl  = "PAPER" if paper else "LIVE"
+    index     = cfg["index"]
+    min_p     = cfg["min_premium"]
+    max_p     = cfg["max_premium"]
+    lots      = cfg["lots"]
     target_pnl = cfg["target_pnl"]
+    poll       = cfg["POLL_INTERVAL"]
 
-    total_pnl  = 0.0
+    # Always detect the nearest live expiry — CONFIG["expiry"] may be stale
+    expiry = _get_nearest_expiry_auto(index)
+    if expiry != cfg["expiry"]:
+        print(f"⚠️  CONFIG expiry {cfg['expiry']} is stale — using nearest: {expiry}")
+        cfg["expiry"] = expiry   # update in-memory so find_option_by_premium_parallel sees it
+
+    _write_auto_status("STARTING", mode_label=mode_lbl, index=index)
+    print("\n" + "="*68)
+    print(f"🤖 AUTO MODE v2 [{mode_lbl}] — Multi-signal consensus")
+    print(f"   Index: {index}  |  Expiry: {expiry}  (auto-detected)")
+    print(f"   Premium range: ₹{min_p}–₹{max_p}  |  Lots: {lots}")
+    print(f"   Target P&L: ₹{target_pnl}  |  Min votes: {AUTO_V2_CONFIG['MIN_VOTES']}")
+    print(f"   MASTER conf threshold: {AUTO_V2_CONFIG['MIN_MASTER_CONFIDENCE']}%")
+    print(f"   SL: HIGH={AUTO_V2_CONFIG['SL_PCT_HIGH']*100:.0f}%  "
+          f"MEDIUM={AUTO_V2_CONFIG['SL_PCT_MEDIUM']*100:.0f}%  "
+          f"Target R:R ≥ {AUTO_V2_CONFIG['TARGET_MULTIPLIER']:.1f}:1")
+    print("="*68)
+    send_telegram(f"🤖 AUTO v2 [{mode_lbl}] started  |  {index}")
+
+    total_pnl   = 0.0
     trade_count = 0
+    scan_start  = time.time()
 
     while True:
-        print(f"\n🔄 Auto | Trade #{trade_count + 1} | P&L so far: ₹{total_pnl:.2f} / ₹{target_pnl:.2f}")
 
+        # ── P&L target gate ──────────────────────────────────────────────────
         if total_pnl >= target_pnl:
-            print(f"🎯 Target P&L ₹{target_pnl} reached! Stopping auto mode.")
-            send_telegram(f"🎯 AUTO MODE done — Total P&L: ₹{total_pnl:.2f}")
+            print(f"🎯 Target P&L ₹{target_pnl} reached! Stopping.")
+            send_telegram(f"🎯 AUTO v2 done — Total P&L: ₹{total_pnl:.2f}")
+            _write_auto_status("STOPPED", mode_label=mode_lbl, index=index,
+                               total_pnl=total_pnl, trade_count=trade_count,
+                               stop_reason="target_reached")
             break
 
-        # --- Find best option by momentum ---
-        print("🔍 Detecting best option (CE / PE) by momentum...")
-        result = detect_option_type_parallel(index, expiry, min_p, max_p, lots)
-
-        if result is None:
-            print("⚠️ Could not detect option. Waiting 30s before retry...")
-            time.sleep(30)
+        # ── Market-hours gate ────────────────────────────────────────────────
+        if not _within_trading_hours_auto():
+            nh, nm = AUTO_V2_CONFIG["NO_TRADE_BEFORE"]
+            print(f"⏳ Outside trading window. Waiting for {nh:02d}:{nm:02d}...")
+            time.sleep(60)
             continue
 
-        opt_type, instrument, ltp, lot_size = result
+        # ── Signal collection ────────────────────────────────────────────────
+        print(f"\n{'─'*60}")
+        print(f"🔍 Trade #{trade_count+1} | Scanning signals"
+              f"  (P&L: ₹{total_pnl:.2f} / ₹{target_pnl:.2f})")
+        signals = _collect_signals_auto(index, expiry, lots, min_p, max_p)
+        print(signals["detail"])
+
+        direction  = signals["direction"]
+        confidence = signals["confidence"]
+
+        _write_auto_status(
+            "SCANNING",
+            mode_label=mode_lbl,
+            index=index,
+            expiry=expiry,
+            direction=direction,
+            confidence=confidence,
+            votes_ce=signals["votes_ce"],
+            votes_pe=signals["votes_pe"],
+            total_pnl=total_pnl,
+            trade_count=trade_count,
+            last_scan_detail=signals["detail"],
+        )
+
+        if direction == "WAIT" or confidence in ("LOW", "NONE"):
+            elapsed = (time.time() - scan_start) / 60
+            print(f"  ⏳ No actionable signal ({direction} | {confidence}). "
+                  f"Waiting {AUTO_V2_CONFIG['SCAN_WAIT_SEC']}s…  "
+                  f"({elapsed:.0f}/{AUTO_V2_CONFIG['SCAN_TIMEOUT_MIN']} min)")
+            time.sleep(AUTO_V2_CONFIG["SCAN_WAIT_SEC"])
+            if elapsed >= AUTO_V2_CONFIG["SCAN_TIMEOUT_MIN"]:
+                print(f"⚠️  No signal for {AUTO_V2_CONFIG['SCAN_TIMEOUT_MIN']} min — pausing 5 min")
+                time.sleep(300)
+                scan_start = time.time()
+            continue
+
+        # ── Good signal — validate instrument ────────────────────────────────
+        scan_start  = time.time()
+        instrument  = signals["instrument"]
+        ltp         = signals["ltp"]
+        lot_size    = signals["lot_size"]
+        sl_pct      = signals["sl_pct"]
+        master      = signals["master"]
+
         if not instrument or not ltp:
-            print("⚠️ No valid instrument found. Waiting 30s...")
-            time.sleep(30)
+            print(f"⚠️  No valid {direction} instrument in range ₹{min_p}–₹{max_p}. Retrying…")
+            time.sleep(AUTO_V2_CONFIG["SCAN_WAIT_SEC"])
             continue
 
         symbol   = instrument.get("internal_trading_symbol") or instrument.get("trading_symbol")
         quantity = lots * lot_size
-        print(f"✅ Selected: {symbol} | {opt_type} | LTP: ₹{ltp:.2f} | Qty: {quantity}")
 
-        # --- BUY ---
+        print(f"\n✅ SIGNAL CONFIRMED: {direction}  [{confidence}]")
+        print(f"   Option : {symbol}")
+        print(f"   LTP    : ₹{ltp:.2f}  |  Qty: {quantity}")
+        if master:
+            print(f"   MASTER : conf={master.get('confidence',0):.0f}%  "
+                  f"stop={master.get('stop',0):.1f}  "
+                  f"target={master.get('target',0):.1f}  "
+                  f"R:R={master.get('rr',0):.1f}")
+
+        # ── Optional user confirmation ────────────────────────────────────────
+        if cfg.get("user_confirmation_needed", False):
+            ans = input(f"\nProceed BUY {direction} {symbol}? (y/n): ").strip().lower()
+            if ans != "y":
+                print("Skipped.")
+                time.sleep(5)
+                continue
+
+        # ── BUY order ─────────────────────────────────────────────────────────
         try:
-            buy_resp = place_market_order_groww(instrument, quantity, "BUY", "MIS")
-            buy_order_id = buy_resp.get("payload", {}).get("groww_order_id") or buy_resp.get("groww_order_id")
-            print(f"✅ BUY order: {buy_order_id}")
-            send_telegram(f"🤖 AUTO BUY [{mode_label}]: {symbol} @ ₹{ltp:.2f} | Qty: {quantity}")
+            buy_resp     = place_market_order_groww(instrument, quantity, "BUY", "MIS")
+            buy_order_id = (buy_resp.get("payload", {}).get("groww_order_id")
+                            or buy_resp.get("groww_order_id"))
+            print(f"✅ BUY placed: {buy_order_id}")
+            send_telegram(
+                f"🤖 AUTO v2 BUY [{mode_lbl}]: {symbol} @ ₹{ltp:.2f}  "
+                f"Qty:{quantity}  [{direction}|{confidence}]"
+            )
         except Exception as e:
-            print(f"❌ BUY failed: {e}. Retrying in 10s...")
+            print(f"❌ BUY failed: {e}. Retrying in 10s…")
             time.sleep(10)
             continue
 
-        # --- Wait for BUY execution ---
+        # ── Wait for BUY execution ────────────────────────────────────────────
         if cfg.get("VALIDATE_ORDERS", True) and buy_order_id:
-            buy_status = wait_for_order_status(buy_order_id, access_token, "BUY")
-            if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                print(f"⚠️ BUY not executed ({buy_status}). Skipping trade.")
+            b_status = wait_for_order_status(buy_order_id, access_token, "BUY")
+            if b_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                print(f"⚠️  BUY not executed ({b_status}). Skipping trade.")
                 continue
             avg_price, bought_qty = get_order_executed_price(buy_order_id, access_token)
             if not avg_price:
@@ -2680,27 +3499,57 @@ def auto_mode_runner():
         else:
             avg_price, bought_qty = ltp, quantity
 
-        print(f"🎯 BUY @ ₹{avg_price:.2f} | Qty: {bought_qty}")
+        print(f"🎯 BUY executed @ ₹{avg_price:.2f}  Qty: {bought_qty}")
+        _write_auto_status(
+            "IN_TRADE",
+            mode_label=mode_lbl,
+            index=index,
+            expiry=expiry,
+            direction=direction,
+            confidence=confidence,
+            symbol=symbol,
+            entry_price=avg_price,
+            quantity=bought_qty,
+            total_pnl=total_pnl,
+            trade_count=trade_count + 1,
+        )
 
-        # --- Trailing stop monitoring ---
-        hard_sl       = round_to_nearest_5_paise(avg_price - cfg["HARD_SL_POINTS"])
+        # ── Compute SL and target ─────────────────────────────────────────────
+        # %-based SL from confidence level; target enforces R:R ≥ TARGET_MULTIPLIER
+        sl_abs     = avg_price * sl_pct
+        hard_sl    = round_to_nearest_5_paise(avg_price - sl_abs)
+        target_p   = round_to_nearest_5_paise(avg_price + sl_abs * AUTO_V2_CONFIG["TARGET_MULTIPLIER"])
+        # Also apply CONFIG's absolute hard-SL as a tighter floor
+        cfg_sl     = round_to_nearest_5_paise(avg_price - cfg["HARD_SL_POINTS"])
+        hard_sl    = max(hard_sl, cfg_sl)
+
         trail_start_p = cfg["TRAIL_START_PROFIT"]
         trail_step    = cfg["TRAIL_STEP"]
-        poll          = cfg["POLL_INTERVAL"]
-        max_time      = cfg["MAX_TRAIL_TIME"]
+        max_trade_sec = AUTO_V2_CONFIG["MAX_TRADE_MIN"] * 60
 
+        print(f"📈 SL ₹{hard_sl:.2f} ({sl_pct*100:.0f}%)  "
+              f"|  Target ₹{target_p:.2f}  "
+              f"|  Trail after +{trail_start_p}pt")
+        send_telegram(
+            f"📈 AUTO v2 — Entry ₹{avg_price:.2f}  "
+            f"SL ₹{hard_sl:.2f}  Target ₹{target_p:.2f}  [{direction}]"
+        )
+
+        # ── Monitor loop ──────────────────────────────────────────────────────
         highest_price   = avg_price
         mon_start       = time.time()
+        last_recheck    = time.time()
         last_heartbeat  = time.time()
         last_trail_exit = None
         sell_price      = avg_price
-
-        print(f"📈 Monitoring | SL: ₹{hard_sl:.2f} | Trail after +{trail_start_p}pt")
-        send_telegram(f"📈 AUTO trailing | Entry: ₹{avg_price:.2f} | SL: ₹{hard_sl:.2f}")
+        entry_dir       = direction
 
         while True:
+            # Heartbeat every 30 s
             if time.time() - last_heartbeat > 30:
-                print(f"💓 Auto monitoring... last LTP: ₹{sell_price:.2f}")
+                print(f"  💓 Monitoring {entry_dir} @ ₹{sell_price:.2f}"
+                      f"  SL:{hard_sl:.2f}  Tgt:{target_p:.2f}"
+                      f"  High:{highest_price:.2f}")
                 last_heartbeat = time.time()
 
             try:
@@ -2708,64 +3557,111 @@ def auto_mode_runner():
             except Exception:
                 time.sleep(poll)
                 continue
-
             if cur_ltp is None:
                 time.sleep(poll)
                 continue
 
-            cur_ltp = float(cur_ltp)
+            cur_ltp    = float(cur_ltp)
+            elapsed    = time.time() - mon_start
+            sell_price = cur_ltp
             sell_reason = None
 
+            # Hard SL
             if cur_ltp <= hard_sl:
-                sell_reason = f"🛑 SL HIT @ ₹{cur_ltp:.2f}"
-            elif time.time() - mon_start >= max_time:
-                sell_reason = "⏰ Max trail time reached"
-            else:
+                sell_reason = f"🛑 Hard SL hit @ ₹{cur_ltp:.2f}"
+
+            # Target hit
+            elif cur_ltp >= target_p:
+                sell_reason = f"🎯 Target hit @ ₹{cur_ltp:.2f}"
+
+            # Max trade duration
+            elif elapsed >= max_trade_sec:
+                sell_reason = (f"⏰ Max trade time ({AUTO_V2_CONFIG['MAX_TRADE_MIN']}min)"
+                               f" @ ₹{cur_ltp:.2f}")
+
+            # Market-close guard
+            elif not _within_trading_hours_auto():
+                sell_reason = f"🔔 Market closing — squaring off @ ₹{cur_ltp:.2f}"
+
+            # Signal-reversal check (every SIGNAL_RECHECK_SEC)
+            elif time.time() - last_recheck >= AUTO_V2_CONFIG["SIGNAL_RECHECK_SEC"]:
+                last_recheck = time.time()
+                fresh = _read_master_signal_latest(index)
+                if fresh:
+                    new_dir  = fresh.get("direction", "WAIT")
+                    new_conf = float(fresh.get("confidence", 0))
+                    if (new_dir not in (entry_dir, "WAIT")
+                            and new_conf >= AUTO_V2_CONFIG["MIN_MASTER_CONFIDENCE"]):
+                        sell_reason = (
+                            f"🔄 MASTER flipped to {new_dir} ({new_conf:.0f}%)"
+                            f" — exiting {entry_dir}"
+                        )
+
+            # Trailing stop (kicks in after trail_start_p profit)
+            if not sell_reason:
                 if cur_ltp > highest_price:
                     highest_price = cur_ltp
                 if highest_price >= avg_price + trail_start_p:
                     trail_exit = round_to_nearest_5_paise(highest_price - trail_step)
                     if trail_exit != last_trail_exit:
-                        print(f"📉 Trail | LTP={cur_ltp} | High={highest_price} | Exit={trail_exit}")
+                        print(f"  📉 Trail | LTP={cur_ltp:.2f}"
+                              f"  High={highest_price:.2f}  Exit={trail_exit:.2f}")
                         last_trail_exit = trail_exit
                     if cur_ltp <= trail_exit:
-                        sell_reason = f"🔻 Trail HIT @ ₹{cur_ltp:.2f}"
-
-            sell_price = cur_ltp  # keep updated for logging fallback
+                        sell_reason = f"🔻 Trail stop hit @ ₹{cur_ltp:.2f}"
 
             if sell_reason:
                 print(sell_reason)
-                play_sound_async(SOUND_SL if "SL" in sell_reason else SOUND_PROFIT)
+                is_profit = sell_price > avg_price
+                play_sound_async(SOUND_PROFIT if is_profit else SOUND_SL)
 
+                # ── SELL order ────────────────────────────────────────────────
                 try:
-                    sell_resp = place_market_order_groww(instrument, bought_qty, "SELL", "MIS")
-                    sell_order_id = sell_resp.get("payload", {}).get("groww_order_id") or sell_resp.get("groww_order_id")
-
+                    sell_resp     = place_market_order_groww(instrument, bought_qty, "SELL", "MIS")
+                    sell_order_id = (sell_resp.get("payload", {}).get("groww_order_id")
+                                     or sell_resp.get("groww_order_id"))
                     if cfg.get("VALIDATE_ORDERS", True) and sell_order_id:
-                        sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
-                        if sell_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+                        s_stat = wait_for_order_status(sell_order_id, access_token, "SELL")
+                        if s_stat in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
                             sp, sq = get_order_executed_price(sell_order_id, access_token)
                             if sp and sq:
                                 sell_price, bought_qty = sp, sq
-                    else:
-                        sell_price = cur_ltp
-                except Exception as e:
-                    print(f"❌ SELL failed: {e}")
-                    sell_price = cur_ltp
+                except Exception as ex:
+                    print(f"❌ SELL failed: {ex}")
 
-                profit = (sell_price - avg_price) * bought_qty
-                total_pnl  += profit
+                profit       = (sell_price - avg_price) * bought_qty
+                total_pnl   += profit
                 trade_count += 1
-                pnl_icon = "🟢" if profit >= 0 else "🔴"
-                print(f"{pnl_icon} Trade #{trade_count} [{mode_label}] P&L: ₹{profit:.2f} | Total: ₹{total_pnl:.2f}")
-                send_telegram(f"🤖 AUTO SELL [{mode_label}]: {symbol} @ ₹{sell_price:.2f} | P&L: ₹{profit:.2f} | Total: ₹{total_pnl:.2f}")
+                icon = "🟢" if profit >= 0 else "🔴"
+                print(f"{icon} Trade #{trade_count} [{mode_lbl}]"
+                      f"  Entry ₹{avg_price:.2f}  Exit ₹{sell_price:.2f}"
+                      f"  P&L ₹{profit:.2f}  |  Total ₹{total_pnl:.2f}")
+                send_telegram(
+                    f"🤖 AUTO v2 SELL [{mode_lbl}]: {symbol}"
+                    f" @ ₹{sell_price:.2f}  P&L: ₹{profit:.2f}"
+                    f"  Total: ₹{total_pnl:.2f}"
+                )
                 log_trade_to_excel(symbol, avg_price, sell_price, bought_qty, profit)
+                _write_auto_status(
+                    "TRADE_CLOSED",
+                    mode_label=mode_lbl,
+                    index=index,
+                    expiry=expiry,
+                    direction=direction,
+                    symbol=symbol,
+                    entry_price=avg_price,
+                    exit_price=sell_price,
+                    trade_pnl=profit,
+                    total_pnl=total_pnl,
+                    trade_count=trade_count,
+                    exit_reason=sell_reason,
+                )
                 break
 
             time.sleep(poll)
 
-        print("⏳ Cooldown 10s before next trade...")
-        time.sleep(10)
+        print("⏳ Cooldown 15s before next signal scan…")
+        time.sleep(15)
 
 
 # ----------------- Main menu -----------------
@@ -2798,7 +3694,94 @@ if __name__ == "__main__":
     print("Manual example: 20 NIFTY17MAR202623150CE")
     print("                50 SENSEX12MAR202674600CE")
     print("Directional: c (Call) / p (Put) - Auto-selects option\n")
-    
+
+    # ── Live Dashboard Command Bridge ────────────────────────────────────────
+    _BRIDGE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".prod10_bridge_cmd.json")
+    _bridge_lock = threading.Lock()
+
+    def _dashboard_bridge_watcher():
+        import json as _json
+        _hb_last = 0.0
+        while True:
+            _now = time.time()
+            if _now - _hb_last >= 60:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 [DASHBOARD] Bridge alive — idle, ready for commands")
+                _hb_last = _now
+            try:
+                if os.path.exists(_BRIDGE_FILE):
+                    with open(_BRIDGE_FILE) as _f:
+                        _data = _json.load(_f)
+                    os.remove(_BRIDGE_FILE)
+                    _cmd        = (_data.get("command") or "").strip()
+                    _mode       = _data.get("mode", "manual")
+                    _paper      = _data.get("paper", None)      # None = keep CONFIG default
+                    _mock       = bool(_data.get("mock", False))
+                    _validate   = _data.get("validate_orders", None)  # None = keep CONFIG default
+                    _atr_flag    = bool(_data.get("atr", True))   # ATR-based SL on/off
+                    _atr_src     = str(_data.get("atr_source", "candle"))  # "candle" or "scan"
+                    _quick_pts   = float(_data.get("quick_pts", 1.5))
+                    _partial     = bool(_data.get("partial", False))
+                    _partial_pct = int(_data.get("partial_pct", 50))
+                    # ── Runtime target update (no new trade, just changes target mid-run) ──
+                    if _cmd == "set_quick_pts":
+                        _new_tgt = float(_data.get("quick_pts", 0))
+                        if _new_tgt > 0:
+                            _QUICK_RUNTIME_TARGET[0] = _new_tgt
+                            print(f"\n🎯 [DASHBOARD] Runtime target update → +{_new_tgt}pt (will apply on next LTP tick)")
+                        continue
+                    if _cmd == "set_partial":
+                        _QUICK_RUNTIME_PARTIAL[0] = {
+                            "partial":     bool(_data.get("partial", False)),
+                            "partial_pct": int(_data.get("partial_pct", 50)),
+                        }
+                        print(f"\n📊 [DASHBOARD] Runtime partial update → {'ON' if _data.get('partial') else 'OFF'} {_data.get('partial_pct',50)}%")
+                        continue
+                    # auto mode needs no command string; all others require one
+                    _actionable = _cmd or _mode == "auto"
+                    if _actionable:
+                        if _bridge_lock.acquire(blocking=False):
+                            _vflag = '' if _validate is None else (' VALIDATE' if _validate else ' NO-VALIDATE')
+                            print(f"\n\n🌐 [DASHBOARD] Command received: {_cmd or '(auto)'}  (mode={_mode}{' PAPER' if _paper else ''}{' MOCK-RUN' if _mock else ''}{_vflag})")
+                            def _run(_c=_cmd, _m=_mode, _p=_paper, _mk=_mock, _v=_validate, _lk=_bridge_lock,
+                                     _af=_atr_flag, _as=_atr_src, _qp=_quick_pts,
+                                     _pt=_partial, _pp=_partial_pct):
+                                _orig       = CONFIG.get("PAPER_TRADING")
+                                _orig_mock  = CONFIG.get("MOCK_LTP_RUN", False)
+                                _orig_val   = CONFIG.get("VALIDATE_ORDERS", False)
+                                try:
+                                    if _p is not None:
+                                        CONFIG["PAPER_TRADING"] = bool(_p)
+                                    CONFIG["MOCK_LTP_RUN"] = bool(_mk)
+                                    if _v is not None:
+                                        CONFIG["VALIDATE_ORDERS"] = bool(_v)
+                                    if _m == "auto":
+                                        auto_mode_runner()
+                                    elif _m == "quick":
+                                        place_quick_order(_c, atr_based=_af, quick_pts=_qp, atr_source=_as, partial=_pt, partial_pct=_pp)
+                                    else:
+                                        place_cp_order(_c)
+                                except Exception as _exc:
+                                    import traceback as _tb
+                                    print(f"\n❌ [DASHBOARD] {_m} mode crashed: {_exc}")
+                                    _tb.print_exc()
+                                finally:
+                                    if _p is not None:
+                                        CONFIG["PAPER_TRADING"] = _orig
+                                    CONFIG["MOCK_LTP_RUN"] = _orig_mock
+                                    if _v is not None:
+                                        CONFIG["VALIDATE_ORDERS"] = _orig_val
+                                    _lk.release()
+                            threading.Thread(target=_run, daemon=True, name="DashBridge").start()
+                        else:
+                            print("\n⚠️  [DASHBOARD] Ignored — bot is already executing an order.")
+            except Exception:
+                pass
+            time.sleep(0.01)
+
+    threading.Thread(target=_dashboard_bridge_watcher, daemon=True, name="DashboardBridgeWatcher").start()
+    print("🌐 Live Dashboard bridge active — select a strike in the Dashboard and click → PROD10")
+    # ── End Bridge ───────────────────────────────────────────────────────────
+
     while True:
         mode = input("Choose mode: (m)anual / (q)uick / (d)irectional / (a)uto / (e)xit: ").strip().lower()
         if mode in ["e", "exit", "quit"]:

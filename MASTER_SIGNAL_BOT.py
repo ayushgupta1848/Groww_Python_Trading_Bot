@@ -678,6 +678,11 @@ def print_signal(
 # ══════════════════════════════════════════════════════════════
 def select_theme():
     global COLOR_CONFIG
+    env_theme = os.environ.get("BOT_THEME", "").strip()
+    if env_theme and env_theme in THEMES:
+        COLOR_CONFIG = THEMES[env_theme].copy()
+        print(f"  Theme (env): {COLOR_CONFIG['_name']}")
+        return
     print()
     print(f"  {C.CYAN}{'─'*40}{C.RESET}")
     print(f"  {C.BOLD}{C.WHITE}  Select color theme{C.RESET}")
@@ -691,6 +696,10 @@ def select_theme():
     print(f"  {C.DIM}Theme: {COLOR_CONFIG['_name']}{C.RESET}")
 
 def select_index():
+    env_index = os.environ.get("BOT_INDEX", "").strip().upper()
+    if env_index in ("NIFTY", "SENSEX"):
+        print(f"  Index (env): {env_index}")
+        return env_index
     print()
     print(f"  {C.CYAN}{'─'*40}{C.RESET}")
     print(f"  {C.BOLD}{C.WHITE}  Select index{C.RESET}")

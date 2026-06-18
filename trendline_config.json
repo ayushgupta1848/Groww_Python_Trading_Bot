@@ -1,0 +1,14 @@
+{
+  "expiry_date": "2026-06-23",
+  "premium_min": 85,
+  "premium_max": 200,
+  "lots": 18,
+  "tl_ascending_enabled": true,
+  "tl_descending_enabled": true,
+  "tl_horizontal_enabled": false,
+  "spot_confirm_enabled": false,
+  "volume_confirm_enabled": false,
+  "volume_confirm_mult": 1.3,
+  "pct_confirm_enabled": false,
+  "bounce_confirm_pct": 1
+}

@@ -1,0 +1,1 @@
+{"trade_mode": "live", "index": "NIFTY", "expiry": "2026-06-23", "lots": 18, "exit_mode": "manual", "min_premium": 90, "max_premium": 200, "atm_range": 8, "validate_orders": true, "scan_seconds": 20, "poll_seconds": 3, "choppiness_enabled": true, "consec_sl_brake": true, "HARD_SL_ATR_BASED": true, "atr_source": "scan", "min_score_filter": true, "velocity_filter": true}
