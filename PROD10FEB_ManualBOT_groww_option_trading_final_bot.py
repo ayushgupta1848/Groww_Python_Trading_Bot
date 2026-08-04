@@ -3678,6 +3678,25 @@ if __name__ == "__main__":
     _BRIDGE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".prod10_bridge_cmd.json")
     _bridge_lock = threading.Lock()
 
+    # Single-instance guard — only ONE PROD10 process may own the bridge.
+    # (2026-08-04: two live instances both consumed the same dashboard click and
+    # both placed real orders; the duplicates were only rejected by luck.)
+    _BRIDGE_OWNER_LOCK = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".prod10_bridge.lock")
+
+    def _claim_bridge_ownership():
+        """Exclusive flock held for process lifetime; auto-released on exit/crash."""
+        try:
+            import fcntl
+            fd = open(_BRIDGE_OWNER_LOCK, "w")
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fd.write(str(os.getpid()))
+            fd.flush()
+            return fd
+        except Exception:
+            return None
+
+    _bridge_owner_fd = _claim_bridge_ownership()
+
     def _dashboard_bridge_watcher():
         import json as _json
         _hb_last = 0.0
@@ -3688,9 +3707,17 @@ if __name__ == "__main__":
                 _hb_last = _now
             try:
                 if os.path.exists(_BRIDGE_FILE):
-                    with open(_BRIDGE_FILE) as _f:
+                    # Atomic claim: rename succeeds for exactly one process, so a
+                    # command can never be consumed twice even if two bots run.
+                    _claim = f"{_BRIDGE_FILE}.claimed.{os.getpid()}"
+                    try:
+                        os.rename(_BRIDGE_FILE, _claim)
+                    except OSError:
+                        time.sleep(0.01)
+                        continue  # another instance claimed it first
+                    with open(_claim) as _f:
                         _data = _json.load(_f)
-                    os.remove(_BRIDGE_FILE)
+                    os.remove(_claim)
                     _cmd        = (_data.get("command") or "").strip()
                     _mode       = _data.get("mode", "manual")
                     _paper      = _data.get("paper", None)      # None = keep CONFIG default
@@ -3758,8 +3785,17 @@ if __name__ == "__main__":
                 pass
             time.sleep(0.01)
 
-    threading.Thread(target=_dashboard_bridge_watcher, daemon=True, name="DashboardBridgeWatcher").start()
-    print("🌐 Live Dashboard bridge active — select a strike in the Dashboard and click → PROD10")
+    if _bridge_owner_fd:
+        threading.Thread(target=_dashboard_bridge_watcher, daemon=True, name="DashboardBridgeWatcher").start()
+        print("🌐 Live Dashboard bridge active — select a strike in the Dashboard and click → PROD10")
+    else:
+        try:
+            _owner_pid = open(_BRIDGE_OWNER_LOCK).read().strip() or "?"
+        except Exception:
+            _owner_pid = "?"
+        print(f"🚫 Dashboard bridge DISABLED in this instance — another PROD10 (PID {_owner_pid}) already owns it.")
+        print("   Dashboard clicks go to that instance only. Close it and restart this one to take over.")
+        send_telegram(f"⚠️ PROD10 started with bridge DISABLED — another instance (PID {_owner_pid}) owns the dashboard bridge.")
     # ── End Bridge ───────────────────────────────────────────────────────────
 
     while True:
