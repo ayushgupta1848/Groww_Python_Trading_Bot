@@ -24,3 +24,7 @@ ai_config.json
 # Heavy runtime logs
 trading_decision_engine/logs/
 logs/chart_level/
+
+# PROD10 bridge runtime files
+.prod10_bridge.lock
+.prod10_bridge_cmd.json.claimed.*
