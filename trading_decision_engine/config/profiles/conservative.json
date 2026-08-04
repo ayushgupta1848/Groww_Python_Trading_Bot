@@ -1,0 +1,24 @@
+{
+  "_comment": "CONSERVATIVE - fewer, higher-quality trades: long confirmation window, strict thresholds, extra mandatory gates (breakout + market strength must also pass Stage 1). Activate with active_profile='conservative' or --profile conservative.",
+
+  "trend_threshold": 45.0,
+  "decision_score_threshold": 90.0,
+  "min_confidence": 90.0,
+  "min_trade_quality": 90.0,
+  "min_engine_agreement": 3,
+
+  "signal_stability_min_seconds": 3.0,
+  "signal_stability_max_seconds": 5.0,
+  "signal_stability_base_seconds": 5.0,
+
+  "min_resistance_distance": 15.0,
+  "momentum_threshold": 0.03,
+  "premium_velocity_scale": 0.5,
+  "structure_double_tolerance_pct": 0.03,
+
+  "require_breakout": true,
+  "require_market_strength": true,
+
+  "max_trades_per_day": 5,
+  "cooldown_seconds": 30
+}

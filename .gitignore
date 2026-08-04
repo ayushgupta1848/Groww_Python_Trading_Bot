@@ -10,3 +10,17 @@ instrument.json
 *.log
 ai_config.json
 .chatgpt_profile/
+# Groww access-token cache (credential material)
+.groww_token.json
+.groww_token.json.lock
+.groww_token.json.tmp
+
+# macOS junk
+.DS_Store
+
+# Browser capture with live session cookies — never commit
+*.har
+
+# Heavy runtime logs
+trading_decision_engine/logs/
+logs/chart_level/

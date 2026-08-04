@@ -1,3 +1,4 @@
+flask>=3.0.0
 growwapi>=1.5.0
 openai>=1.0.0
 openpyxl>=3.1.0
@@ -6,3 +7,4 @@ playwright>=1.50.0
 pyperclip>=1.8.0
 pyotp>=2.9.0
 requests>=2.32.0
+twilio>=9.0.0

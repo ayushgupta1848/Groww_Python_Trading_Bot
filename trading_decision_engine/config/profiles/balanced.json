@@ -1,0 +1,20 @@
+{
+  "_comment": "BALANCED - the middle ground: moderate confirmation window, moderate thresholds. Calibrated for 1-min index scalping. Activate with active_profile='balanced' or --profile balanced.",
+
+  "trend_threshold": 35.0,
+  "decision_score_threshold": 75.0,
+  "min_confidence": 75.0,
+  "min_trade_quality": 75.0,
+
+  "signal_stability_min_seconds": 2.0,
+  "signal_stability_max_seconds": 4.0,
+  "signal_stability_base_seconds": 3.0,
+
+  "min_resistance_distance": 10.0,
+  "momentum_threshold": 0.02,
+  "premium_velocity_scale": 0.5,
+  "structure_double_tolerance_pct": 0.03,
+
+  "max_trades_per_day": 10,
+  "cooldown_seconds": 20
+}

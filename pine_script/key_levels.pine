@@ -1,0 +1,158 @@
+//@version=5
+// =============================================================================
+//  KEY LEVELS — Prev-Day HL + Multi-Touch Support/Resistance
+//  Dedicated companion to "TW All in One".
+//
+//  What it draws:
+//   1) Yesterday's Day High / Low / Close / Open  (the ORANGE lines you drew)
+//   2) Multi-touch S/R zones — horizontal levels that price has respected
+//      (bounced / rejected) MULTIPLE times (the GREEN lines you drew).
+//      Line thickness + label show how many touches = how strong the level is.
+//
+//  Logic for multi-touch S/R:
+//   - Detect swing pivots (highs & lows).
+//   - Cluster pivots that fall within a tolerance band into a single level.
+//   - Count how many pivots landed in that band = "touches".
+//   - Only render a level once it has >= minTouches touches.
+//   - Stronger levels (more touches) draw thicker / more opaque.
+// =============================================================================
+indicator("Key Levels — PDH/PDL + Multi-Touch S/R", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ----------------------------------------------------------------------------
+// INPUTS
+// ----------------------------------------------------------------------------
+grpPD    = "Previous Day Levels"
+showPDH  = input.bool(true,  "Show Prev Day High/Low", group=grpPD)
+showPDC  = input.bool(true,  "Show Prev Day Close",    group=grpPD)
+showPDO  = input.bool(false, "Show Prev Day Open",     group=grpPD)
+pdColHL  = input.color(color.new(color.orange, 0),  "Prev Day High/Low color", group=grpPD)
+pdColC   = input.color(color.new(color.gray, 20),   "Prev Day Close color",    group=grpPD)
+pdWidth  = input.int(2, "Prev Day line width", minval=1, maxval=5, group=grpPD)
+
+grpSR    = "Multi-Touch S/R"
+showSR       = input.bool(true, "Show multi-touch S/R", group=grpSR)
+pivLeft      = input.int(10, "Pivot lookback (left)",  minval=1, group=grpSR)
+pivRight     = input.int(10, "Pivot lookforward (right)", minval=1, group=grpSR, tooltip="Bars to the right needed to confirm a swing. Higher = fewer, stronger pivots (confirmed later).")
+minTouches   = input.int(2,  "Min touches to draw",    minval=2, maxval=10, group=grpSR, tooltip="A level is only drawn once price has tapped it this many times.")
+tolMode      = input.string("Percent", "Cluster tolerance mode", options=["Percent", "Points"], group=grpSR, tooltip="How close two pivots must be to count as the SAME level.")
+tolPct       = input.float(0.15, "Tolerance %",     minval=0.01, step=0.01, group=grpSR)
+tolPts       = input.float(20.0, "Tolerance points", minval=0.1,  step=0.5,  group=grpSR)
+maxLevels    = input.int(12, "Max levels to keep",  minval=1, maxval=50, group=grpSR)
+srColor      = input.color(color.new(color.green, 0), "S/R color", group=grpSR)
+showTouchLbl = input.bool(true, "Show touch-count label", group=grpSR)
+extendRight  = input.bool(true, "Extend levels to the right", group=grpSR)
+
+// ----------------------------------------------------------------------------
+// 1) PREVIOUS DAY HIGH / LOW / CLOSE / OPEN
+// ----------------------------------------------------------------------------
+// request.security with lookahead pulls the *completed* prior daily bar.
+pdHigh  = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
+pdLow   = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
+pdClose = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+pdOpen  = request.security(syminfo.tickerid, "D", open[1],  lookahead=barmerge.lookahead_on)
+
+plot(showPDH ? pdHigh  : na, "Prev Day High",  color=pdColHL, linewidth=pdWidth, style=plot.style_linebr)
+plot(showPDH ? pdLow   : na, "Prev Day Low",   color=pdColHL, linewidth=pdWidth, style=plot.style_linebr)
+plot(showPDC ? pdClose : na, "Prev Day Close", color=pdColC,  linewidth=1,       style=plot.style_linebr)
+plot(showPDO ? pdOpen  : na, "Prev Day Open",  color=pdColC,  linewidth=1,       style=plot.style_linebr)
+
+// Right-edge tags for the prev-day levels
+var label lblPDH = na
+var label lblPDL = na
+if barstate.islast and showPDH
+    label.delete(lblPDH)
+    label.delete(lblPDL)
+    lblPDH := label.new(bar_index, pdHigh, "PDH " + str.tostring(pdHigh, format.mintick), style=label.style_label_left, color=color.new(pdColHL, 80), textcolor=pdColHL, size=size.small)
+    lblPDL := label.new(bar_index, pdLow,  "PDL " + str.tostring(pdLow,  format.mintick), style=label.style_label_left, color=color.new(pdColHL, 80), textcolor=pdColHL, size=size.small)
+
+// ----------------------------------------------------------------------------
+// 2) MULTI-TOUCH S/R (clustered pivots)
+// ----------------------------------------------------------------------------
+// Persistent state: one entry per detected level.
+var float[] lvlPrice   = array.new_float()   // running-average price of the level
+var int[]   lvlTouches = array.new_int()      // how many pivots have hit it
+var int[]   lvlBarSeen = array.new_int()      // last bar_index a touch happened
+var line[]  lvlLine    = array.new_line()
+var label[] lvlLabel   = array.new_label()
+
+// Tolerance band (in price) for clustering
+f_tol(_p) => tolMode == "Percent" ? _p * tolPct / 100.0 : tolPts
+
+// Register a pivot price into the clustering engine
+f_register(_price) =>
+    if not na(_price)
+        int   hitIdx = -1
+        float best   = 1e20
+        n = array.size(lvlPrice)
+        if n > 0
+            for i = 0 to n - 1
+                d = math.abs(array.get(lvlPrice, i) - _price)
+                if d <= f_tol(_price) and d < best
+                    best   := d
+                    hitIdx := i
+        if hitIdx >= 0
+            // merge into existing level: touch++, price = running average
+            t   = array.get(lvlTouches, hitIdx) + 1
+            old = array.get(lvlPrice, hitIdx)
+            array.set(lvlTouches, hitIdx, t)
+            array.set(lvlPrice,   hitIdx, (old * (t - 1) + _price) / t)
+            array.set(lvlBarSeen, hitIdx, bar_index)
+        else
+            // brand new level
+            array.push(lvlPrice,   _price)
+            array.push(lvlTouches, 1)
+            array.push(lvlBarSeen, bar_index)
+            array.push(lvlLine,    na)
+            array.push(lvlLabel,   na)
+
+// Confirmed pivots (offset back by pivRight bars)
+ph = ta.pivothigh(high, pivLeft, pivRight)
+pl = ta.pivotlow(low,  pivLeft, pivRight)
+if showSR and not na(ph)
+    f_register(ph)
+if showSR and not na(pl)
+    f_register(pl)
+
+// Keep only the strongest N levels (prune weakest by touch count)
+f_prune() =>
+    while array.size(lvlPrice) > maxLevels
+        // find weakest (fewest touches; tie-break: oldest)
+        worst = 0
+        for i = 1 to array.size(lvlPrice) - 1
+            tw = array.get(lvlTouches, worst)
+            ti = array.get(lvlTouches, i)
+            if ti < tw or (ti == tw and array.get(lvlBarSeen, i) < array.get(lvlBarSeen, worst))
+                worst := i
+        line.delete(array.get(lvlLine, worst))
+        label.delete(array.get(lvlLabel, worst))
+        array.remove(lvlPrice,   worst)
+        array.remove(lvlTouches, worst)
+        array.remove(lvlBarSeen, worst)
+        array.remove(lvlLine,    worst)
+        array.remove(lvlLabel,   worst)
+
+if showSR and barstate.islast and array.size(lvlPrice) > 0
+    f_prune()
+    ext = extendRight ? extend.right : extend.none
+    for i = 0 to array.size(lvlPrice) - 1
+        t = array.get(lvlTouches, i)
+        if t >= minTouches
+            p  = array.get(lvlPrice, i)
+            bs = array.get(lvlBarSeen, i)
+            // strength -> thickness (2..5) & opacity
+            w   = math.min(5, 1 + t)
+            trp = math.max(0, 60 - t * 8)
+            col = color.new(srColor, trp)
+            ln = array.get(lvlLine, i)
+            line.delete(ln)
+            ln := line.new(bs, p, bar_index, p, color=col, width=w, extend=ext)
+            array.set(lvlLine, i, ln)
+            lb = array.get(lvlLabel, i)
+            label.delete(lb)
+            if showTouchLbl
+                lb := label.new(bar_index, p, "S/R x" + str.tostring(t) + "  " + str.tostring(p, format.mintick), style=label.style_label_left, color=color.new(srColor, 85), textcolor=srColor, size=size.small)
+                array.set(lvlLabel, i, lb)
+        else
+            // below threshold: make sure nothing is drawn for it
+            line.delete(array.get(lvlLine, i))
+            label.delete(array.get(lvlLabel, i))

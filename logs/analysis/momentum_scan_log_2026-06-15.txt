@@ -1,0 +1,118 @@
+
+#     Time        Taken   Symbol                  Scan (CE | PE)          Signal  Cons%     Vel%      Buy ₹      Sell ₹     Qty    P&L ₹          Note
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ════ BEFORE 2:30 PM ════
+
+1     09:24:18    NO      —                       CE +0.000  PE +1.269    —      —         —         —          —          —      —              Velocity too low
+2     11:19:30    NO      —                       CE +0.050  PE +0.000    —      —         —         —          —          —      —              Velocity too low
+3     11:20:52    NO      —                       CE -0.079  PE +0.000    —      —         —         —          —          —      —              No momentum signal
+4     11:22:14    NO      —                       CE -1.726  PE +0.000    —      —         —         —          —          —      —              No momentum signal
+5     11:23:36    NO      —                       CE -0.616  PE +0.000    —      —         —         —          —          —      —              No momentum signal
+6     11:24:57    NO      —                       CE +0.663  PE +0.000    —      —         —         —          —          —      —              Velocity too low
+7     11:26:19    NO      —                       CE +0.117  PE +0.000    —      —         —         —          —          —      —              Velocity too low
+8     11:27:41    NO      —                       CE —  PE —              —      —         —         —          —          —      —              —
+9     11:31:21    YES     NIFTY2661624000PE       CE -2.533  PE +1.655    PE     74%       +3.28%    118.00     118.60     1040   +624           Trail SL
+10    11:36:17    NO      —                       CE -0.023  PE +0.344    —      —         —         —          —          —      —              Velocity too low
+11    11:37:20    NO      —                       CE +0.435  PE -0.666    —      —         —         —          —          —      —              Velocity too low
+12    11:38:57    NO      —                       CE -0.109  PE +0.242    —      —         —         —          —          —      —              Velocity too low
+13    11:40:32    NO      —                       CE +0.056  PE -0.106    —      —         —         —          —          —      —              Velocity too low
+14    11:42:04    NO      —                       CE +0.283  PE -0.454    —      —         —         —          —          —      —              Velocity too low
+15    11:43:29    NO      —                       CE -0.480  PE +0.320    —      —         —         —          —          —      —              Velocity too low
+16    11:44:56    NO      —                       CE -2.675  PE +1.731    —      —         —         —          —          —      —              Velocity too low
+17    11:46:28    NO      —                       CE -0.420  PE +0.334    —      —         —         —          —          —      —              Velocity too low
+18    11:47:58    NO      —                       CE -1.324  PE +0.876    —      —         —         —          —          —      —              Velocity too low
+19    11:49:25    NO      —                       CE +0.173  PE -0.441    —      —         —         —          —          —      —              Velocity too low
+20    11:50:55    NO      —                       CE +0.365  PE -0.435    —      —         —         —          —          —      —              Velocity too low
+21    11:52:24    NO      —                       CE -0.944  PE +0.641    —      —         —         —          —          —      —              Velocity too low
+22    11:53:50    NO      —                       CE -1.854  PE +0.967    —      —         —         —          —          —      —              Velocity too low
+23    11:55:15    NO      —                       CE +0.234  PE +0.100    —      —         —         —          —          —      —              Velocity too low
+24    11:56:41    NO      —                       CE -0.518  PE +0.150    —      —         —         —          —          —      —              Velocity too low
+25    11:58:07    NO      —                       CE -1.641  PE +1.076    —      —         —         —          —          —      —              Velocity too low
+26    11:59:35    NO      —                       CE +0.472  PE -0.750    —      —         —         —          —          —      —              Velocity too low
+27    12:01:07    NO      —                       CE -0.733  PE +0.352    —      —         —         —          —          —      —              Velocity too low
+28    12:02:37    NO      —                       CE -0.727  PE +0.893    —      —         —         —          —          —      —              Velocity too low
+29    12:04:08    NO      —                       CE -0.736  PE +0.579    —      —         —         —          —          —      —              Velocity too low
+30    12:05:38    NO      —                       CE -1.968  PE +1.616    —      —         —         —          —          —      —              Velocity too low
+31    12:06:49    NO      —                       CE -1.008  PE +0.781    —      —         —         —          —          —      —              Velocity too low
+32    12:08:21    NO      —                       CE -0.357  PE +0.287    —      —         —         —          —          —      —              Velocity too low
+33    12:09:27    NO      —                       CE -0.679  PE +0.570    —      —         —         —          —          —      —              Velocity too low
+34    12:10:54    NO      —                       CE +0.392  PE -0.325    —      —         —         —          —          —      —              Velocity too low
+35    12:12:21    NO      —                       CE -0.973  PE +0.726    —      —         —         —          —          —      —              Velocity too low
+36    12:13:52    YES     NIFTY2661623950PE       CE -1.918  PE +0.670    PE     58%       +1.39%    105.70     106.25     1040   +572           Trail SL
+37    12:17:43    NO      —                       CE +0.517  PE -0.801    —      —         —         —          —          —      —              Velocity too low
+38    12:19:13    NO      —                       CE -0.006  PE +0.090    —      —         —         —          —          —      —              Velocity too low
+39    12:20:17    NO      —                       CE +0.175  PE -0.012    —      —         —         —          —          —      —              Score too weak (CE +0.175)
+40    12:21:47    NO      —                       CE -0.016  PE -0.039    —      —         —         —          —          —      —              No momentum signal
+41    12:23:14    NO      —                       CE +0.077  PE -0.074    —      —         —         —          —          —      —              Score too weak (CE +0.077)
+42    12:24:40    NO      —                       CE -0.372  PE +0.181    —      —         —         —          —          —      —              Score too weak (PE +0.181)
+43    12:26:10    YES     NIFTY2661623800CE       CE +0.559  PE -1.034    CE     63%       +1.21%    162.80     163.90     1040   +1,144         Quick Target
+44    12:29:39    NO      —                       CE -0.290  PE -0.084    —      —         —         —          —          —      —              No momentum signal
+45    12:31:11    YES     NIFTY2661624000PE       CE -1.490  PE +1.551    PE     58%       +3.46%    161.45     152.75     1040   -9,048         ⛔ HARD SL
+46    12:36:39    YES     NIFTY2661624050PE       CE -0.727  PE +0.326    PE     47%↓      +1.01%    180.55     182.20     1040   +1,716         Quick Target
+47    12:39:15    YES     NIFTY2661623900PE       CE -0.568  PE +0.807    PE     58%       +2.02%    93.45      94.65      1040   +1,248         Quick Target
+48    12:41:53    YES     NIFTY2661623900CE       CE +1.140  PE -1.513    CE     53%↓      +2.56%    102.35     103.90     1040   +1,612         Quick Target
+49    12:47:10    YES     NIFTY2661623850CE       CE +0.284  PE -0.733    CE     42%⚠      +0.80%    133.05     133.40     1040   +364           Trail SL
+50    12:50:02    YES     NIFTY2661623800CE       CE +1.062  PE -1.692    CE     63%       +1.97%    160.65     164.25     1040   +3,744         Trail SL
+51    12:52:56    YES     NIFTY2661623950PE       CE -1.212  PE +1.210    PE     58%       +2.44%    121.85     123.50     1040   +1,716         Trail SL
+52    12:54:37    YES     NIFTY2661623900CE       CE +0.638  PE -1.259    CE     53%↓      +1.34%    105.60     107.10     1170   +1,755         Trail SL
+53    12:58:20    NO      —                       CE +0.226  PE -0.192    —      —         —         —          —          —      —              Score too weak (CE +0.226)
+54    12:59:50    YES     NIFTY2661624050PE       CE -1.366  PE +1.040    PE     63%       +2.23%    188.10     192.25     1170   +4,855         Trail SL
+55    13:03:53    YES     NIFTY2661624000PE       CE -0.454  PE +0.490    PE     53%↓      +1.34%    154.70     155.00     1170   +351           Trail SL
+56    13:08:30    YES     NIFTY2661623900CE       CE +0.756  PE -1.473    CE     53%↓      +1.95%    107.35     112.80     1170   +6,376         Trail SL
+57    13:12:07    NO      —                       CE -0.270  PE +0.075    —      —         —         —          —          —      —              Score too weak (PE +0.075)
+58    13:13:45    YES     NIFTY2661623950CE       CE +0.330  PE -0.572    CE     47%↓      +2.42%    88.95      89.15      1170   +234           Trail SL
+59    13:16:27    YES     NIFTY2661623800CE       CE +0.553  PE -0.448    CE     58%       +1.53%    169.00     175.10     1170   +7,137         Trail SL
+60    13:19:32    YES     NIFTY2661623750CE       CE +0.306  PE -0.146    CE     47%↓      +0.80%    195.90     198.55     1170   +3,100         Trail SL
+61    13:22:31    YES     NIFTY2661623850CE       CE +0.483  PE -1.450    CE     56%       +1.01%    135.05     136.25     1170   +1,404         Trail SL
+62    13:26:01    YES     NIFTY2661623950PE       CE -0.520  PE +0.392    PE     53%↓      +1.29%    109.95     109.80     1170   -175           Trail SL
+63    13:28:49    YES     NIFTY2661623800CE       CE +0.724  PE -1.252    CE     63%       +1.63%    —          —          —      —              —
+64    13:29:24    YES     NIFTY2661623850CE       CE +0.539  PE -1.530    CE     40%⚠      +2.23%    —          —          —      —              —
+65    13:29:55    NO      —                       CE —  PE —              —      —         —         —          —          —      —              —
+66    13:30:00    YES     NIFTY2661623900CE       CE +0.288  PE +0.119    CE     47%↓      +1.01%    —          —          —      —              —
+67    13:30:30    NO      —                       CE —  PE —              —      —         —         —          —          —      —              —
+68    13:31:37    NO      —                       CE -0.358  PE +0.015    —      —         —         —          —          —      —              Score too weak (PE +0.015)
+69    13:33:16    YES     NIFTY2661623950PE       CE -0.874  PE +0.619    PE     42%⚠      +1.82%    114.55     115.05     1170   +585           Trail SL
+70    13:36:48    YES     NIFTY2661624050PE       CE -0.493  PE +0.651    PE     58%       +1.56%    179.00     180.75     1170   +2,047         Trail SL
+71    13:39:50    YES     NIFTY2661623950PE       CE -0.818  PE +0.698    PE     58%       +2.42%    118.60     128.15     1170   +11,173        Trail SL
+72    13:43:47    YES     NIFTY2661624000PE       CE -1.547  PE +0.476    PE     58%       +1.02%    148.25     152.45     1170   +4,914         Trail SL
+73    13:46:42    NO      —                       CE -0.031  PE +0.161    —      —         —         —          —          —      —              Score too weak (PE +0.161)
+74    13:48:16    YES     NIFTY2661623900CE       CE +0.589  PE -1.103    CE     63%       +1.15%    100.80     —          1170   —              Bot restarted / no exit data
+75    13:51:40    NO      —                       CE —  PE —              —      —         —         —          —          —      —              —
+76    13:51:51    YES     NIFTY2661623900PE       CE -2.036  PE +1.535    PE     47%↓      +4.96%    105.70     107.10     1170   +1,638         Trail SL
+77    13:54:50    YES     NIFTY2661624000PE       CE -0.936  PE +0.862    PE     68%       +1.80%    155.85     146.25     1170   -11,232        ⛔ HARD SL
+78    13:59:00    YES     NIFTY2661623850CE       CE +0.608  PE -0.748    CE     53%↓      +1.79%    133.70     135.15     1170   +1,696         Trail SL
+79    14:01:49    YES     NIFTY2661623950PE       CE -2.831  PE +2.211    PE     63%       +4.80%    107.00     109.75     1170   +3,217         Trail SL
+80    14:04:08    YES     NIFTY2661624000PE       CE -1.197  PE +0.452    PE     44%⚠      +1.35%    139.05     140.85     65     +61            Trail SL
+81    14:07:06    YES     NIFTY2661624000PE       CE -0.790  PE +0.627    PE     53%↓      +2.11%    147.30     148.05     65     +48            Trail SL
+82    14:10:13    YES     NIFTY2661623800CE       CE +0.366  PE -0.429    CE     53%↓      +0.99%    153.20     153.60     65     +26            Trail SL
+83    14:13:51    YES     NIFTY2661624050PE       CE -1.087  PE +0.775    PE     53%↓      +1.63%    186.90     —          65     —              Bot restarted / no exit data
+84    14:17:22    YES     NIFTY2661623800CE       CE +0.450  PE -0.923    CE     53%↓      +1.29%    157.00     156.80     65     -13            Trail SL
+85    14:20:10    YES     NIFTY2661623950PE       CE -0.493  PE +0.478    PE     53%↓      +1.20%    109.65     —          65     —              Bot restarted / no exit data
+86    14:21:24    NO      —                       CE —  PE —              —      —         —         —          —          —      —              —
+87    14:29:24    YES     NIFTY2661623900CE       CE +1.164  PE -2.153    CE     53%↓      +3.51%    103.05     104.35     65     +162           Trail SL
+
+  ════ AFTER 2:30 PM ← losses here ════
+
+88    14:31:28    YES     NIFTY2661624000PE       CE -2.839  PE +1.664    PE     53%↓      +4.00%    126.00     116.30     1170   -11,349        ⛔ HARD SL
+89    14:34:43    YES     NIFTY2661623800CE       CE +1.262  PE -2.144    CE     63%       +2.36%    184.45     188.70     1170   +4,972         Trail SL
+90    14:37:19    YES     NIFTY2661623950PE       CE -0.618  PE +0.764    PE     42%⚠      +2.92%    93.50      93.50      1170   +0             Trail SL
+91    14:40:18    YES     NIFTY2661623900CE       CE +0.315  PE -0.641    CE     32%⚠      +1.21%    112.80     104.00     1170   -10,296        ⛔ HARD SL
+92    14:44:15    YES     NIFTY2661623900CE       CE +0.317  PE -0.128    CE     53%↓      +1.09%    106.80     109.60     1170   +3,276         Trail SL
+93    14:50:48    YES     NIFTY2661623950PE       CE -6.845  PE +6.345    PE     63%       +12.18%   117.45     108.90     1170   -10,003        ⛔ HARD SL
+94    14:54:17    YES     NIFTY2661624000PE       CE -0.807  PE +0.975    PE     53%↓      +2.84%    146.75     144.70     1170   -2,398         Trail SL
+95    14:57:11    NO      —                       CE +0.070  PE -0.029    —      —         —         —          —          —      —              Score too weak (CE +0.070)
+96    14:58:43    YES     NIFTY2661623950PE       CE -4.101  PE +3.152    PE     47%↓      +8.06%    124.05     115.70     1170   -9,769         ⛔ HARD SL
+97    15:02:06    YES     NIFTY2661624000PE       CE -1.287  PE +1.104    PE     53%↓      +2.96%    151.35     155.55     1170   +4,914         Trail SL
+98    15:04:56    YES     NIFTY2661623950PE       CE -2.185  PE +1.663    PE     47%↓      +3.83%    124.75     124.90     1170   +175           Trail SL
+99    15:08:13    YES     NIFTY2661623850CE       CE +1.391  PE -2.408    CE     58%       +3.58%    99.90      —          1170   —              Bot restarted / no exit data
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  Legend:  ⚠ = consistency < 45% (poor)  |  ↓ = consistency < 55% (below config threshold)  |  ⛔ = Hard SL hit
+
+  ── CONSISTENCY FLAGS IN TRADED SIGNALS ──
+  >=70%         trades=1  wins=1  hard_sl=0  P&L=₹+624
+  55-69%        trades=16  wins=13  hard_sl=3  P&L=₹+17,860
+  45-54% ↓      trades=20  wins=15  hard_sl=2  P&L=₹+3,375
+  <45%  ⚠       trades=5  wins=3  hard_sl=1  P&L=₹-9,286

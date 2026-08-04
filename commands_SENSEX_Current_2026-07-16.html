@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SENSEX Commands - Current_2026-07-16</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            font-size: 14px;
+        }
+        h2, h3 { margin: 4px 0; }
+        /* Classic option-chain layout: CE ── strike ── PE */
+        .row { display: flex; align-items: center; margin: 3px 0; }
+        .ce-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            padding-right: 14px;
+        }
+        .strike-col {
+            width: 100px;
+            text-align: center;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .pe-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            padding-left: 14px;
+        }
+        .ce { color: #0dc710; font-weight: bold; }
+        .pe { color: #e51717; font-weight: bold; }
+        .spot { color: #ffd700; font-weight: bold; }
+        .dim { color: #555; }
+        .sep { color: #444; }
+        .copy-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #777;
+            cursor: pointer;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            line-height: 1.4;
+            flex-shrink: 0;
+        }
+        .copy-btn:hover { color: #ccc; border-color: #aaa; }
+        .copy-btn.copied { color: #0dc710; border-color: #0dc710; }
+    </style>
+    <script>
+    function cp(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '✓';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+        });
+    }
+    </script>
+</head>
+<body>
+<h2>SENSEX Option Commands — Current_2026-07-16</h2>
+<h3 style="color:#ffd700">Spot: 77535.51</h3>
+<br>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202675500CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">75500</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675500PE', this)">📋</button><span class="dim">50 SENSEX16JUL202675500PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202675600CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675600CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">75600</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675600PE', this)">📋</button><span class="dim">50 SENSEX16JUL202675600PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202675700CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675700CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">75700</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675700PE', this)">📋</button><span class="dim">50 SENSEX16JUL202675700PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202675800CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675800CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">75800</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675800PE', this)">📋</button><span class="dim">50 SENSEX16JUL202675800PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202675900CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675900CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">75900</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202675900PE', this)">📋</button><span class="dim">50 SENSEX16JUL202675900PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202676000CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676000CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">76000</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676000PE', this)">📋</button><span class="dim">50 SENSEX16JUL202676000PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202676100CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676100CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">76100</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676100PE', this)">📋</button><span class="dim">50 SENSEX16JUL202676100PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202676200CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">76200</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676200PE', this)">📋</button><span class="dim">50 SENSEX16JUL202676200PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202676300CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676300CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">76300</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676300PE', this)">📋</button><span class="dim">50 SENSEX16JUL202676300PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202676400CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676400CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">76400</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676400PE', this)">📋</button><span class="dim">50 SENSEX16JUL202676400PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202676500CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">76500</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676500PE', this)">📋</button><span class="dim">50 SENSEX16JUL202676500PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202676600CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676600CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;76600&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676600PE', this)">📋</button><span class="pe">50 SENSEX16JUL202676600PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202676700CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676700CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;76700&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676700PE', this)">📋</button><span class="pe">50 SENSEX16JUL202676700PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202676800CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676800CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;76800&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676800PE', this)">📋</button><span class="pe">50 SENSEX16JUL202676800PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202676900CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676900CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;76900&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202676900PE', this)">📋</button><span class="pe">50 SENSEX16JUL202676900PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677000CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677000CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77000&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677000PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677000PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677100CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677100CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77100&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677100PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677100PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677200CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77200&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677200PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677200PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677300CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677300CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77300&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677300PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677300PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677400CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677400CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77400&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677400PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677400PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677500CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="spot">77500 📍</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677500PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677500PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677600CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677600CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77600&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677600PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677600PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677700CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677700CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77700&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677700PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677700PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677800CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677800CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77800&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677800PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677800PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202677900CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677900CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;77900&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202677900PE', this)">📋</button><span class="pe">50 SENSEX16JUL202677900PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202678000CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678000CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;78000&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678000PE', this)">📋</button><span class="pe">50 SENSEX16JUL202678000PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202678100CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678100CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;78100&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678100PE', this)">📋</button><span class="pe">50 SENSEX16JUL202678100PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202678200CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;78200&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678200PE', this)">📋</button><span class="pe">50 SENSEX16JUL202678200PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202678300CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678300CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;78300&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678300PE', this)">📋</button><span class="pe">50 SENSEX16JUL202678300PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202678400CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678400CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;78400&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678400PE', this)">📋</button><span class="pe">50 SENSEX16JUL202678400PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">50 SENSEX16JUL202678500CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;78500&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678500PE', this)">📋</button><span class="pe">50 SENSEX16JUL202678500PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202678600CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678600CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">78600</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678600PE', this)">📋</button><span class="dim">50 SENSEX16JUL202678600PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202678700CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678700CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">78700</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678700PE', this)">📋</button><span class="dim">50 SENSEX16JUL202678700PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202678800CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678800CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">78800</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678800PE', this)">📋</button><span class="dim">50 SENSEX16JUL202678800PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202678900CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678900CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">78900</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202678900PE', this)">📋</button><span class="dim">50 SENSEX16JUL202678900PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202679000CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679000CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">79000</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679000PE', this)">📋</button><span class="dim">50 SENSEX16JUL202679000PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202679100CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679100CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">79100</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679100PE', this)">📋</button><span class="dim">50 SENSEX16JUL202679100PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202679200CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">79200</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679200PE', this)">📋</button><span class="dim">50 SENSEX16JUL202679200PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202679300CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679300CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">79300</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679300PE', this)">📋</button><span class="dim">50 SENSEX16JUL202679300PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202679400CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679400CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">79400</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679400PE', this)">📋</button><span class="dim">50 SENSEX16JUL202679400PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">50 SENSEX16JUL202679500CE</span><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">79500</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('50 SENSEX16JUL202679500PE', this)">📋</button><span class="dim">50 SENSEX16JUL202679500PE</span></span></div>
+</body>
+</html>

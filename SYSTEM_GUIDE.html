@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groww Trading Framework — System Guide</title>
+<style>
+:root {
+  --ground:   #080c14;
+  --surface:  #0d1421;
+  --surface2: #121928;
+  --surface3: #1a2438;
+  --text:     #c4d4e8;
+  --dim:      #4a6480;
+  --dim2:     #2a3e58;
+  --accent:   #f0a020;
+  --data:     #38c4f0;
+  --bull:     #38d98a;
+  --bear:     #f05050;
+  --purple:   #a78bfa;
+  --pink:     #f472b6;
+  --border:   rgba(100,160,220,.09);
+  --mono: 'Courier New', Courier, monospace;
+  --sans: system-ui,-apple-system,'Segoe UI',Helvetica,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.75;
+  overflow-x:hidden;
+}
+
+/* ── NAV ─────────────────────────────────────── */
+nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(8,12,20,.92);
+  border-bottom:1px solid var(--border);
+  backdrop-filter:blur(12px);
+  display:flex;align-items:center;gap:0;
+  padding:0 28px;
+  overflow-x:auto;
+}
+nav a{
+  color:var(--dim);
+  text-decoration:none;
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  padding:14px 16px;
+  border-bottom:2px solid transparent;
+  white-space:nowrap;
+  transition:color .2s,border-color .2s;
+}
+nav a:hover,nav a.active{color:var(--accent);border-bottom-color:var(--accent);}
+.nav-brand{
+  font-family:var(--mono);font-size:11px;font-weight:700;
+  color:var(--accent);letter-spacing:2px;
+  padding:14px 0;margin-right:20px;white-space:nowrap;
+  border-right:1px solid var(--border);padding-right:20px;
+}
+
+/* ── HERO ────────────────────────────────────── */
+.hero{
+  padding:72px 28px 56px;
+  max-width:1200px;margin:0 auto;
+}
+.hero-eyebrow{
+  font-family:var(--mono);font-size:10px;letter-spacing:2.5px;
+  color:var(--accent);text-transform:uppercase;margin-bottom:20px;
+  display:flex;align-items:center;gap:10px;
+}
+.hero-eyebrow::before{
+  content:'';display:inline-block;width:28px;height:1px;background:var(--accent);
+}
+h1{
+  font-family:var(--mono);
+  font-size:clamp(28px,4vw,52px);
+  font-weight:700;
+  color:#fff;
+  letter-spacing:-1px;
+  line-height:1.1;
+  margin-bottom:20px;
+}
+h1 em{font-style:normal;color:var(--accent);}
+.hero-sub{
+  font-size:16px;line-height:1.7;color:var(--dim);
+  max-width:580px;margin-bottom:40px;
+}
+.stat-bar{
+  display:flex;flex-wrap:wrap;gap:0;
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+  max-width:780px;
+}
+.stat{
+  padding:16px 24px;
+  border-right:1px solid var(--border);
+  flex:1;min-width:120px;
+}
+.stat:last-child{border-right:none;}
+.stat-n{
+  font-family:var(--mono);font-size:26px;font-weight:700;
+  color:var(--accent);line-height:1;display:block;
+}
+.stat-l{
+  font-size:10px;letter-spacing:1px;color:var(--dim);
+  text-transform:uppercase;margin-top:4px;display:block;
+}
+
+/* ── SECTION WRAPPER ─────────────────────────── */
+section{
+  max-width:1200px;margin:0 auto;
+  padding:56px 28px;
+  border-top:1px solid var(--border);
+}
+.section-head{
+  display:flex;align-items:baseline;gap:16px;margin-bottom:36px;
+}
+.section-eye{
+  font-family:var(--mono);font-size:9px;letter-spacing:2px;
+  color:var(--accent);text-transform:uppercase;white-space:nowrap;
+}
+h2{
+  font-family:var(--mono);font-size:20px;font-weight:700;
+  color:#fff;letter-spacing:-.5px;
+}
+h3{font-family:var(--mono);font-size:13px;font-weight:700;color:#fff;letter-spacing:.5px;}
+
+/* ── ARCHITECTURE DIAGRAM ─────────────────────── */
+.arch-wrapper{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:28px;
+  overflow-x:auto;
+}
+.arch-layer{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:12px;
+  position:relative;
+}
+.arch-layer:last-child{margin-bottom:0;}
+.arch-label{
+  font-family:var(--mono);font-size:9px;letter-spacing:1.5px;
+  text-transform:uppercase;width:80px;flex-shrink:0;
+  text-align:right;padding-right:12px;
+  border-right:1px solid var(--border);
+}
+.arch-nodes{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1;
+}
+.node{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.8px;text-transform:uppercase;
+  padding:7px 12px;
+  border-radius:5px;
+  border:1px solid;
+  white-space:nowrap;
+  position:relative;
+  cursor:default;
+  transition:transform .15s;
+}
+.node:hover{transform:translateY(-2px);}
+.node.data-node{
+  background:rgba(240,160,32,.08);border-color:rgba(240,160,32,.4);color:var(--accent);
+}
+.node.analysis-node{
+  background:rgba(56,196,240,.08);border-color:rgba(56,196,240,.35);color:var(--data);
+}
+.node.signal-node{
+  background:rgba(167,139,250,.08);border-color:rgba(167,139,250,.35);color:var(--purple);
+}
+.node.exec-node{
+  background:rgba(56,217,138,.08);border-color:rgba(56,217,138,.35);color:var(--bull);
+}
+.node.intel-node{
+  background:rgba(244,114,182,.08);border-color:rgba(244,114,182,.35);color:var(--pink);
+}
+.node.dash-node{
+  background:rgba(240,160,32,.15);border-color:var(--accent);color:var(--accent);
+  box-shadow:0 0 20px rgba(240,160,32,.15);
+}
+.arch-arrow{
+  font-family:var(--mono);font-size:18px;color:var(--dim2);
+  text-align:center;padding:4px 0;
+  width:80px;flex-shrink:0;
+}
+.arch-arrow-col{
+  display:flex;flex-direction:column;align-items:center;
+  width:80px;flex-shrink:0;
+}
+/* Animated flow dots */
+.flow-line{
+  position:relative;width:1px;
+  background:var(--border);
+  overflow:hidden;
+}
+.flow-dot{
+  position:absolute;width:3px;height:16px;
+  background:var(--accent);
+  border-radius:2px;
+  left:-1px;top:-20px;
+  animation:flowDown 2.5s linear infinite;
+  box-shadow:0 0 6px var(--accent);
+}
+@keyframes flowDown{
+  0%{top:-20px;opacity:0}
+  10%{opacity:1}
+  90%{opacity:1}
+  100%{top:100%;opacity:0}
+}
+.arch-connector{
+  display:flex;align-items:center;margin-left:92px;margin-bottom:12px;
+}
+.conn-line{width:100%;height:1px;background:var(--border);position:relative;overflow:hidden;}
+.conn-pulse{
+  position:absolute;height:1px;width:60px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  animation:pulse 3s linear infinite;
+}
+@keyframes pulse{from{left:-60px}to{left:100%}}
+
+/* ── FLOW PIPELINE ───────────────────────────── */
+.pipeline{display:flex;flex-direction:column;gap:0;}
+.pipe-step{
+  display:flex;gap:24px;align-items:flex-start;
+  padding:24px 0;
+  border-bottom:1px solid var(--border);
+}
+.pipe-step:last-child{border-bottom:none;}
+.pipe-num{
+  font-family:var(--mono);font-size:32px;font-weight:700;
+  color:var(--dim2);line-height:1;flex-shrink:0;width:52px;text-align:right;
+}
+.pipe-body{flex:1;}
+.pipe-title{
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  color:var(--accent);letter-spacing:1px;text-transform:uppercase;
+  margin-bottom:6px;
+}
+.pipe-desc{font-size:13px;color:var(--text);line-height:1.6;}
+.pipe-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.tag{
+  font-family:var(--mono);font-size:9px;letter-spacing:.8px;
+  padding:3px 8px;border-radius:3px;
+  border:1px solid var(--border);color:var(--dim);
+  text-transform:uppercase;
+}
+.tag.accent{border-color:rgba(240,160,32,.4);color:var(--accent);background:rgba(240,160,32,.06);}
+.tag.data{border-color:rgba(56,196,240,.35);color:var(--data);background:rgba(56,196,240,.06);}
+.tag.bull{border-color:rgba(56,217,138,.35);color:var(--bull);background:rgba(56,217,138,.06);}
+
+/* ── BOT CARDS ───────────────────────────────── */
+.bot-category{
+  font-family:var(--mono);font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:20px;padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+}
+.bots-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+  gap:16px;
+  margin-bottom:40px;
+}
+.bot-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:20px;
+  display:flex;flex-direction:column;gap:12px;
+  transition:border-color .2s;
+}
+.bot-card:hover{border-color:rgba(100,160,220,.2);}
+.bot-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.bot-name{
+  font-family:var(--mono);font-size:11px;font-weight:700;
+  letter-spacing:.8px;color:#fff;
+}
+.bot-badge{
+  font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  padding:3px 7px;border-radius:3px;text-transform:uppercase;
+  flex-shrink:0;
+}
+.badge-data{background:rgba(240,160,32,.12);color:var(--accent);border:1px solid rgba(240,160,32,.3);}
+.badge-analysis{background:rgba(56,196,240,.1);color:var(--data);border:1px solid rgba(56,196,240,.25);}
+.badge-signal{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.25);}
+.badge-exec{background:rgba(56,217,138,.1);color:var(--bull);border:1px solid rgba(56,217,138,.25);}
+.badge-intel{background:rgba(244,114,182,.1);color:var(--pink);border:1px solid rgba(244,114,182,.25);}
+.bot-desc{font-size:12px;color:var(--dim);line-height:1.6;}
+.bot-meta{display:flex;flex-direction:column;gap:6px;}
+.bot-row{display:flex;gap:8px;font-size:11px;}
+.bot-row-key{
+  font-family:var(--mono);font-size:9px;letter-spacing:1px;
+  color:var(--dim2);text-transform:uppercase;width:50px;flex-shrink:0;padding-top:1px;
+}
+.bot-row-val{color:var(--text);font-family:var(--mono);font-size:10px;line-height:1.5;word-break:break-word;}
+.bot-row-val .path{color:var(--accent);opacity:.8;}
+.bot-row-val .api{color:var(--data);}
+.config-list{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:10px 12px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.cfg{font-family:var(--mono);font-size:9px;color:var(--dim);}
+.cfg span{color:var(--text);}
+
+/* ── DASHBOARD TABS ──────────────────────────── */
+.tab-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+  gap:14px;
+}
+.tab-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:18px 20px;
+}
+.tab-card-head{
+  font-family:var(--mono);font-size:11px;font-weight:700;
+  color:#fff;margin-bottom:10px;
+  display:flex;align-items:center;gap:8px;
+}
+.tab-icon{font-size:14px;}
+.tab-features{list-style:none;display:flex;flex-direction:column;gap:5px;}
+.tab-features li{
+  font-size:11px;color:var(--dim);padding-left:12px;position:relative;
+}
+.tab-features li::before{
+  content:'→';position:absolute;left:0;color:var(--dim2);
+  font-family:var(--mono);font-size:10px;
+}
+
+/* ── PROS / CONS ─────────────────────────────── */
+.pros-cons{
+  display:grid;grid-template-columns:1fr 1fr;gap:20px;
+}
+@media(max-width:680px){.pros-cons{grid-template-columns:1fr;}}
+.pc-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:22px;
+}
+.pc-title{
+  font-family:var(--mono);font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:16px;padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.pc-title.pro{color:var(--bull);}
+.pc-title.con{color:var(--bear);}
+.pc-list{list-style:none;display:flex;flex-direction:column;gap:12px;}
+.pc-list li{font-size:12px;color:var(--text);padding-left:20px;position:relative;line-height:1.55;}
+.pc-list.pro li::before{content:'✓';position:absolute;left:0;color:var(--bull);font-weight:700;}
+.pc-list.con li::before{content:'✗';position:absolute;left:0;color:var(--bear);}
+.pc-list li strong{color:#fff;}
+
+/* ── MATRIX ──────────────────────────────────── */
+.matrix-table{
+  width:100%;border-collapse:collapse;
+  font-family:var(--mono);font-size:10px;
+}
+.matrix-table th{
+  background:var(--surface2);color:var(--dim);
+  letter-spacing:1px;text-transform:uppercase;
+  padding:10px 14px;text-align:left;
+  border:1px solid var(--border);font-size:9px;
+}
+.matrix-table td{
+  padding:9px 14px;border:1px solid var(--border);
+  vertical-align:top;color:var(--text);font-size:10px;
+}
+.matrix-table tr:nth-child(even) td{background:rgba(255,255,255,.015);}
+.dot-on{color:var(--bull);font-size:14px;line-height:1;}
+.dot-off{color:var(--dim2);font-size:14px;line-height:1;}
+.scenario{color:var(--accent);font-weight:700;}
+
+/* ── TRADE MODES ─────────────────────────────── */
+.modes-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:14px;
+}
+.mode-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:20px;
+}
+.mode-name{
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  color:#fff;margin-bottom:6px;
+}
+.mode-badge-wrap{margin-bottom:10px;}
+.mode-desc{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:12px;}
+.mode-steps{
+  list-style:none;counter-reset:step;
+  display:flex;flex-direction:column;gap:5px;
+}
+.mode-steps li{
+  font-size:11px;color:var(--text);
+  padding-left:20px;position:relative;counter-increment:step;
+}
+.mode-steps li::before{
+  content:counter(step);
+  position:absolute;left:0;
+  font-family:var(--mono);font-size:9px;
+  color:var(--dim);width:14px;text-align:right;
+}
+
+/* ── MISC UTILS ──────────────────────────────── */
+.divider{height:1px;background:var(--border);margin:4px 0;}
+.accent{color:var(--accent);}
+.data-c{color:var(--data);}
+.bull-c{color:var(--bull);}
+.bear-c{color:var(--bear);}
+.mono{font-family:var(--mono);}
+code{
+  font-family:var(--mono);font-size:10px;
+  background:var(--surface2);color:var(--accent);
+  padding:1px 5px;border-radius:3px;
+}
+
+/* ── REDUCED MOTION ──────────────────────────── */
+@media(prefers-reduced-motion:reduce){
+  .flow-dot,.conn-pulse{animation:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAV ─────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-brand">GROWW&nbsp;BOT</div>
+  <a href="#architecture">Architecture</a>
+  <a href="#flow">Signal Flow</a>
+  <a href="#bots">All Bots</a>
+  <a href="#dashboard">Dashboard</a>
+  <a href="#modes">Trade Modes</a>
+  <a href="#pros">Advantages</a>
+  <a href="#cons">Disadvantages</a>
+  <a href="#matrix">Quick Start</a>
+</nav>
+
+<!-- ── HERO ─────────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="hero-eyebrow">Complete System Guide</div>
+  <h1>The Groww Options<br>Trading <em>Framework</em></h1>
+  <p class="hero-sub">A modular, multi-bot signal intelligence system for NIFTY, SENSEX, and BANKNIFTY options — built on the Groww API. Seventeen components that observe, analyze, signal, and execute. This guide covers every one.</p>
+  <div class="stat-bar">
+    <div class="stat"><span class="stat-n">17</span><span class="stat-l">Active Components</span></div>
+    <div class="stat"><span class="stat-n accent">5</span><span class="stat-l">Signal Layers</span></div>
+    <div class="stat"><span class="stat-n data-c">4</span><span class="stat-l">Auto-Traders</span></div>
+    <div class="stat"><span class="stat-n bull-c">1</span><span class="stat-l">Live Dashboard</span></div>
+    <div class="stat"><span class="stat-n" style="color:var(--purple)">∞</span><span class="stat-l">Self-Tuning Loop</span></div>
+  </div>
+</div>
+
+<!-- ── ARCHITECTURE ─────────────────────────────────────────────── -->
+<section id="architecture">
+  <div class="section-head">
+    <span class="section-eye">§ 01</span>
+    <h2>System Architecture</h2>
+  </div>
+  <p style="color:var(--dim);font-size:13px;margin-bottom:24px;max-width:680px;">Every bot belongs to a layer. Data flows top-to-bottom. The dashboard reads all layers simultaneously. The feedback loop (Signal Analyzer → BOT_TUNING.json → Master Signal) is the only upward path.</p>
+
+  <div class="arch-wrapper">
+    <div class="arch-layer">
+      <div class="arch-label" style="color:var(--accent)">DATA</div>
+      <div class="arch-nodes">
+        <div class="node data-node">NSE Indices Monitor</div>
+        <div class="node data-node">calculate_oi_pcr</div>
+        <div class="node data-node">Premium Direction Tracker</div>
+        <div class="node data-node">India VIX (built-in)</div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="conn-line"><div class="conn-pulse"></div></div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-label" style="color:var(--data)">ANALYSIS</div>
+      <div class="arch-nodes">
+        <div class="node analysis-node">Fibonacci Trend Analyzer</div>
+        <div class="node analysis-node">Chart Level Analyzer</div>
+        <div class="node analysis-node">Trendline Scanner Bot</div>
+        <div class="node analysis-node">Convergence Signal Bot</div>
+        <div class="node analysis-node">Signal Monitor</div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="conn-line"><div class="conn-pulse" style="animation-delay:.8s"></div></div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-label" style="color:var(--purple)">SIGNAL</div>
+      <div class="arch-nodes">
+        <div class="node signal-node">Master Signal Bot ★</div>
+        <div class="node signal-node">Signal Analyzer ↺</div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="conn-line"><div class="conn-pulse" style="animation-delay:1.6s"></div></div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-label" style="color:var(--bull)">EXECUTE</div>
+      <div class="arch-nodes">
+        <div class="node exec-node">PROD10 Manual Bot</div>
+        <div class="node exec-node">Momentum Auto Bot</div>
+        <div class="node exec-node">Scalping Auto Bot</div>
+        <div class="node exec-node">Live Pattern Scanner</div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="conn-line"><div class="conn-pulse" style="animation-delay:2.4s"></div></div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-label" style="color:var(--pink)">INTEL</div>
+      <div class="arch-nodes">
+        <div class="node intel-node">Personal Trading AI</div>
+        <div class="node intel-node">Analyze Bot</div>
+      </div>
+    </div>
+
+    <div style="height:20px"></div>
+    <div style="border-top:1px dashed rgba(240,160,32,.2);padding-top:16px;">
+      <div class="arch-layer">
+        <div class="arch-label" style="color:var(--accent)">HUB</div>
+        <div class="arch-nodes">
+          <div class="node dash-node">⚡ LIVE DASHBOARD — reads all layers, serves unified UI on :8765</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;gap:20px;flex-wrap:wrap;">
+    <span><span style="color:var(--accent)">■</span> Data</span>
+    <span><span style="color:var(--data)">■</span> Analysis</span>
+    <span><span style="color:var(--purple)">■</span> Signal</span>
+    <span><span style="color:var(--bull)">■</span> Execution</span>
+    <span><span style="color:var(--pink)">■</span> Intelligence</span>
+    <span><span style="color:var(--accent)">★</span> Core signal node</span>
+    <span><span style="color:var(--accent)">↺</span> Feedback loop</span>
+  </div>
+</section>
+
+<!-- ── SIGNAL FLOW ────────────────────────────────────────────────── -->
+<section id="flow">
+  <div class="section-head">
+    <span class="section-eye">§ 02</span>
+    <h2>How a Trade Decision Flows</h2>
+  </div>
+  <p style="color:var(--dim);font-size:13px;margin-bottom:28px;max-width:680px;">From market open to order placed — this is the precise path a signal travels through the system before becoming a real options trade.</p>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--accent)">01</div>
+      <div class="pipe-body">
+        <div class="pipe-title">Market opens — raw data flows in</div>
+        <div class="pipe-desc">At 9:15 AM, three bots begin streaming live data simultaneously: <strong>calculate_oi_pcr</strong> polls NSE's option chain API every 60 seconds for Open Interest and PCR across all NIFTY strikes; <strong>Premium Direction Tracker</strong> polls Groww for live ATM CE/PE LTPs every few seconds; <strong>NSE Indices Monitor</strong> tracks breadth across all major sectors. India VIX is fetched from NSE every 2 minutes by the dashboard itself.</div>
+        <div class="pipe-tags">
+          <span class="tag data">NSE API</span>
+          <span class="tag data">Groww LTP</span>
+          <span class="tag">oi_snapshot.json</span>
+          <span class="tag">logs/premium_tracker/</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--data)">02</div>
+      <div class="pipe-body">
+        <div class="pipe-title">Analysis bots compute structure & momentum</div>
+        <div class="pipe-desc"><strong>Fibonacci Trend Analyzer</strong> computes multi-timeframe (1H, 15M) swing highs/lows and identifies which Fibonacci retracement zones (especially the 50–61.8% Golden Zone) the index is near, outputting BULLISH / BEARISH / NEUTRAL bias. <strong>Chart Level Analyzer</strong> scores daily, 1H, 15M support and resistance levels by strength (touch count, rejection quality, efficiency) and tells you if the current price is in a Green (safe to trade), Caution, or Wait zone. <strong>Trendline Scanner</strong> watches for ascending/descending trendline touches and fires BOUNCE or BREAK signals.</div>
+        <div class="pipe-tags">
+          <span class="tag data">Groww charting API</span>
+          <span class="tag">logs/fibo_analyzer/</span>
+          <span class="tag">logs/chart_level/</span>
+          <span class="tag">.trendline_signals.json</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--purple)">03</div>
+      <div class="pipe-body">
+        <div class="pipe-title">Master Signal Bot synthesizes all inputs into one vote</div>
+        <div class="pipe-desc">Every 60 seconds, <strong>Master Signal Bot</strong> ingests signals from all analysis bots and the OI snapshot, applies configured weights (1H: 35%, 15M: 40%, 5M: 15%, Premium: 10%), and outputs a single consolidated signal: <code>ENTER CE</code>, <code>ENTER PE</code>, or <code>NO TRADE</code> with a confidence score. It also reads <code>BOT_TUNING.json</code> (written by Signal Analyzer) each cycle to auto-apply corrections from previous session performance. The time gates (no trade before 9:30, no trade after 3:00) are enforced here.</div>
+        <div class="pipe-tags">
+          <span class="tag accent">CONFIDENCE ≥ 65%</span>
+          <span class="tag">BOT_TUNING.json</span>
+          <span class="tag">logs/master_signal/</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--bull)">04</div>
+      <div class="pipe-body">
+        <div class="pipe-title">Dashboard unifies everything — trader sees one screen</div>
+        <div class="pipe-desc">The <strong>Live Dashboard</strong> (Python HTTP server on port 8765) reads every log file and JSON from every running bot, rebuilds a unified snapshot every 15 seconds, and serves it to the browser. The trader sees: live consensus signal, VIX regime, OI bias, chart level zone, Fibonacci bias, premium flow direction, open positions, PnL — all on one screen without switching terminals. The dashboard does not place any orders — it is read-only except for PROD10 bridge commands.</div>
+        <div class="pipe-tags">
+          <span class="tag accent">:8765</span>
+          <span class="tag">15s refresh</span>
+          <span class="tag">Read-only (except PROD10 bridge)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--bull)">05</div>
+      <div class="pipe-body">
+        <div class="pipe-title">Trader decides — manual, quick, or fully automatic</div>
+        <div class="pipe-desc">The trader has three modes: <strong>Manual</strong> (reads all signals, decides independently, uses PROD10 Trade Board to enter), <strong>Quick Trade Mode</strong> (one-click instant MARKET order from the option chain — no confirmation dialog), or <strong>Fully Auto</strong> (Momentum Auto Bot, Scalping Auto Bot, or Live Pattern Scanner trade autonomously with their own entry/exit logic). In Quick Trade Mode, the system auto-calculates max affordable premium from your F&O balance and grays out strikes you can't afford.</div>
+        <div class="pipe-tags">
+          <span class="tag bull">Manual</span>
+          <span class="tag bull">Quick Trade</span>
+          <span class="tag bull">Auto</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--bull)">06</div>
+      <div class="pipe-body">
+        <div class="pipe-title">PROD10 places the order via Groww API</div>
+        <div class="pipe-desc">The dashboard writes a bridge command to <code>.prod10_bridge_cmd.json</code>. The PROD10 bot's bridge-watcher thread picks it up within 10ms. A MARKET BUY order fires immediately — no pre-order LTP fetch (eliminated to reduce latency). If VALIDATE=ON, the bot waits for EXECUTED status, fetches the actual weighted-average fill price from <code>/v1/order/trades/{id}</code>, and sets the limit SELL target at <code>fill + quick_pts</code>. If VALIDATE=OFF, it uses the dashboard chain LTP as an estimate. Total latency (click → order placed) is approximately 1 second with persistent session, vs 6 seconds without.</div>
+        <div class="pipe-tags">
+          <span class="tag accent">.prod10_bridge_cmd.json</span>
+          <span class="tag">MARKET → avg fill → LIMIT target</span>
+          <span class="tag bull">~1s latency</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-step">
+      <div class="pipe-num" style="color:var(--pink)">07</div>
+      <div class="pipe-body">
+        <div class="pipe-title">After session — feedback loop closes</div>
+        <div class="pipe-desc"><strong>Signal Analyzer</strong> reads logs from Fibonacci, Premium Tracker, and Master Signal to evaluate which signals led to wins and which didn't. It auto-generates <code>BOT_TUNING.json</code> with corrected weights, exclusion patterns, and directional multipliers. Next session, Master Signal Bot picks up this file on its first cycle and self-corrects — without any manual intervention. <strong>Analyze Bot</strong> (with optional OpenAI narrative) generates a full performance report. <strong>Personal Trading AI</strong> compares today's trades against your 3-year history for pattern-level advice.</div>
+        <div class="pipe-tags">
+          <span class="tag" style="color:var(--pink);border-color:rgba(244,114,182,.3);background:rgba(244,114,182,.05)">BOT_TUNING.json</span>
+          <span class="tag">logs/analysis/</span>
+          <span class="tag" style="color:var(--pink);border-color:rgba(244,114,182,.3);background:rgba(244,114,182,.05)">Self-correcting</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ALL BOTS ───────────────────────────────────────────────────── -->
+<section id="bots">
+  <div class="section-head">
+    <span class="section-eye">§ 03</span>
+    <h2>Bot Directory — All 17 Components</h2>
+  </div>
+
+  <!-- DATA LAYER -->
+  <div class="bot-category"><span style="color:var(--accent)">■</span> Data Layer — raw market feeds</div>
+  <div class="bots-grid">
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">calculate_oi_pcr.py</div>
+        <div class="bot-badge badge-data">Data</div>
+      </div>
+      <div class="bot-desc">The OI intelligence engine. Polls NSE's option chain every 60 seconds, computes Put-Call Ratio, tracks OI changes across all strikes, and scores bullish vs bearish writer positioning. The single most important context signal for directional bias.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">NSE option chain API v3</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">oi_snapshot.json</span>, <span class="path">oi_pcr_dashboard.xlsx</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Refresh</div><div class="bot-row-val">Every 60 seconds</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">REFRESH_SECONDS = <span>60</span></div>
+        <div class="cfg">LOT_SIZE = <span>75</span> (NIFTY)</div>
+        <div class="cfg">Output: PCR, OI delta, writer_bias, bull_score, bear_score</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">PREMIUM_DIRECTION_TRACKER.py</div>
+        <div class="bot-badge badge-data">Data</div>
+      </div>
+      <div class="bot-desc">Live CE/PE premium pulse monitor. Polls Groww for ATM CE and PE LTPs every few seconds and logs whether each is trending UP, DOWN, or STABLE. Think of it as a heartbeat monitor for option flow — the raw ingredient for Master Signal's premium weight.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">Groww LTP API</span> (live)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/premium_tracker/Premium_Tracker_*.log</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Mode</div><div class="bot-row-val">Read-only. No orders.</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Auto-selects ATM strike each cycle</div>
+        <div class="cfg">Outputs: UP / DOWN / STABLE per CE and PE</div>
+        <div class="cfg">Dashboard parses last log line each 15s</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">NSE_INDICES_MONITOR.py</div>
+        <div class="bot-badge badge-data">Data</div>
+      </div>
+      <div class="bot-desc">Market breadth scanner. Tracks % changes across every NSE index category — Broad Market, Sectoral, Thematic, Strategy. Provides the macro context answer: is the whole market moving, or is this an isolated move?</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">NSE heatmap-index API</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">Lakshmi.xlsx → NSE_Indices_Monitor sheet</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">History</div><div class="bot-row-val">Last 5 readings per category</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Categories: Broad Market, Sectoral, Thematic, Strategy</div>
+        <div class="cfg">Standalone — run in a separate terminal</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">VIX Monitor (built-in)</div>
+        <div class="bot-badge badge-data">Data</div>
+      </div>
+      <div class="bot-desc">India VIX is fetched directly by the Live Dashboard every 2 minutes from NSE allIndices. No separate bot needed. Stored in an in-memory rolling buffer of up to 210 ticks (~7 hours). Persisted to <code>.vix_cache.json</code> so data survives server restarts. Powers the VIX tab with regime analysis, velocity, and trend.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Source</div><div class="bot-row-val"><span class="api">nseindia.com/api/allIndices</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">.vix_cache.json</span> (persists today's session)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Regimes</div><div class="bot-row-val">&lt;12 Ultra Calm / 12–15 Calm / 15–18 Moderate / 18–22 Elevated / &gt;22 Danger</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYSIS LAYER -->
+  <div class="bot-category"><span style="color:var(--data)">■</span> Analysis Layer — market structure decoders</div>
+  <div class="bots-grid">
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">FIBONACCI_TREND_ANALYZER.py</div>
+        <div class="bot-badge badge-analysis">Analysis</div>
+      </div>
+      <div class="bot-desc">Multi-timeframe Fibonacci engine. Computes swing highs/lows on 1H and 15M candles, maps all Fibonacci retracement levels (23.6%, 38.2%, 50%, 61.8%, 78.6%) and extensions (127.2%, 161.8%, 261.8%). The Golden Zone (50–61.8%) is the highest-probability reversal band. Runs in its own terminal — read-only, never places orders.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">Groww charting API</span> (no auth needed)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/fibo_analyzer/Fibo_Analyzer_*.log</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Output</div><div class="bot-row-val">BULLISH / BEARISH / NEUTRAL + key Fib levels</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Golden Zone = 50–61.8% retracement band</div>
+        <div class="cfg">Confluence: 2+ Fib levels from different timeframes</div>
+        <div class="cfg">Dashboard parses log blocks via regex</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">CHART_LEVEL_ANALYZER.py</div>
+        <div class="bot-badge badge-analysis">Analysis</div>
+      </div>
+      <div class="bot-desc">Multi-timeframe support & resistance level scorer. Identifies levels from Daily/1H/15M swing pivots, intraday pivots (Standard + Camarilla), Opening Range, and psychological round numbers. Scores each level 0–10 based on touch count, rejection quality, efficiency, and recency. Tells you whether current price is Green (safe to trade), Caution, or Wait zone.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">Groww API</span> (multi-TF candles)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/chart_level/</span>, <span class="path">live_chain.json</span>, <span class="path">signals_{date}.jsonl</span></div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Green zone: ≥0.35% from nearest level → CAN TRADE</div>
+        <div class="cfg">Caution: 0.15–0.35% from moderate level</div>
+        <div class="cfg">Wait: price is sitting directly on a strong level</div>
+        <div class="cfg">Strength factors: base weight + touches + rejection + efficiency + confluence bonus</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">TRENDLINE_SCANNER_BOT.py</div>
+        <div class="bot-badge badge-analysis">Analysis</div>
+      </div>
+      <div class="bot-desc">Detects ascending/descending trendlines from 5-minute candle pivot points and fires two types of signals: BOUNCE (price approaching trendline support — enter CE) and BREAK (price breaking below trendline — enter PE / momentum opposite). Connects at least 2 pivots with configurable minimum touches.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">Groww charting API</span> (5M candles)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">.trendline_signals.json</span>, <span class="path">logs/trendline_bot/</span></div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">candle_interval = 5m</div>
+        <div class="cfg">structural_refresh = 30s | ltp_poll_sec = 15</div>
+        <div class="cfg">pivot_lookback = 3 | min_pivots = 2</div>
+        <div class="cfg">proximity_pts = 6.0 | break_pts = 3.0</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">CONVERGENCE_SIGNAL_BOT.py</div>
+        <div class="bot-badge badge-analysis">Analysis</div>
+      </div>
+      <div class="bot-desc">Multi-strike momentum detector. Watches all ATM±range strikes simultaneously in 5-second windows. Fires a STRONG signal when 3 or more strikes on the same side (all CE or all PE) show velocity above threshold with acceleration (second half of window faster than first). Fires ~15–30 seconds before the actual large move becomes visible.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">Groww LTP</span> (all strikes, 5s windows)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">.convergence_signals.json</span></div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">min_convergence = 3 (strikes on same side)</div>
+        <div class="cfg">Reads: convergence_config_override.json (live config)</div>
+        <div class="cfg">Signal: STRONG_CE / STRONG_PE / NEUTRAL</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">SIGNAL_MONITOR.py</div>
+        <div class="bot-badge badge-analysis">Analysis</div>
+      </div>
+      <div class="bot-desc">A lightweight aggregator that reads Premium Direction Tracker and Fibonacci Trend Analyzer outputs and displays them as a single combined signal view. No API calls — file-change polling only, so it updates instantly when source logs update. Useful as a second-monitor companion during trading.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="path">logs/premium_tracker/ + logs/fibo_analyzer/</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/signal_monitor/Signal_Monitor_*.log</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Mode</div><div class="bot-row-val">Purely read-only. Zero API calls.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGNAL LAYER -->
+  <div class="bot-category"><span style="color:var(--purple)">■</span> Signal Layer — synthesis and self-tuning</div>
+  <div class="bots-grid">
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">MASTER_SIGNAL_BOT.py ★</div>
+        <div class="bot-badge badge-signal">Signal</div>
+      </div>
+      <div class="bot-desc">The brain. Every 60 seconds, reads all analysis bot outputs and combines them into a single weighted vote. Produces one of three outputs: ENTER CE, ENTER PE, or NO TRADE — with a confidence percentage. Applies a time gate (no trade before 9:30 or after 3:00 PM). Auto-loads BOT_TUNING.json each cycle for continuous self-correction without restart.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="path">logs/fibo/, logs/premium_tracker/, oi_snapshot.json, BOT_TUNING.json</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/master_signal/Master_Signal_*.log</span></div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">REFRESH_SEC = <span>60</span></div>
+        <div class="cfg">CONFIDENCE_THRESHOLD = <span>65%</span></div>
+        <div class="cfg">Weights: 1H(35%) + 15M(40%) + 5M(15%) + Premium(10%)</div>
+        <div class="cfg">NO_TRADE_BEFORE = <span>9:30 AM</span> | NO_TRADE_AFTER = <span>3:00 PM</span></div>
+        <div class="cfg">BOT_TUNING.json auto-reloaded every cycle</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">SIGNAL_ANALYZER.py ↺</div>
+        <div class="bot-badge badge-signal">Signal</div>
+      </div>
+      <div class="bot-desc">The system's self-improvement engine. Run after each trading session. Parses Fibonacci, Premium Tracker, and Master Signal logs to score which signals led to profitable outcomes and which didn't. Outputs BOT_TUNING.json with corrected weights, directional multipliers, and exclusion patterns — which Master Signal picks up next session automatically. This is the only backward path in the architecture.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="path">logs/fibo_analyzer/, logs/premium_tracker/, logs/master_signal/</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">BOT_TUNING.json</span> → consumed by Master Signal</div></div>
+        <div class="bot-row"><div class="bot-row-key">Run when</div><div class="bot-row-val">After market close, before next session</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">No API calls — pure log analysis</div>
+        <div class="cfg">Output: corrected weights + exclusion patterns</div>
+        <div class="cfg">Effect: Master Signal is smarter next session</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXECUTION LAYER -->
+  <div class="bot-category"><span style="color:var(--bull)">■</span> Execution Layer — actual order placement</div>
+  <div class="bots-grid">
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">PROD10FEB_ManualBOT.py</div>
+        <div class="bot-badge badge-exec">Execute</div>
+      </div>
+      <div class="bot-desc">The primary trading engine. Receives commands from the Live Dashboard via a bridge file and places real MARKET orders on Groww. Supports Quick Trade Mode (instant buy → ATR/fixed SL → trailing limit sell), Manual mode (guided by analyzer signals), and partial exit. Uses persistent HTTP sessions to cut order latency from ~6s to ~1s.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Bridge</div><div class="bot-row-val"><span class="path">.prod10_bridge_cmd.json</span> (polled every 10ms)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/groww_bot/Groww_Bot_*.log</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Orders</div><div class="bot-row-val">MARKET BUY → avg fill → LIMIT SELL target</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">VALIDATE_ORDERS: ON = real fill price / OFF = LTP estimate</div>
+        <div class="cfg">PAPER_TRADING: simulates without placing orders</div>
+        <div class="cfg">MOCK mode: logs but does not execute</div>
+        <div class="cfg">ATR-SL: uses historical candle ATR × multiplier</div>
+        <div class="cfg">Partial exit: sells X% of qty at sub-peak reversal</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">MOMENTUM_AUTO_BOT.py</div>
+        <div class="bot-badge badge-exec">Execute</div>
+      </div>
+      <div class="bot-desc">Fully autonomous momentum trader. Scans ATM±range strikes for 20 seconds, scores each on velocity (% move) × consistency (direction uniformity), enters the highest-scoring strike if it clears both thresholds, then trails SL with a hard floor. OI writer bias from oi_snapshot.json acts as a soft directional filter. One trade at a time. Cooldown between trades.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="api">Groww LTP</span>, <span class="path">oi_snapshot.json</span>, <span class="path">momentum_config_override.json</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/momentum_bot/</span>, <span class="path">logs/trade_history/{date}.jsonl</span></div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">scan_seconds = <span>20</span> | scan_poll_sec = <span>1</span></div>
+        <div class="cfg">velocity_pct = <span>0.5%</span> | consistency_pct = <span>70%</span></div>
+        <div class="cfg">HARD_SL_POINTS = <span>8</span> | TRAIL_STEP = <span>0.75</span></div>
+        <div class="cfg">max_hold_min = <span>30</span> | cooldown_sec = <span>90</span></div>
+        <div class="cfg">Live config via momentum_config_override.json</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">SCALPING_AUTO_BOT.py</div>
+        <div class="bot-badge badge-exec">Execute</div>
+      </div>
+      <div class="bot-desc">Opening Range Breakout specialist. Builds a price box from the first 5-minute candle (9:15–9:20), waits for a breakout above (bullish) or below (bearish), confirms on a retest of the broken level on 1-minute candles, then enters the corresponding option. Fixed 1:2 risk/reward. Time-gated to market hours. Best suited for high-gap opening days.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Strategy</div><div class="bot-row-val">ORB + retest confirmation</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/</span>, Excel workbook</div></div>
+        <div class="bot-row"><div class="bot-row-key">R:R</div><div class="bot-row-val">1:2 fixed | Win rate target: 55–65%</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Box period: 9:15–9:20 (first 5-min candle)</div>
+        <div class="cfg">Confirmation: 1-min retest candle</div>
+        <div class="cfg">Runs fully autonomous during market hours</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">LIVE_PATTERN_SCANNER.py</div>
+        <div class="bot-badge badge-exec">Execute</div>
+      </div>
+      <div class="bot-desc">Three-pattern trader with circuit breaker safety. Detects MULTI_BREAK (trendline breakout), COMPRESSION (range squeeze before explosive move), and TREND_RIDE (3 consecutive higher-highs+higher-lows momentum confirmation). Each pattern has its own time gate. Sequential — only one trade open at a time. Auto-blocks for the day after 2 consecutive SL hits.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="path">PATTERN_ANALYZER.py</span> (imports core logic)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/</span>, trade history</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">lots = 18 | scan_strikes = 8</div>
+        <div class="cfg">premium_min = 100 | premium_max = 200 (best win-rate zone)</div>
+        <div class="cfg">MULTI_BREAK: all hours | COMPRESSION: ≥10:30 | TREND_RIDE: ≥13:00</div>
+        <div class="cfg">Circuit breaker: 2 consecutive SL hits → blocked for day</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTELLIGENCE LAYER -->
+  <div class="bot-category"><span style="color:var(--pink)">■</span> Intelligence Layer — learning and review</div>
+  <div class="bots-grid">
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">PERSONAL_TRADING_AI.py</div>
+        <div class="bot-badge badge-intel">Intel</div>
+      </div>
+      <div class="bot-desc">Your personal pre-market advisor. Loads 3 years of your actual trade history from local files and Lakshmi.xlsx, pulls live market conditions via yfinance (India VIX, NIFTY), and uses Anthropic Claude API to write a narrative analysis of your historical patterns — which days, times, and setups historically work for you, and whether today's market setup matches your edge windows.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="path">ayush_previous_data/</span>, <span class="path">Lakshmi.xlsx</span>, yfinance market data</div></div>
+        <div class="bot-row"><div class="bot-row-key">AI</div><div class="bot-row-val">Anthropic Claude API (ai_config.json)</div></div>
+        <div class="bot-row"><div class="bot-row-key">Cache</div><div class="bot-row-val"><span class="path">.trading_ai_cache.json</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Run when</div><div class="bot-row-val">Pre-market (8:30–9:10 AM)</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Requires ANTHROPIC_API_KEY in ai_config.json</div>
+        <div class="cfg">Output: narrative + structured stats on your personal edge</div>
+      </div>
+    </div>
+
+    <div class="bot-card">
+      <div class="bot-card-head">
+        <div class="bot-name">ANALYZE_BOT.py</div>
+        <div class="bot-badge badge-intel">Intel</div>
+      </div>
+      <div class="bot-desc">Post-session performance report generator. Reads actual trade logs from PROD10, cross-references with Fibonacci and Premium Tracker signals, and generates a unified performance report showing which signals aligned with winning trades and which didn't. Optional AI narrative via OpenAI. Best run at end of day before running SIGNAL_ANALYZER.</div>
+      <div class="bot-meta">
+        <div class="bot-row"><div class="bot-row-key">Reads</div><div class="bot-row-val"><span class="path">logs/groww_bot/, logs/fibo_analyzer/, logs/premium_tracker/</span></div></div>
+        <div class="bot-row"><div class="bot-row-key">Writes</div><div class="bot-row-val"><span class="path">logs/analysis/</span> output files</div></div>
+        <div class="bot-row"><div class="bot-row-key">AI</div><div class="bot-row-val">Optional OpenAI narrative (ai_config.json)</div></div>
+      </div>
+      <div class="config-list">
+        <div class="cfg">Requires OPENAI_API_KEY for narrative (optional)</div>
+        <div class="cfg">Works without AI — outputs structured metrics regardless</div>
+        <div class="cfg">Run order: market close → Analyze Bot → Signal Analyzer</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── DASHBOARD ──────────────────────────────────────────────────── -->
+<section id="dashboard">
+  <div class="section-head">
+    <span class="section-eye">§ 04</span>
+    <h2>Live Dashboard — Tab by Tab</h2>
+  </div>
+  <p style="color:var(--dim);font-size:13px;margin-bottom:24px;max-width:680px;">The dashboard is a Python HTTP server (<code>python LIVE_DASHBOARD.py</code>) that serves a self-contained React-less single-page app on <code>localhost:8765</code>. No external dependencies — everything runs locally. Auto-refreshes every 15 seconds.</p>
+
+  <div class="tab-grid">
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">📡</span> Live Dashboard</div>
+      <ul class="tab-features">
+        <li>Consensus signal (ENTER CE / PE / NO TRADE) with confidence %</li>
+        <li>Live NIFTY, BANKNIFTY, SENSEX index prices</li>
+        <li>Master Signal current output + last updated</li>
+        <li>Fibonacci bias (BULLISH / BEARISH / NEUTRAL)</li>
+        <li>Chart Level zone (Green / Caution / Wait)</li>
+        <li>Premium flow direction (CE up/down, PE up/down)</li>
+        <li>VIX sparkline card with regime label</li>
+        <li>OI snapshot: PCR, writer bias, bull/bear scores</li>
+        <li>Open positions PnL strip</li>
+        <li>Key support/resistance levels panel</li>
+        <li>Scalp plan (AI-generated intraday analysis)</li>
+        <li>BOT STATUS bar — shows age of each bot's last output</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🔬</span> OI Intelligence</div>
+      <ul class="tab-features">
+        <li>Full NSE option chain OI table (all strikes)</li>
+        <li>CE OI vs PE OI heatmap by strike</li>
+        <li>PCR gauge with trend direction</li>
+        <li>Max Pain calculation and chart</li>
+        <li>Writer positioning: who is defending which level</li>
+        <li>OI change from previous snapshot (delta per strike)</li>
+        <li>Bull score / Bear score from oi_snapshot.json</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🚀</span> Trade Board (PROD10)</div>
+      <ul class="tab-features">
+        <li>Live option chain (CE premium | STRIKE | PE premium)</li>
+        <li>ATM row auto-highlighted; ITM/OTM color-coded</li>
+        <li>Quick Trade Mode toggle — instant 1-click orders</li>
+        <li>Capital source: Fetch from Groww API or enter manually</li>
+        <li>MAX PREM badge: auto-calculated from capital ÷ (lots × lot size)</li>
+        <li>Over-budget strikes grayed out automatically</li>
+        <li>5-second auto-refresh of chain premiums in Quick Mode</li>
+        <li>LOTS / QK TGT / PARTIAL / PAPER / MOCK / VALIDATE toggles</li>
+        <li>ATR-SL source: Hist ATR or Tick Range</li>
+        <li>PROD10 STATUS panel: log stream from running bot</li>
+        <li>TRADE HISTORY table (fill price, target, SL, result)</li>
+        <li>All config values applied live — no bot restart needed</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">💹</span> PnL Status</div>
+      <ul class="tab-features">
+        <li>Live open positions fetched from Groww (30s cache)</li>
+        <li>Realised PnL for the session</li>
+        <li>Unrealised PnL on open positions</li>
+        <li>F&O margin usage and available balance</li>
+        <li>Session trade count, win rate, average profit/loss</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">📈</span> Performance</div>
+      <ul class="tab-features">
+        <li>Historical PnL chart across sessions</li>
+        <li>Win rate over rolling periods</li>
+        <li>Best/worst session, max drawdown</li>
+        <li>Breakdown by index (NIFTY vs SENSEX)</li>
+        <li>Time-of-day performance heatmap</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🤖</span> Bot Control</div>
+      <ul class="tab-features">
+        <li>Start/stop each bot from the UI (shell commands)</li>
+        <li>See which bots are currently running</li>
+        <li>View last-output age per bot</li>
+        <li>Quick-launch preset combinations</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🔭</span> Scanner</div>
+      <ul class="tab-features">
+        <li>Live Pattern Scanner output viewer</li>
+        <li>MULTI_BREAK / COMPRESSION / TREND_RIDE signal cards</li>
+        <li>Active trade status from scanner</li>
+        <li>Circuit breaker status (blocked/active)</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🧠</span> AI Brain</div>
+      <ul class="tab-features">
+        <li>Personal Trading AI pre-market narrative</li>
+        <li>Your historical edge windows and patterns</li>
+        <li>Today's market context vs your history</li>
+        <li>Trade / No-Trade recommendation with reasoning</li>
+        <li>Scalp plan (intraday AI-generated strategy)</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🌡</span> VIX</div>
+      <ul class="tab-features">
+        <li>India VIX current level — large display with regime color</li>
+        <li>Session open, high, low, range, % change</li>
+        <li>30-minute velocity (rising/falling/stable)</li>
+        <li>Intraday trend (first-half vs second-half average)</li>
+        <li>Option premium implication (Cheap / Fair / Expensive / Very Rich)</li>
+        <li>Large intraday VIX chart with zone fills (12/15/18/22)</li>
+        <li>Analysis text: what this VIX level means + strategy to use</li>
+        <li>Recent 15 ticks log (newest first, with delta arrows)</li>
+        <li>Auto-updates every 15 seconds</li>
+      </ul>
+    </div>
+
+    <div class="tab-card">
+      <div class="tab-card-head"><span class="tab-icon">🗺️</span> Guide</div>
+      <ul class="tab-features">
+        <li>Built-in quick-reference guide</li>
+        <li>Setup instructions for each bot</li>
+        <li>Config parameter reference</li>
+        <li>Common troubleshooting tips</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ── TRADE MODES ────────────────────────────────────────────────── -->
+<section id="modes">
+  <div class="section-head">
+    <span class="section-eye">§ 05</span>
+    <h2>Three Ways to Trade</h2>
+  </div>
+
+  <div class="modes-grid">
+    <div class="mode-card">
+      <div class="mode-name">MANUAL MODE</div>
+      <div class="mode-badge-wrap"><span class="tag" style="color:var(--dim)">PROD10 + All Analyzers</span></div>
+      <div class="mode-desc">You read all signals, make the decision, and click BUY CE or BUY PE on the Trade Board. Full control — the system is purely advisory. Best for learning the signals and developing conviction.</div>
+      <ol class="mode-steps">
+        <li>Run all analyzer bots + PROD10</li>
+        <li>Open dashboard → Trade Board tab</li>
+        <li>Check consensus signal + VIX + chart zone</li>
+        <li>Click strike → confirmation dialog → confirm</li>
+        <li>Monitor PROD10 STATUS for fill + target set</li>
+      </ol>
+    </div>
+
+    <div class="mode-card" style="border-color:rgba(240,160,32,.25);">
+      <div class="mode-name" style="color:var(--accent)">⚡ QUICK TRADE MODE</div>
+      <div class="mode-badge-wrap"><span class="tag accent">PROD10 ONLY</span></div>
+      <div class="mode-desc">One-click instant MARKET order from the option chain. No confirmation. Capital auto-fetched from Groww or entered manually. Over-budget strikes grayed out. Chain auto-refreshes every 5 seconds. Optimized for speed.</div>
+      <ol class="mode-steps">
+        <li>Toggle ⚡ Quick: ON in Trade Board</li>
+        <li>Set CAPITAL SRC to API or Manual</li>
+        <li>Fetch capital → MAX PREM calculated automatically</li>
+        <li>Click any enabled BUY CE / BUY PE → order fires instantly</li>
+        <li>PROD10 fetches actual fill → sets limit target</li>
+      </ol>
+    </div>
+
+    <div class="mode-card" style="border-color:rgba(56,217,138,.2);">
+      <div class="mode-name" style="color:var(--bull)">AUTO MODE</div>
+      <div class="mode-badge-wrap"><span class="tag bull">Momentum / Scalping / Pattern</span></div>
+      <div class="mode-desc">Run one or more auto-bots. They observe, decide, enter, manage SL, trail, and exit completely without you. You can monitor via the dashboard but no action is required. Circuit breakers prevent runaway losses.</div>
+      <ol class="mode-steps">
+        <li>Choose a bot: Momentum (velocity), Scalping (ORB), or Pattern (3 setups)</li>
+        <li>Configure via override JSON (live — no restart needed)</li>
+        <li>Run the bot in terminal</li>
+        <li>Monitor Dashboard → Scanner / BOT STATUS bar</li>
+        <li>Review trades in logs/trade_history/ at end of day</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ── ADVANTAGES ────────────────────────────────────────────────── -->
+<section id="pros">
+  <div class="section-head">
+    <span class="section-eye">§ 06</span>
+    <h2>Advantages</h2>
+  </div>
+  <div class="pros-cons" style="grid-template-columns:1fr;">
+  <div class="pc-card">
+    <div class="pc-title pro">What this system does well</div>
+    <ul class="pc-list pro">
+      <li><strong>Multi-layer signal consensus.</strong> No single indicator decides. Fibonacci + OI + Chart Level + Premium flow + Trendline all vote before Master Signal outputs anything — dramatically fewer false entries compared to a single-indicator system.</li>
+      <li><strong>Self-tuning feedback loop.</strong> Signal Analyzer → BOT_TUNING.json → Master Signal. The system gets smarter session-over-session without manual intervention. Wrong thresholds correct themselves.</li>
+      <li><strong>Quick Trade latency of ~1 second.</strong> Persistent HTTP sessions eliminate the 2–3 second TCP/TLS overhead per API call. Dashboard LTP hint skips the pre-order fetch. MARKET order fires the moment you click.</li>
+      <li><strong>VIX-aware execution.</strong> All auto-bots adjust velocity thresholds based on VIX regime. In a VIX &gt;22 environment, momentum thresholds automatically rise — you won't enter on the same 0.5% move that would trigger in a VIX 14 session.</li>
+      <li><strong>Live config without restarts.</strong> Every key parameter (target points, lots, mode, partial %, ATR source) reads fresh from the dashboard or override JSON on every trade cycle. Change mid-session, takes effect immediately.</li>
+      <li><strong>Capital-aware option chain.</strong> Quick Trade Mode auto-fetches your F&O buy balance, calculates max affordable premium per-lot, and grays out strikes you can't afford. No accidental oversize entries.</li>
+      <li><strong>Comprehensive logging at every layer.</strong> Every bot writes structured logs. ANALYZE_BOT and SIGNAL_ANALYZER can reconstruct exactly what happened in any session — what was signaled, what was entered, what the outcome was.</li>
+      <li><strong>Personal AI advisor uses YOUR history.</strong> Unlike generic backtests, PERSONAL_TRADING_AI analyzes your 3 years of actual trades to find your personal edge windows — specific times, setups, and market conditions where you historically perform best.</li>
+      <li><strong>Paper and Mock modes on every execution bot.</strong> Any execution bot can run in PAPER (simulated fills, no orders) or MOCK (logs actions, no Groww API calls) — safe for testing new configs during live market hours.</li>
+      <li><strong>ATR-based adaptive stop-loss.</strong> SL distance uses Historical ATR or Tick Range — it adapts to the volatility of each session rather than using a fixed point stop that is too tight on high-VIX days and too loose on calm days.</li>
+      <li><strong>One screen for everything.</strong> The dashboard unifies output from 17 components into a single browser tab. No terminal switching, no mental state aggregation — the consensus is already computed for you.</li>
+      <li><strong>Circuit breakers on auto-bots.</strong> Live Pattern Scanner blocks itself for the day after 2 consecutive SL hits. Momentum Auto Bot enforces cooldown between trades. You cannot accidentally revenge-trade through an auto-bot.</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ── DISADVANTAGES ─────────────────────────────────────────────── -->
+<section id="cons">
+  <div class="section-head">
+    <span class="section-eye">§ 07</span>
+    <h2>Disadvantages &amp; Limitations</h2>
+  </div>
+  <div class="pros-cons" style="grid-template-columns:1fr;">
+  <div class="pc-card">
+    <div class="pc-title con">What to watch out for</div>
+    <ul class="pc-list con">
+      <li><strong>NSE API is fragile.</strong> NSE's allIndices and option-chain endpoints require browser-like cookie sessions and rate-limit aggressively. The VIX fetch loop and OI bot can go silent for minutes during high-traffic periods (market open, major events). You must monitor the BOT STATUS bar for staleness.</li>
+      <li><strong>Single-broker lock-in.</strong> The entire execution layer is built on growwapi + Groww's specific order endpoints. Migrating to Zerodha, Upstox, or Angel requires rewriting every order placement function. No abstraction layer exists.</li>
+      <li><strong>growwapi library maintenance risk.</strong> The growwapi Python library is a third-party wrapper that has broken before when Groww updated their internal API. When it breaks, all auto-bots stop working until the library is patched.</li>
+      <li><strong>In-memory state.</strong> Most bot state (OI history, VIX ticks, open position data) lives in RAM. A server crash mid-trade means the bot has no memory of its open position — though VIX is now cached to disk, most other state is not.</li>
+      <li><strong>High operational complexity.</strong> Running the full system requires starting 8–10 separate processes in separate terminals. There is no single start command, no process manager, no watchdog that auto-restarts a crashed bot.</li>
+      <li><strong>Fibonacci and trendlines are lagging.</strong> These tools work on past candles. In fast, news-driven moves (RBI announcement, global shock), the analysis layer may signal "BULLISH" from structure while the market is already down 1%. The convergence bot is the only early-warning component.</li>
+      <li><strong>Log file accumulation.</strong> Every bot writes timestamped log files with no automatic rotation or deletion. After months of running, log directories can grow very large and slow down the regex-based dashboard parser.</li>
+      <li><strong>Personal AI requires careful data hygiene.</strong> PERSONAL_TRADING_AI is only as good as your historical trade data. Gaps, formatting inconsistencies, or data from a different strategy era will produce misleading recommendations.</li>
+      <li><strong>Only simple option buys supported.</strong> The execution layer handles single-leg MARKET BUY → LIMIT SELL. Spreads, straddles, strangles, ratio spreads — none of these multi-leg strategies can be placed through this system.</li>
+      <li><strong>Race conditions between auto-bots.</strong> If you run Momentum Auto Bot AND Scalping Auto Bot simultaneously, both can enter positions in the same underlying at the same time. There is no cross-bot position coordination or mutual exclusion.</li>
+      <li><strong>OI data can lag 3–5 minutes.</strong> NSE publishes OI updates with a delay. calculate_oi_pcr polls every 60 seconds, but the underlying NSE data may itself be 3–5 minutes stale. OI bias signals should be treated as background context, not real-time flow.</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ── QUICK START MATRIX ─────────────────────────────────────────── -->
+<section id="matrix">
+  <div class="section-head">
+    <span class="section-eye">§ 08</span>
+    <h2>Quick-Start Matrix</h2>
+  </div>
+  <p style="color:var(--dim);font-size:13px;margin-bottom:20px;">Which bots to run for each scenario. ● = required, ○ = optional but improves quality.</p>
+  <div style="overflow-x:auto;">
+  <table class="matrix-table">
+    <thead>
+      <tr>
+        <th>Scenario</th>
+        <th>calculate_oi_pcr</th>
+        <th>Premium Tracker</th>
+        <th>Fibonacci</th>
+        <th>Chart Level</th>
+        <th>Trendline</th>
+        <th>Convergence</th>
+        <th>Master Signal</th>
+        <th>PROD10</th>
+        <th>Momentum</th>
+        <th>Dashboard</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="scenario">Full manual analysis</td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-off">○</span></td><td><span class="dot-off">○</span></td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td><td><span class="dot-off">—</span></td><td><span class="dot-on">●</span></td>
+      </tr>
+      <tr>
+        <td class="scenario">Quick Trade Mode only</td>
+        <td><span class="dot-off">○</span></td><td><span class="dot-off">○</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-on">●</span></td><td><span class="dot-off">—</span></td><td><span class="dot-on">●</span></td>
+      </tr>
+      <tr>
+        <td class="scenario">Momentum auto-trade</td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">○</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td>
+      </tr>
+      <tr>
+        <td class="scenario">Pre-market preparation</td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-on">●</span></td>
+      </tr>
+      <tr>
+        <td class="scenario">Post-session review</td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+        <td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td><td><span class="dot-off">—</span></td>
+      </tr>
+      <tr>
+        <td class="scenario">Full system (everything)</td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td>
+        <td><span class="dot-on">●</span></td><td><span class="dot-on">●</span></td><td><span class="dot-off">○</span></td><td><span class="dot-on">●</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div style="margin-top:14px;font-family:var(--mono);font-size:10px;color:var(--dim);">
+    <span class="dot-on">●</span> required &nbsp;&nbsp;
+    <span class="dot-off">○</span> optional/recommended &nbsp;&nbsp;
+    <span class="dot-off">—</span> not needed for this scenario
+    <span style="margin-left:24px;">Post-session review runs: Analyze Bot → Signal Analyzer (no live bots needed)</span>
+  </div>
+
+  <!-- End note -->
+  <div style="margin-top:48px;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;border-left:3px solid var(--accent);">
+    <div style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--accent);text-transform:uppercase;margin-bottom:10px;">Important operating note</div>
+    <div style="font-size:13px;color:var(--dim);line-height:1.7;">
+      Never run MOMENTUM_AUTO_BOT and PROD10 simultaneously on the same index without a coordination strategy — they will both try to enter positions independently and can stack unintended exposure. The dashboard's BOT STATUS bar stale indicators are your first line of defense: if any critical bot shows &gt;5 minutes stale during market hours, investigate before trading. The system's self-tuning only improves what it can observe — if you don't run Signal Analyzer after losing sessions, the correction loop stays open.
+    </div>
+  </div>
+</section>
+
+<div style="text-align:center;padding:36px 28px;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:1px;border-top:1px solid var(--border);">
+  GROWW TRADING FRAMEWORK — SYSTEM GUIDE &nbsp;·&nbsp; 17 COMPONENTS &nbsp;·&nbsp; 5 SIGNAL LAYERS &nbsp;·&nbsp; NIFTY / SENSEX / BANKNIFTY
+</div>
+
+<script>
+// Active nav on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a[href^="#"]');
+function setActive(){
+  let cur='';
+  sections.forEach(s=>{
+    const top=s.getBoundingClientRect().top;
+    if(top<=80) cur=s.id;
+  });
+  navLinks.forEach(a=>{
+    a.classList.toggle('active', a.getAttribute('href')==='#'+cur);
+  });
+}
+window.addEventListener('scroll',setActive,{passive:true});
+setActive();
+</script>
+</body>
+</html>

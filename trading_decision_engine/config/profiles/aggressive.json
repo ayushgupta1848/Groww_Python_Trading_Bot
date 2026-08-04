@@ -1,0 +1,20 @@
+{
+  "_comment": "AGGRESSIVE - more trades, faster confirmation, looser gates. Calibrated for 1-min index scalping (uses the velocity scale/threshold that real premium tape actually produces). Activate with active_profile='aggressive' in strategy.json or --profile aggressive.",
+
+  "trend_threshold": 30.0,
+  "decision_score_threshold": 40.0,
+  "min_confidence": 60.0,
+  "min_trade_quality": 60.0,
+
+  "signal_stability_min_seconds": 1.0,
+  "signal_stability_max_seconds": 2.0,
+  "signal_stability_base_seconds": 1.5,
+
+  "min_resistance_distance": 8.0,
+  "momentum_threshold": 0.02,
+  "premium_velocity_scale": 0.5,
+  "structure_double_tolerance_pct": 0.03,
+
+  "max_trades_per_day": 15,
+  "cooldown_seconds": 15
+}

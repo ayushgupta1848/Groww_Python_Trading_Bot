@@ -1,0 +1,510 @@
+{
+  "time": "12:49:46",
+  "timestamp": 1785482386.984839,
+  "price": 24411.65,
+  "atm": 24400,
+  "sentiment": "BULLISH",
+  "pcr_all": 1.528,
+  "pcr_atm": 1.169,
+  "total_oi_ce": 182254500,
+  "total_oi_pe": 278453700,
+  "total_chg_ce": 53176650,
+  "total_chg_pe": 111472275,
+  "resistance": [
+    24600,
+    24400,
+    24500
+  ],
+  "support": [
+    24300,
+    24200,
+    24000
+  ],
+  "resistance_strength": [
+    {
+      "strike": 24600,
+      "ce_oi": 16496550,
+      "total_oi": 17782275
+    },
+    {
+      "strike": 24400,
+      "ce_oi": 15504900,
+      "total_oi": 32646825
+    },
+    {
+      "strike": 24500,
+      "ce_oi": 14423775,
+      "total_oi": 19845675
+    }
+  ],
+  "support_strength": [
+    {
+      "strike": 24300,
+      "pe_oi": 19744800,
+      "total_oi": 29311350
+    },
+    {
+      "strike": 24200,
+      "pe_oi": 17831925,
+      "total_oi": 23095125
+    },
+    {
+      "strike": 24000,
+      "pe_oi": 17248575,
+      "total_oi": 20343300
+    }
+  ],
+  "atm_strikes_oi": {
+    "24250": {
+      "ce_oi": 3291300,
+      "pe_oi": 13039050
+    },
+    "24300": {
+      "ce_oi": 9566550,
+      "pe_oi": 19744800
+    },
+    "24350": {
+      "ce_oi": 10352925,
+      "pe_oi": 17013525
+    },
+    "24400": {
+      "ce_oi": 15504900,
+      "pe_oi": 17141925
+    },
+    "24450": {
+      "ce_oi": 7454325,
+      "pe_oi": 4255725
+    },
+    "24500": {
+      "ce_oi": 14423775,
+      "pe_oi": 5421900
+    },
+    "24550": {
+      "ce_oi": 5841525,
+      "pe_oi": 1048650
+    }
+  },
+  "writer_bias": "BULLISH",
+  "bullish_score": 3.88,
+  "bearish_score": 0.22,
+  "ce_writing_strikes": [
+    25350,
+    25100,
+    26050
+  ],
+  "pe_writing_strikes": [
+    24400,
+    24300,
+    24500
+  ],
+  "max_pain": 24350,
+  "vol_pcr": 0.971,
+  "total_ce_vol": 22054097,
+  "total_pe_vol": 21406251,
+  "atm_ce_iv": 7.8,
+  "atm_pe_iv": 10.3,
+  "iv_skew": -2.5,
+  "atm_extras": {
+    "24250": {
+      "ce_iv": 7.3,
+      "pe_iv": 10.5,
+      "ce_ltp": 196.95,
+      "pe_ltp": 41,
+      "ce_vol": 686491,
+      "pe_vol": 1167863
+    },
+    "24300": {
+      "ce_iv": 7.8,
+      "pe_iv": 10.3,
+      "ce_ltp": 158.95,
+      "pe_ltp": 53.75,
+      "ce_vol": 2523277,
+      "pe_vol": 2922381
+    },
+    "24350": {
+      "ce_iv": 7.9,
+      "pe_iv": 10.2,
+      "ce_ltp": 125.95,
+      "pe_ltp": 70.25,
+      "ce_vol": 3414324,
+      "pe_vol": 2989329
+    },
+    "24400": {
+      "ce_iv": 7.8,
+      "pe_iv": 10.3,
+      "ce_ltp": 96.35,
+      "pe_ltp": 91.05,
+      "ce_vol": 3497831,
+      "pe_vol": 2061000
+    },
+    "24450": {
+      "ce_iv": 7.9,
+      "pe_iv": 10.3,
+      "ce_ltp": 71.8,
+      "pe_ltp": 116.6,
+      "ce_vol": 1546464,
+      "pe_vol": 547164
+    },
+    "24500": {
+      "ce_iv": 7.9,
+      "pe_iv": 10.5,
+      "ce_ltp": 51.55,
+      "pe_ltp": 146.4,
+      "ce_vol": 2137326,
+      "pe_vol": 538172
+    },
+    "24550": {
+      "ce_iv": 7.9,
+      "pe_iv": 10.7,
+      "ce_ltp": 35.6,
+      "pe_ltp": 180.8,
+      "ce_vol": 905879,
+      "pe_vol": 107685
+    }
+  },
+  "smart_money_ce": [
+    {
+      "strike": 24400,
+      "oi_change": 132171,
+      "ltp": 96.35,
+      "vol": 3497831
+    },
+    {
+      "strike": 24350,
+      "oi_change": 98910,
+      "ltp": 125.95,
+      "vol": 3414324
+    },
+    {
+      "strike": 24450,
+      "oi_change": 64830,
+      "ltp": 71.8,
+      "vol": 1546464
+    },
+    {
+      "strike": 24600,
+      "oi_change": 63363,
+      "ltp": 23.65,
+      "vol": 1369779
+    },
+    {
+      "strike": 24550,
+      "oi_change": 40137,
+      "ltp": 35.6,
+      "vol": 905879
+    }
+  ],
+  "smart_money_pe": [
+    {
+      "strike": 24350,
+      "oi_change": 207372,
+      "ltp": 70.25,
+      "vol": 2989329
+    },
+    {
+      "strike": 24400,
+      "oi_change": 204722,
+      "ltp": 91.05,
+      "vol": 2061000
+    },
+    {
+      "strike": 24300,
+      "oi_change": 171645,
+      "ltp": 53.75,
+      "vol": 2922381
+    },
+    {
+      "strike": 24250,
+      "oi_change": 102245,
+      "ltp": 41,
+      "vol": 1167863
+    },
+    {
+      "strike": 24200,
+      "oi_change": 72105,
+      "ltp": 31.8,
+      "vol": 1583110
+    }
+  ],
+  "market_signal": "BULLISH",
+  "bull_score_v2": 69,
+  "bear_score_v2": 15,
+  "momentum_score": 100,
+  "signal_list": [
+    {
+      "key": "pcr",
+      "label": "PCR 1.53 \u22651.5 \u2014 STRONG BULLISH",
+      "dir": "bull",
+      "pts": 20
+    },
+    {
+      "key": "oi_imb",
+      "label": "PE OI 21% dominant \u2014 BULLISH",
+      "dir": "bull",
+      "pts": 12
+    },
+    {
+      "key": "sess_chg",
+      "label": "PE session add 111.5M > CE \u2014 BULLISH",
+      "dir": "bull",
+      "pts": 7
+    },
+    {
+      "key": "writer",
+      "label": "PE writing 3.9M > CE 0.2M \u2014 WRITERS BULLISH",
+      "dir": "bull",
+      "pts": 15
+    },
+    {
+      "key": "smart_money",
+      "label": "Smart money: PE 758K > CE 399K lots \u2014 BULLISH",
+      "dir": "bull",
+      "pts": 15
+    },
+    {
+      "key": "vol_pcr",
+      "label": "Vol PCR 0.97 \u2014 mild CE volume",
+      "dir": "bear",
+      "pts": 4
+    },
+    {
+      "key": "max_pain",
+      "label": "Spot near Max Pain 24350 (+62pts) \u2014 expiry magnet",
+      "dir": "neutral",
+      "pts": 0
+    },
+    {
+      "key": "iv_skew",
+      "label": "IV Skew -2.5% mild PE premium",
+      "dir": "bear",
+      "pts": 3
+    },
+    {
+      "key": "buildup",
+      "label": "SIDEWAYS \u2014 \u0394Price +5pts, Writers: BULLISH",
+      "dir": "neutral",
+      "pts": 0
+    },
+    {
+      "key": "vol_spike",
+      "label": "Volume balanced. Top CE:24400(3,448,090) PE:24350(2,966,669)",
+      "dir": "neutral",
+      "pts": 0
+    },
+    {
+      "key": "writing",
+      "label": "CALL WRITING CONFIRMED at [24400, 24350] \u2014 BEARISH",
+      "dir": "bear",
+      "pts": 8
+    }
+  ],
+  "call_writing": [
+    {
+      "strike": 24400,
+      "oi_change": 9912825,
+      "ltp": 92.9,
+      "ltp_chg": -0.25,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24350,
+      "oi_change": 7418250,
+      "ltp": 121.75,
+      "ltp_chg": -0.25,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24450,
+      "oi_change": 4862250,
+      "ltp": 68.8,
+      "ltp_chg": -0.2,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24550,
+      "oi_change": 3010275,
+      "ltp": 33.5,
+      "ltp_chg": -0.05,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24500,
+      "oi_change": 2903775,
+      "ltp": 48.85,
+      "ltp_chg": -0.15,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24750,
+      "oi_change": 2183250,
+      "ltp": 6.45,
+      "ltp_chg": -0.1,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24300,
+      "oi_change": 1935375,
+      "ltp": 154.65,
+      "ltp_chg": -0.25,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24700,
+      "oi_change": 1773150,
+      "ltp": 9.3,
+      "ltp_chg": -0.1,
+      "tag": "CONFIRMED"
+    }
+  ],
+  "put_writing": [
+    {
+      "strike": 24350,
+      "oi_change": 15552900,
+      "ltp": 71.95,
+      "ltp_chg": -0.05,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24400,
+      "oi_change": 15354150,
+      "ltp": 93.25,
+      "ltp_chg": -0.15,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24300,
+      "oi_change": 12873375,
+      "ltp": 54.95,
+      "ltp_chg": -0.2,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24250,
+      "oi_change": 7668375,
+      "ltp": 41.85,
+      "ltp_chg": -0.1,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24200,
+      "oi_change": 5407875,
+      "ltp": 32.35,
+      "ltp_chg": -0.05,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24100,
+      "oi_change": 4578975,
+      "ltp": 19.4,
+      "ltp_chg": -0.05,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24500,
+      "oi_change": 4145250,
+      "ltp": 149.35,
+      "ltp_chg": -0.45,
+      "tag": "CONFIRMED"
+    },
+    {
+      "strike": 24450,
+      "oi_change": 3885525,
+      "ltp": 119.25,
+      "ltp_chg": -0.05,
+      "tag": "CONFIRMED"
+    }
+  ],
+  "strike_buildups": [
+    {
+      "strike": 24250,
+      "is_atm": false,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "SHORT BUILDUP",
+      "ce_oi_chg": -81825,
+      "pe_oi_chg": 3375,
+      "ce_ltp": 191.7,
+      "pe_ltp": 41.85
+    },
+    {
+      "strike": 24300,
+      "is_atm": false,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "SHORT BUILDUP",
+      "ce_oi_chg": -638475,
+      "pe_oi_chg": 73350,
+      "ce_ltp": 154.65,
+      "pe_ltp": 54.95
+    },
+    {
+      "strike": 24350,
+      "is_atm": false,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "LONG UNWINDING",
+      "ce_oi_chg": -546600,
+      "pe_oi_chg": -2400,
+      "ce_ltp": 121.75,
+      "pe_ltp": 71.95
+    },
+    {
+      "strike": 24400,
+      "is_atm": true,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "SHORT BUILDUP",
+      "ce_oi_chg": -710550,
+      "pe_oi_chg": 230850,
+      "ce_ltp": 92.9,
+      "pe_ltp": 93.25
+    },
+    {
+      "strike": 24450,
+      "is_atm": false,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "LONG UNWINDING",
+      "ce_oi_chg": -267375,
+      "pe_oi_chg": -27300,
+      "ce_ltp": 68.8,
+      "pe_ltp": 119.25
+    },
+    {
+      "strike": 24500,
+      "is_atm": false,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "SHORT BUILDUP",
+      "ce_oi_chg": -104925,
+      "pe_oi_chg": 69900,
+      "ce_ltp": 48.85,
+      "pe_ltp": 149.35
+    },
+    {
+      "strike": 24550,
+      "is_atm": false,
+      "ce_buildup": "LONG UNWINDING",
+      "pe_buildup": "LONG BUILDUP",
+      "ce_oi_chg": -87000,
+      "pe_oi_chg": 4275,
+      "ce_ltp": 33.5,
+      "pe_ltp": 184.4
+    }
+  ],
+  "iv_changes": [],
+  "pcr_change": {
+    "delta": 0.028,
+    "current": 1.527828942495247,
+    "label": "PCR 1.53 (+0.028 from last tick)"
+  },
+  "atm_momentum": {
+    "action": "\u23f3 WAIT",
+    "reason": "ATM CE score 25 PE score 10 \u2014 no clear momentum at ATM yet",
+    "ce_momentum": 25,
+    "pe_momentum": 10,
+    "atm": 24400,
+    "ce_ltp": 92.9,
+    "pe_ltp": 93.25,
+    "target": null,
+    "stop": null,
+    "ce_ltp_chg": -0.25,
+    "pe_ltp_chg": -0.15
+  },
+  "resistance_breakout": null,
+  "support_breakdown": null
+}

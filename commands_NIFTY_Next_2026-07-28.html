@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>NIFTY Commands - Next_2026-07-28</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            font-size: 14px;
+        }
+        h2, h3 { margin: 4px 0; }
+        /* Classic option-chain layout: CE ── strike ── PE */
+        .row { display: flex; align-items: center; margin: 3px 0; }
+        .ce-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            padding-right: 14px;
+        }
+        .strike-col {
+            width: 100px;
+            text-align: center;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .pe-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            padding-left: 14px;
+        }
+        .ce { color: #0dc710; font-weight: bold; }
+        .pe { color: #e51717; font-weight: bold; }
+        .spot { color: #ffd700; font-weight: bold; }
+        .dim { color: #555; }
+        .sep { color: #444; }
+        .copy-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #777;
+            cursor: pointer;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            line-height: 1.4;
+            flex-shrink: 0;
+        }
+        .copy-btn:hover { color: #ccc; border-color: #aaa; }
+        .copy-btn.copied { color: #0dc710; border-color: #0dc710; }
+    </style>
+    <script>
+    function cp(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '✓';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+        });
+    }
+    </script>
+</head>
+<body>
+<h2>NIFTY Option Commands — Next_2026-07-28</h2>
+<h3 style="color:#ffd700">Spot: 24182.15</h3>
+<br>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623200CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23200</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623200PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623200PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623250CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623250CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23250</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623250PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623250PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623300CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623300CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23300</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623300PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623300PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623350CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623350CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23350</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623350PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623350PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623400CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623400CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23400</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623400PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623400PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623450CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623450CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23450</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623450PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623450PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623500CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23500</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623500PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623500PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623550CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623550CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23550</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623550PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623550PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623600CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623600CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23600</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623600PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623600PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202623650CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623650CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">23650</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623650PE', this)">📋</button><span class="dim">20 NIFTY28JUL202623650PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202623700CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623700CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;23700&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623700PE', this)">📋</button><span class="pe">20 NIFTY28JUL202623700PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202623750CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623750CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;23750&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623750PE', this)">📋</button><span class="pe">20 NIFTY28JUL202623750PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202623800CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623800CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;23800&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623800PE', this)">📋</button><span class="pe">20 NIFTY28JUL202623800PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202623850CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623850CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;23850&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623850PE', this)">📋</button><span class="pe">20 NIFTY28JUL202623850PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202623900CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623900CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;23900&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623900PE', this)">📋</button><span class="pe">20 NIFTY28JUL202623900PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202623950CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623950CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;23950&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202623950PE', this)">📋</button><span class="pe">20 NIFTY28JUL202623950PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624000CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624000CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24000&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624000PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624000PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624050CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624050CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24050&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624050PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624050PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624100CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624100CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24100&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624100PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624100PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624150CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624150CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24150&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624150PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624150PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624200CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="spot">24200 📍</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624200PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624200PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624250CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624250CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24250&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624250PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624250PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624300CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624300CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24300&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624300PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624300PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624350CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624350CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24350&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624350PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624350PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624400CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624400CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24400&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624400PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624400PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624450CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624450CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24450&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624450PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624450PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624500CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624500CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24500&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624500PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624500PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624550CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624550CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24550&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624550PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624550PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624600CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624600CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24600&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624600PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624600PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="ce">20 NIFTY28JUL202624650CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624650CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;24650&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624650PE', this)">📋</button><span class="pe">20 NIFTY28JUL202624650PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202624700CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624700CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">24700</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624700PE', this)">📋</button><span class="dim">20 NIFTY28JUL202624700PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202624750CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624750CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">24750</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624750PE', this)">📋</button><span class="dim">20 NIFTY28JUL202624750PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202624800CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624800CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">24800</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624800PE', this)">📋</button><span class="dim">20 NIFTY28JUL202624800PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202624850CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624850CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">24850</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624850PE', this)">📋</button><span class="dim">20 NIFTY28JUL202624850PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202624900CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624900CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">24900</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624900PE', this)">📋</button><span class="dim">20 NIFTY28JUL202624900PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202624950CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624950CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">24950</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202624950PE', this)">📋</button><span class="dim">20 NIFTY28JUL202624950PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202625000CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625000CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">25000</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625000PE', this)">📋</button><span class="dim">20 NIFTY28JUL202625000PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202625050CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625050CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">25050</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625050PE', this)">📋</button><span class="dim">20 NIFTY28JUL202625050PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202625100CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625100CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">25100</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625100PE', this)">📋</button><span class="dim">20 NIFTY28JUL202625100PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202625150CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625150CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">25150</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625150PE', this)">📋</button><span class="dim">20 NIFTY28JUL202625150PE</span></span></div>
+<div class="row"><span class="ce-group"><span class="dim">20 NIFTY28JUL202625200CE</span><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625200CE', this)">📋</button></span><span class="strike-col sep">|&nbsp;<span class="dim">25200</span>&nbsp;|</span><span class="pe-group"><button class="copy-btn" onclick="cp('20 NIFTY28JUL202625200PE', this)">📋</button><span class="dim">20 NIFTY28JUL202625200PE</span></span></div>
+</body>
+</html>

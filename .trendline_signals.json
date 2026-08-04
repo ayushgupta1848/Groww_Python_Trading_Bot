@@ -1,0 +1,11 @@
+{
+  "ts": "2026-07-30 12:50:13",
+  "active_trade": null,
+  "signals": [],
+  "stats": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "pnl": 0.0
+  }
+}
