@@ -95,8 +95,7 @@ LOG_PATH = _setup_logger()
 # ============================================================
 API_KEY     = "eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjI1NjQ2NTczODEsImlhdCI6MTc3NjI1NzM4MSwibmJmIjoxNzc2MjU3MzgxLCJzdWIiOiJ7XCJ0b2tlblJlZklkXCI6XCJjMjAzMmM5MS04ZGYzLTRkZDUtYjc5NS0yMGVlOWRhZDhhZjlcIixcInZlbmRvckludGVncmF0aW9uS2V5XCI6XCJlMzFmZjIzYjA4NmI0MDZjODg3NGIyZjZkODQ5NTMxM1wiLFwidXNlckFjY291bnRJZFwiOlwiMmVlMjYyMjItN2MwNS00Y2IwLWIwM2MtNzAzYWRmNWVmN2RkXCIsXCJkZXZpY2VJZFwiOlwiNjA2MzE5M2QtZWZkMC01OWViLTgzYzQtNWQ2NGZkNzdkNzQ3XCIsXCJzZXNzaW9uSWRcIjpcIjI0OWQ2OGRlLTNjZTgtNGQ4OS05ODJkLWM0N2NmYmI1YzdlNFwiLFwiYWRkaXRpb25hbERhdGFcIjpcIno1NC9NZzltdjE2WXdmb0gvS0EwYktvMDZXRlpjc241VUNmTWF5aERtNGxSTkczdTlLa2pWZDNoWjU1ZStNZERhWXBOVi9UOUxIRmtQejFFQisybTdRPT1cIixcInJvbGVcIjpcImF1dGgtdG90cFwiLFwic291cmNlSXBBZGRyZXNzXCI6XCIyNDA5OjQwYzQ6MTBhMzozN2UzOjE4NGI6N2IyOTpiMzBlOjIwZTUsMTcyLjcwLjIxOC4xMzUsMzUuMjQxLjIzLjEyM1wiLFwidHdvRmFFeHBpcnlUc1wiOjI1NjQ2NTczODE2ODYsXCJ2ZW5kb3JOYW1lXCI6XCJncm93d0FwaVwifSIsImlzcyI6ImFwZXgtYXV0aC1wcm9kLWFwcCJ9.3kotfZI_EC0lzszHKlXiRdqEQv-O8ubYFh0pgoAT0KsSfdQ1sHmts5UtlaAq4PB6DEwY4X2jZUCD8uBgc2nwXQ"
 TOTP_SECRET = "SC3YMFLEGLHBWUPHRBOYLPEEOVAT2PZ4"
-BOT_TOKEN   = "8666941668:AAEObDodwWqDwdVJVXy8WvFx_lyreq8p7fI"
-CHAT_ID     = "6012308856"
+from whatsapp_gateway import send_whatsapp as send_telegram, start_webhook_server
 
 # ============================================================
 # 3. CONFIG
@@ -206,9 +205,12 @@ _OVERRIDE_CAST = {
 }
 
 
+_last_vix_note = ""   # track last logged VIX note to avoid duplicate spam
+
 def _reload_override(verbose=True):
     """Re-read momentum_config_override.json and update CONFIG in-place.
     Called once at startup (verbose=True) and silently at each scan cycle."""
+    global _last_vix_note
     if not os.path.exists(_override_path):
         return
     try:
@@ -224,6 +226,11 @@ def _reload_override(verbose=True):
                     pass
         if _applied and verbose:
             print(f"[CONFIG] Override applied from UI: {_applied}")
+        # Log VIX auto config note whenever it changes (not just on startup)
+        note = _ov.get("_vix_config_note", "")
+        if note and note != _last_vix_note:
+            print(f"[VIX AUTO CONFIG] {note}")
+            _last_vix_note = note
     except Exception as _oe:
         if verbose:
             print(f"[CONFIG] Override read error: {_oe}")
@@ -377,26 +384,18 @@ _ltp_lock = threading.Lock()
 groww       = None
 access_token = None
 
+from groww_token import get_access_token as get_cached_access_token
+
+
 def groww_init():
     global groww, access_token
-    totp = _totp_gen.now()
-    access_token = GrowwAPI.get_access_token(api_key=API_KEY, totp=totp)
+    access_token = get_cached_access_token(API_KEY, TOTP_SECRET)
     groww = GrowwAPI(access_token)
     print(f"✅ Groww API initialised  [{datetime.now().strftime('%H:%M:%S')}]")
 
 # ============================================================
-# 5. TELEGRAM
+# 5. WHATSAPP (see whatsapp_gateway.py)
 # ============================================================
-def send_telegram(msg: str):
-    def _send():
-        try:
-            requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                data={"chat_id": CHAT_ID, "text": msg},
-                timeout=8,
-            )
-        except Exception: pass
-    threading.Thread(target=_send, daemon=True).start()
 
 # ============================================================
 # 6. INSTRUMENTS
@@ -1351,6 +1350,7 @@ def main():
           f"Max trades/day=unlimited")
     print(f"  OI filter={'ON' if CONFIG['use_oi_filter'] else 'OFF'}  "
           f"Validate orders={CONFIG['validate_orders']}\n")
+    start_webhook_server()
     send_telegram("🤖 MOMENTUM AUTO BOT started")
 
     while True:

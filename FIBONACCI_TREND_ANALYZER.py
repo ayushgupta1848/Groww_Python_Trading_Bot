@@ -199,8 +199,7 @@ API_KEY = (
     ".3kotfZI_EC0lzszHKlXiRdqEQv-O8ubYFh0pgoAT0KsSfdQ1sHmts5UtlaAq4PB6DEwY4X2jZUCD8uBgc2nwXQ"
 )
 TOTP_SECRET = "SC3YMFLEGLHBWUPHRBOYLPEEOVAT2PZ4"
-BOT_TOKEN   = "8666941668:AAEObDodwWqDwdVJVXy8WvFx_lyreq8p7fI"
-CHAT_ID     = "6012308856"
+from whatsapp_gateway import send_whatsapp, start_webhook_server
 
 _session = requests.Session()
 
@@ -225,28 +224,24 @@ FIB_EXTEND = [
 # ─────────────────────────────────────────────────────────────
 #  AUTH
 # ─────────────────────────────────────────────────────────────
+from groww_token import get_access_token as get_cached_access_token
+
+
 def init_groww():
-    totp = pyotp.TOTP(TOTP_SECRET).now()
-    access_token = GrowwAPI.get_access_token(api_key=API_KEY, totp=totp)
+    access_token = get_cached_access_token(API_KEY, TOTP_SECRET)
     client = GrowwAPI(access_token)
     print(f"{_cc('API_OK')}✅ Fibonacci Analyzer: Groww API initialized{C.RESET}")
     return client, access_token
 
 
 # ─────────────────────────────────────────────────────────────
-#  TELEGRAM
+#  WHATSAPP (see whatsapp_gateway.py)
 # ─────────────────────────────────────────────────────────────
 def send_telegram(msg: str):
+    """Wrapper: honours the TELEGRAM_ALERTS flag from FIBO_CONFIG."""
     if not FIBO_CONFIG.get("TELEGRAM_ALERTS"):
         return
-    try:
-        _session.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": msg},
-            timeout=3,
-        )
-    except Exception:
-        pass
+    send_whatsapp(msg)
 
 
 # ─────────────────────────────────────────────────────────────

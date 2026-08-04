@@ -272,11 +272,57 @@ def _write_chart_data(watch_list: list):
     if not has_live_data:
         return
 
+    # Build status block for dashboard
+    prox     = cfg["proximity_pts"]
+    pm_min   = cfg["premium_min"]
+    pm_max   = cfg["premium_max"]
+    valid_tl = sum(1 for i in watch_list if (
+        (cfg.get("tl_ascending_enabled",  True)  and i.tl.valid) or
+        (cfg.get("tl_descending_enabled", False) and i.tl_resist.valid) or
+        (cfg.get("tl_horizontal_enabled", False) and i.horiz_zone is not None)
+    )) if watch_list else 0
+    in_range_with_tl = [i for i in watch_list
+                        if pm_min <= i.ltp <= pm_max and (i.tl.valid or i.tl_resist.valid)] if watch_list else []
+    near_signal = []
+    for i in in_range_with_tl:
+        if i.tl.valid:
+            dist = round(i.ltp - i.tl.support, 1)
+            if -prox * 4 <= dist <= prox * 4:
+                near_signal.append({"symbol": i.symbol[-12:], "ltp": round(i.ltp, 1),
+                                    "support": round(i.tl.support, 1), "dist": dist, "type": "ASC"})
+        if cfg.get("tl_descending_enabled", False) and i.tl_resist.valid:
+            dist = round(i.ltp - i.tl_resist.support, 1)
+            if abs(dist) <= prox * 4:
+                near_signal.append({"symbol": i.symbol[-12:], "ltp": round(i.ltp, 1),
+                                    "support": round(i.tl_resist.support, 1), "dist": dist, "type": "DESC"})
+    near_signal.sort(key=lambda x: abs(x["dist"]))
+    open_trade_info = None
+    for i in (watch_list or []):
+        if i.active_trade:
+            t = i.active_trade
+            open_trade_info = {"symbol": t.symbol[-12:], "type": t.play_type,
+                               "entry": t.entry_price, "sl": t.sl,
+                               "ltp": round(i.ltp, 1), "peak": t.peak,
+                               "trail_active": t.trail_active}
+            break
+    status_block = {
+        "tl_active":   valid_tl,
+        "total":       len(watch_list) if watch_list else 0,
+        "in_range":    len(in_range_with_tl),
+        "near_signal": near_signal[:8],
+        "open_trade":  open_trade_info,
+        "spot_bars":   len(spot_candles),
+        "spot_ltp":    spot_ltp,
+    }
+
     try:
         with open(_CHART_DATA_FILE, "w") as f:
             json.dump({
                 "ts":          datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "index":       cfg["index"],
+                "premium_min": cfg["premium_min"],
+                "premium_max": cfg["premium_max"],
+                "status":      status_block,
                 "instruments": instruments,
                 "spot": {
                     "symbol":     cfg["index"],
@@ -491,9 +537,8 @@ def _auto_bearer_token() -> str:
         totp_sec = ai.get("groww_totp_secret", "")
         if not api_key or not totp_sec:
             return ""
-        import pyotp
-        from growwapi import GrowwAPI
-        token = GrowwAPI.get_access_token(api_key=api_key, totp=pyotp.TOTP(totp_sec).now())
+        from groww_token import get_access_token as _get_cached_token
+        token = _get_cached_token(api_key, totp_sec)
         log.info("✅  Fresh Bearer token fetched for spot chart")
         return token
     except Exception as ex:
@@ -1009,6 +1054,62 @@ def refresh_one(inst: InstrumentState, verbose: bool = True):
             log.info(f"  ⬜ HORIZ LOST: {inst.symbol}")
 
 
+def _print_status_block(watch_list: List[InstrumentState]):
+    """Print a compact status summary to the log."""
+    cfg       = CONFIG
+    prox      = cfg["proximity_pts"]
+    pm_min    = cfg["premium_min"]
+    pm_max    = cfg["premium_max"]
+
+    # Trendline counts
+    valid = sum(1 for i in watch_list if (
+        (cfg.get("tl_ascending_enabled",  True)  and i.tl.valid) or
+        (cfg.get("tl_descending_enabled", False) and i.tl_resist.valid) or
+        (cfg.get("tl_horizontal_enabled", False) and i.horiz_zone is not None)
+    ))
+    in_range = [i for i in watch_list
+                if pm_min <= i.ltp <= pm_max and (i.tl.valid or i.tl_resist.valid)]
+    in_trade = [i for i in watch_list if i.active_trade]
+
+    # Spot info
+    spot_bars = len(_spot_state.candles_today)
+    spot_ltp  = float(_spot_state.ltp_history[-1]) if _spot_state.ltp_history else 0.0
+    spot_str  = f"₹{spot_ltp:.0f}  {_spot_state.structure()}" if spot_ltp > 0 else "N/A"
+
+    # Nearest to signal (in premium range, with TL)
+    candidates = []
+    for i in in_range:
+        if i.tl.valid:
+            dist = i.ltp - i.tl.support
+            if -prox * 4 <= dist <= prox * 4:
+                candidates.append((abs(dist), dist, i.symbol[-12:], i.ltp, i.tl.support, "ASC"))
+        if cfg.get("tl_descending_enabled", False) and i.tl_resist.valid:
+            dist = i.ltp - i.tl_resist.support
+            if abs(dist) <= prox * 4:
+                candidates.append((abs(dist), dist, i.symbol[-12:], i.ltp, i.tl_resist.support, "DESC"))
+    candidates.sort()
+
+    log.info("━" * 62)
+    log.info(f"📊 STATUS  │  NIFTY {spot_str}  │  bars={spot_bars}")
+    log.info(f"   TL active : {valid}/{len(watch_list)}  │  In premium range (₹{pm_min:.0f}–{pm_max:.0f}): {len(in_range)}")
+    if in_trade:
+        for i in in_trade:
+            t = i.active_trade
+            pnl = round((i.ltp - t.entry_price) * t.qty, 0)
+            log.info(f"   🔴 OPEN   : {t.symbol[-12:]}  [{t.play_type}]  "
+                     f"entry=₹{t.entry_price:.0f}  SL=₹{t.sl:.0f}  P&L≈₹{pnl:+,.0f}")
+    else:
+        log.info("   Open trades: none")
+    if candidates:
+        log.info("   Watching (nearest to signal):")
+        for _, dist, sym, ltp, sup, tl_type in candidates[:5]:
+            arrow = "⬆ BOUNCE zone" if dist >= 0 else "⬇ below support"
+            log.info(f"     {sym:<15} LTP=₹{ltp:.0f}  support=₹{sup:.0f}  dist={dist:+.1f}  [{tl_type}] {arrow}")
+    else:
+        log.info("   Watching: no instruments near signal yet")
+    log.info("━" * 62)
+
+
 def structural_loop(watch_list: List[InstrumentState]):
     """Background thread: refresh candles every structural_refresh seconds."""
     interval = CONFIG["structural_refresh"]
@@ -1018,16 +1119,7 @@ def structural_loop(watch_list: List[InstrumentState]):
             if not inst.active_trade:
                 refresh_one(inst, verbose=False)
         _refresh_spot()
-        cfg      = CONFIG
-        valid    = sum(1 for i in watch_list if (
-            (cfg.get("tl_ascending_enabled",  True)  and i.tl.valid) or
-            (cfg.get("tl_descending_enabled", False) and i.tl_resist.valid) or
-            (cfg.get("tl_horizontal_enabled", False) and i.horiz_zone is not None)
-        ))
-        in_trade = sum(1 for i in watch_list if i.active_trade)
-        spot_str = f"  │  NIFTY: {_spot_state.structure()}" if _spot_state.candles_today else ""
-        log.info(f"🔄 Structural refresh  │  {valid}/{len(watch_list)} trendlines active  │  "
-                 f"{in_trade} open trade(s){spot_str}")
+        _print_status_block(watch_list)
         _write_chart_data(watch_list)
 
 # ═══════════════════════════════════════════════════════════════════════════════

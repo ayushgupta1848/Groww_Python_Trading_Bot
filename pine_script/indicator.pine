@@ -1,0 +1,106 @@
+//@version=4
+study("TW All in One", overlay=true)
+
+// identify Trade for up-side or down-side 
+src = close
+modeSwitch = "Ehma"
+length = 16
+lengthMult = 1.0
+useHtf = false
+htf = "240"
+switchColor = true
+candleCol = false
+visualSwitch = true
+thicknesSwitch = 1
+transpSwitch = 40
+
+HMA(_src, _length) => wma(2 * wma(_src, _length / 2) - wma(_src, _length), round(sqrt(_length)))
+EHMA(_src, _length) => ema(2 * ema(_src, _length ) - ema(_src, _length), round(sqrt(_length)))
+THMA(_src, _length) => wma(wma(_src, _length / 3) * 3 - wma(_src, _length / 2) - wma(_src, _length), _length)
+
+ema100 = ema(src, 100)
+
+selectedMA = modeSwitch == "Hma" ? HMA(src, length) :
+              modeSwitch == "Ehma" ? EHMA(src, length ) : 
+              modeSwitch == "Thma" ? THMA(src, length / 2) : na
+
+_hull = useHtf ? security(syminfo.ticker, htf, selectedMA) : selectedMA
+HULL = _hull
+MHULL = HULL[0]
+SHULL = HULL[2]
+
+hullColor = switchColor ? (HULL > HULL[2] ? color.rgb(0, 24, 243) : color.rgb(255, 75, 75)) : color.rgb(255, 41, 41)
+
+Fi1 = plot(MHULL, title="Band 1", color=hullColor, linewidth=thicknesSwitch, transp=50)
+Fi2 = plot(visualSwitch ? SHULL : na, title="Band 2", color=hullColor, linewidth=thicknesSwitch, transp=transpSwitch)
+
+fill(Fi1, Fi2, title="Band Filler", color=hullColor, transp=transpSwitch)
+
+plot(ema100, title="N-Line", color=color.purple, linewidth=4)
+
+barcolor(color = candleCol ? (switchColor ? hullColor : na) : na)
+
+plotshape(crossover(SHULL, MHULL), style=shape.triangledown, location=location.abovebar, color=color.rgb(236, 34, 61), size=size.small, title="Sell")
+plotshape(crossunder(SHULL, MHULL), style=shape.triangleup, location=location.belowbar, color=color.rgb(76, 66, 219), size=size.small, title="Buy")
+
+// Target & Stop Loss 
+var left = 33
+var right = 21
+var quick_right = 3
+var src_auto_sr = "Close"
+
+pivot_high = iff(src_auto_sr=="Close",pivothigh(close,left,right),pivothigh(high,left,right))
+pivot_lows = iff(src_auto_sr=="Close",pivotlow(close, left,right),pivotlow(low,left,right))
+
+quick_pivot_high = iff(src_auto_sr=="Close",pivothigh(close,left,quick_right),pivothigh(high,left,quick_right))
+quick_pivot_lows = iff(src_auto_sr=="Close",pivotlow(close, left,quick_right),pivotlow(low, left,quick_right))
+
+level1 = iff(src_auto_sr=="Close",valuewhen(quick_pivot_high, close[quick_right], 0),valuewhen(quick_pivot_high, high[quick_right], 0))
+level2 = iff(src_auto_sr=="Close",valuewhen(quick_pivot_lows, close[quick_right], 0),valuewhen(quick_pivot_lows, low[quick_right], 0))
+level3 = iff(src_auto_sr=="Close",valuewhen(pivot_high, close[right], 0),valuewhen(pivot_high, high[right], 0))
+level4 = iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 0),valuewhen(pivot_lows, low[right], 0))
+level5 = iff(src_auto_sr=="Close",valuewhen(pivot_high, close[right], 1),valuewhen(pivot_high, high[right], 1))
+level6 = iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 1),valuewhen(pivot_lows, low[right], 1))
+level7 = iff(src_auto_sr=="Close",valuewhen(pivot_high, close[right], 2),valuewhen(pivot_high, high[right], 2))
+level8 = iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 2),valuewhen(pivot_lows, low[right], 2))
+level9 = iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 3),valuewhen(pivot_lows, low[right], 3))
+level10 = iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 3),valuewhen(pivot_lows, low[right], 3))
+level11 = iff(src_auto_sr=="Close",valuewhen(pivot_high, close[right], 4),valuewhen(pivot_high, high[right], 4))
+level12= iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 4),valuewhen(pivot_lows, low[right], 4))
+level13= iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 5),valuewhen(pivot_lows, low[right], 5))
+level14 = iff(src_auto_sr=="Close",valuewhen(pivot_lows, close[right], 5),valuewhen(pivot_lows, low[right], 5))
+
+
+
+level1_col = close >= level1 ? color.green : color.red
+level2_col = close >= level2 ? color.green : color.red
+level3_col = close >= level3 ? color.green : color.red
+level4_col = close >= level4 ? color.green : color.red
+level5_col = close >= level5 ? color.green : color.red
+level6_col = close >= level6 ? color.green : color.red
+level7_col = close >= level7 ? color.green : color.red
+level8_col = close >= level8 ? color.green : color.red
+level9_col = close >= level9 ? color.green : color.red
+level10_col = close >= level10 ? color.green : color.red
+level11_col = close >= level11 ? color.green : color.red
+level12_col = close >= level12 ? color.green : color.red
+level13_col = close >= level13? color.green : color.red
+level14_col = close >= level14 ? color.green : color.red
+
+
+
+
+plot(level1, style=plot.style_line, color=level1_col, title="Target Stoploss Line 1")
+plot(level2, style=plot.style_line, color=level2_col, title="Target Stoploss Line  2")
+plot(level3, style=plot.style_line, color=level3_col, title="Target Stoploss Line  3")
+plot(level4, style=plot.style_line, color=level4_col, title="Target Stoploss Line  4")
+plot(level5, style=plot.style_line, color=level5_col, title="Target Stoploss Line  5")
+plot(level6, style=plot.style_line, color=level6_col, title="Target Stoploss Line  6")
+plot(level7, style=plot.style_line, color=level7_col, title="Target Stoploss Line  7")
+plot(level8, style=plot.style_line, color=level8_col, title="Target Stoploss Line  8")
+plot(level9, style=plot.style_line, color=level9_col, title="Target Stoploss Line  9")
+plot(level10, style=plot.style_line, color=level10_col, title="Target Stoploss Line  10")
+plot(level11, style=plot.style_line, color=level11_col, title="Target Stoploss Line  11")
+plot(level12, style=plot.style_line, color=level12_col, title="Target Stoploss Line  12")
+plot(level13, style=plot.style_line, color=level13_col, title="Target Stoploss Line  13")
+plot(level14, style=plot.style_line, color=level14_col, title="Target Stoploss Line  14")

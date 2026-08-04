@@ -268,9 +268,11 @@ def sdiv(label=""):
 # ══════════════════════════════════════════════════════════════
 #  GROWW INIT
 # ══════════════════════════════════════════════════════════════
+from groww_token import get_access_token as get_cached_access_token
+
+
 def init_groww():
-    totp  = pyotp.TOTP(TOTP_SECRET).now()
-    token = GrowwAPI.get_access_token(api_key=API_KEY, totp=totp)
+    token = get_cached_access_token(API_KEY, TOTP_SECRET)
     return GrowwAPI(token), token
 
 

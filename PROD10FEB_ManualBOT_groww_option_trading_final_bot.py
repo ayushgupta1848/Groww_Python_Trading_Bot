@@ -44,15 +44,31 @@ def setup_persistent_logger():
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_path = os.path.join(log_dir, f"Groww_Bot_{timestamp}.log")
 
-    # Define a Tee class to write to both console and log file
+    # Define a Tee class to write to both console and log file,
+    # prefixing every new line with a [HH:MM:SS] timestamp.
     class Tee:
         def __init__(self, *streams):
             self.streams = streams
+            self._at_line_start = True
+
+        def _stamp(self):
+            return f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] "
 
         def write(self, data):
+            if not data:
+                return
+            out = []
+            for ch in data:
+                if self._at_line_start and ch != "\n":
+                    out.append(self._stamp())
+                    self._at_line_start = False
+                out.append(ch)
+                if ch == "\n":
+                    self._at_line_start = True
+            stamped = "".join(out)
             for s in self.streams:
                 try:
-                    s.write(data)
+                    s.write(stamped)
                     s.flush()
                 except Exception:
                     pass  # Ignore on shutdown
@@ -93,9 +109,7 @@ print(csv_path)
 # csv_path = r"C:\Users\HITS\Downloads\instrument (6).csv"
 convert_csv_to_json = "yes"
 
-# Telegram placeholders (you will replace later)
-TELEGRAM_BOT_TOKEN = "PUT_YOUR_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "PUT_YOUR_CHAT_ID_HERE"
+from whatsapp_gateway import send_whatsapp as send_telegram, start_webhook_server
 
 # Sound files (ensure these exist in script folder or provide full path)
 SOUND_PROFIT = "coin.mp3"
@@ -122,15 +136,16 @@ except Exception:
     print("❗ growwapi module not found. Make sure it's installed and importable.")
     # continue; import errors will show when script runs further
 
+from groww_token import get_access_token as get_cached_access_token
+
 # ----------------- Groww auth & wrapper -----------------
 def groww_init(api_key):
     """
     Return growwapi client instance (GrowwAPI(access_token))
     This function gets access_token using GrowwAPI.get_access_token if available.
     """
-    totp = totp_gen.now()
     try:
-        access_token = GrowwAPI.get_access_token(api_key=api_key, totp=totp)
+        access_token = get_cached_access_token(api_key, 'SC3YMFLEGLHBWUPHRBOYLPEEOVAT2PZ4')
         client = GrowwAPI(access_token)
         print(access_token)
         print("✅ Groww API Initialized Successfully")
@@ -142,20 +157,28 @@ def groww_init(api_key):
 # Init groww client
 groww ,access_token = groww_init(api_key)
 
+# ── Speed patch: reuse TCP+TLS connection for order API calls ──────────────
+# growwapi uses bare requests.post() (new TCP+TLS handshake every call = ~2-3s).
+# Patching _request_post to use a persistent session drops order latency to <1s.
+_order_session = requests.Session()
+_order_session.headers.update({"Connection": "keep-alive"})
 
-# ----------------- Utilities: Telegram, Sound, Excel Logging -----------------
-
-# === TELEGRAM CONFIG ===
-BOT_TOKEN = "8666941668:AAEObDodwWqDwdVJVXy8WvFx_lyreq8p7fI"
-CHAT_ID = "6012308856"
-
-def send_telegram(message: str):
+def _fast_request_post(url, json=None, headers=None, timeout=None, **kwargs):
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": CHAT_ID, "text": message}
-        requests.post(url, data=payload, timeout=3)  # 3-second timeout
-    except Exception as e:
-        pass  # Silently ignore Telegram errors to avoid spam
+        return _order_session.post(url=url, json=json, headers=headers, timeout=timeout, **kwargs)
+    except requests.exceptions.Timeout:
+        try:
+            from growwapi.groww.exceptions import GrowwAPITimeoutException
+            raise GrowwAPITimeoutException()
+        except ImportError:
+            raise
+
+groww._request_post = _fast_request_post
+print("⚡ Order session patched — persistent TCP connection enabled")
+# ── End speed patch ────────────────────────────────────────────────────────
+
+
+# ----------------- Utilities: Sound, Excel Logging -----------------
 
 def play_sound_async(filename):
     try:
@@ -591,11 +614,12 @@ CONFIG = {
     "TRAIL_SL_ATR_MULTIPLIER": 1.0,  # How many ATRs to use as the trail distance (0.5=tight, 1.5=loose)
     "POLL_INTERVAL": 0.50,  # Poll interval in seconds (Optimized for speed)
     "MAX_TRAIL_TIME": 3600,  # Max trailing time in seconds (1 hour)
-    "HARD_SL_POINTS": 6.0,  # Hard stop loss points below entry
+    "HARD_SL_POINTS": 6.0,        # Hard stop loss points below entry (also acts as floor when ATR-based SL is active)
+    "HARD_SL_ATR_MULTIPLIER": 1.5,  # ATR multiplier for HIST ATR SL (5-min ATR × this = raw SL pts, floored at HARD_SL_POINTS)
     "VALIDATE_ORDERS": False,   # ✅ LIVE TRADING: Set True to validate BUY/SELL execution (RECOMMENDED)
     "PAPER_TRADING": True,   # ✅ Set True to simulate trades without placing real orders (safe for testing all modes)
-    "QUICK_TRAIL_BUFFER": 1.0,  # pts above target before cancelling limit sell and switching to trailing stop
-    "QUICK_TRAIL_GAP": 1.5,     # pts below peak to place the trailing stop (same as default target gap)
+    "QUICK_TRAIL_BUFFER": 1.0,  # DEPRECATED (unused): quick mode is now a hard target — no trailing past target
+    "QUICK_TRAIL_GAP": 1.5,     # DEPRECATED (unused): quick mode is now a hard target — no trailing past target
     "user_confirmation_needed": False,   # or False
     "ENABLE_EMA_CHECK": False,
     "ENABLE_ADX_CHECK": False,
@@ -980,10 +1004,11 @@ def calculate_atr(high, low, close, period=14):
     return atr if atr is not None else 0
 
 
-def get_technicals(symbol, groww_client, interval="1minute", segment="FNO", timeout=5, instrument=None):
+def get_technicals(symbol, groww_client, interval="1minute", segment="FNO", timeout=5, instrument=None, lookback_minutes=60):
     """
     Fetch technical indicators with timeout protection (optimized to 5s).
     Returns None if API call fails or times out.
+    lookback_minutes: how far back to fetch candles (increase for wider intervals, e.g. 150 for 5-min)
     """
     try:
         # Detect exchange dynamically (BSE for SENSEX, NSE for others)
@@ -992,12 +1017,11 @@ def get_technicals(symbol, groww_client, interval="1minute", segment="FNO", time
             exchange_const = groww_client.EXCHANGE_BSE if exch_str == "BSE" else groww_client.EXCHANGE_NSE
         else:
             exchange_const = groww_client.EXCHANGE_NSE
-        
-        # Fetch 60 mins data (reduced from 120 for speed)
-        end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=60)
 
-        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=lookback_minutes)
+
+        end_str   = end_time.strftime("%Y-%m-%d %H:%M:%S")
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
         print(f"🔄 Fetching historical candles for {symbol}...")
@@ -1661,26 +1685,36 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
         print(f"📋 [PAPER] Executed: ₹{price:.2f} × {qty} (order {order_id})")
         return float(price), int(qty)
 
-    try:
-        url = f"https://api.groww.in/v1/order/trades/{order_id}?segment={segment}&page=0&page_size=50"
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}",
-            "X-API-VERSION": "1.0"
-        }
+    url = f"https://api.groww.in/v1/order/trades/{order_id}?segment={segment}&page=0&page_size=50"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0"
+    }
 
-        print(f"\n📦 Fetching trade details for order: {order_id}")
-        response = requests.get(url, headers=headers)
-        data = response.json()
+    print(f"\n📦 Fetching trade details for order: {order_id}")
+
+    # The trades endpoint lags order status by a few hundred ms (eventually consistent).
+    # First attempt fires immediately — retries/sleeps happen only when no trades came back.
+    _backoff = (0, 0.25, 0.5, 1.0, 1.25)
+    for _attempt, _delay in enumerate(_backoff, start=1):
+        if _delay:
+            time.sleep(_delay)
+        try:
+            response = requests.get(url, headers=headers, timeout=5)
+            data = response.json()
+        except Exception as e:
+            print(f"⚠️ Trades fetch attempt {_attempt}/{len(_backoff)} error: {e}")
+            continue
 
         if data.get("status") != "SUCCESS":
-            print("⚠️ Failed to fetch trade info:", data)
-            return None, None
+            print(f"⚠️ Trades fetch attempt {_attempt}/{len(_backoff)} failed:", data)
+            continue
 
         trades = data.get("payload", {}).get("trade_list", [])
         if not trades:
-            print("⚠️ No trades found for order ID.")
-            return None, None
+            print(f"⚠️ No trades yet for order ID (attempt {_attempt}/{len(_backoff)}).")
+            continue
 
         # Compute average price & total quantity
         total_qty = sum(t["quantity"] for t in trades)
@@ -1693,9 +1727,22 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
         print(f"✅ {side} {symbol} | Total Qty={total_qty} | Avg Price=₹{avg_price}")
         return avg_price, total_qty
 
+    # Fallback: the order-status payload carries average_price for executed orders
+    try:
+        status_url = f"https://api.groww.in/v1/order/status/{order_id}?segment={segment}"
+        s_payload = requests.get(status_url, headers=headers, timeout=5).json().get("payload", {}) or {}
+        avg_price = s_payload.get("average_price") or s_payload.get("avg_price") or 0
+        qty = s_payload.get("filled_quantity") or s_payload.get("quantity") or 0
+        if avg_price and qty:
+            avg_price = round(float(avg_price), 2)
+            qty = int(qty)
+            print(f"✅ Fallback via order-status: Qty={qty} | Avg Price=₹{avg_price}")
+            return avg_price, qty
+        print("⚠️ Order-status fallback had no average_price:", s_payload)
     except Exception as e:
-        print("❌ Error fetching order trades:", e)
-        return None, None
+        print("❌ Order-status fallback failed:", e)
+
+    return None, None
 
 
 
@@ -1729,7 +1776,7 @@ def _fetch_atr_sync(instrument, timeout=3):
     return q.get() if not q.empty() else None
 
 # ----------------- Place CP order workflow (mirrors AngelOne logic) -----------------
-def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle", partial=False, partial_pct=50):
+def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle", partial=False, partial_pct=50, ltp_hint=0):
     """Quick mode: Buy at market, set limit sell at +quick_pts, ATR-based hard SL + full trail.
     partial=True: sell partial_pct% of qty when price reverses from 60%-of-target sub-peak."""
     global buy_status, instruments_data, CONFIG
@@ -1771,52 +1818,65 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
     lot_size = int(instrument.get("lot_size") or instrument.get("lotsize") or 1)
     quantity = lots * lot_size
 
-    # Fetch LTP
-    ltp_before = get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
-    if ltp_before is None:
-        print("❌ Could not fetch LTP before placing order.")
-        return
-
-    entry_price = round(float(ltp_before), 2)
-    target_price = round(entry_price + quick_pts, 2)
     _atr_src_label = ('HIST ATR' if atr_source=='candle' else 'TICK RNG') if atr_based else 'OFF'
-    print(f"⚡ QUICK MODE: Entry={entry_price} | Target={target_price} (+{quick_pts}pt)  ATR-SL={_atr_src_label}")
 
-    # Place BUY order
+    # Use dashboard chain LTP as reference (no pre-fetch needed — market order fills at exchange price)
+    _ref_ltp = round(float(ltp_hint), 2) if ltp_hint and ltp_hint > 0 else None
+    if _ref_ltp:
+        print(f"⚡ QUICK MODE: Ref LTP=₹{_ref_ltp} (from dashboard) | +{quick_pts}pt target  ATR-SL={_atr_src_label}")
+    else:
+        print(f"⚡ QUICK MODE: Placing MARKET order immediately | +{quick_pts}pt target  ATR-SL={_atr_src_label}")
+
+    # Place BUY order immediately — no LTP pre-fetch, target set from actual fill price
     try:
         order_resp = place_market_order_groww(instrument, quantity, transaction_type="BUY", product="MIS")
         order_id = order_resp.get("payload", {}).get("groww_order_id") or order_resp.get("groww_order_id")
         print(f"✅ Buy Order placed:", order_resp, {datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-        send_telegram(f"⚡ QUICK BUY: {entry_price} | Target: {target_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
     except Exception as e:
         print(f"❌ Buy order failed: {e}")
         send_telegram(f"❌ Buy order failed: {e}")
         return
 
-    # Wait for BUY execution (only if VALIDATE_ORDERS is True)
+    # Get actual fill price — use for target (more accurate than pre-order LTP estimate)
+    avg_price = None
     if CONFIG.get("VALIDATE_ORDERS", True):
-        if order_id:
-            buy_status = wait_for_order_status(order_id, access_token, "BUY")
-            if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                print(f"⚠️ BUY failed: {buy_status}")
-                send_telegram(f"⚠️ BUY failed: {buy_status}")
-                return
-            
-            avg_price, executed_qty = get_order_executed_price(order_id, access_token)
-            if not avg_price or not executed_qty:
-                print(f"❌ Could not get executed price/qty for BUY order {order_id}.")
-                return
-            quantity = executed_qty
-            target_price = round(avg_price + quick_pts, 2)  # Recalculate based on actual buy price
-            print(f"🎯 BUY EXECUTED @ ₹{avg_price} | New Target: ₹{target_price} (+{quick_pts}pt)")
-        else:
+        if not order_id:
             print("❌ No BUY order ID received.")
             return
+        buy_status = wait_for_order_status(order_id, access_token, "BUY")
+        if buy_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
+            print(f"⚠️ BUY failed: {buy_status}")
+            send_telegram(f"⚠️ BUY failed: {buy_status}")
+            return
+        avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+        if not avg_price or not executed_qty:
+            # BUY is confirmed EXECUTED — never abandon the position. Estimate entry from LTP.
+            _est = _ref_ltp or get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
+            if not _est:
+                print(f"🚨 BUY {order_id} EXECUTED but no price available — POSITION OPEN & UNMANAGED. Exit manually!")
+                send_telegram(f"🚨 BUY {order_id} EXECUTED but price unavailable — POSITION OPEN & UNMANAGED. Exit manually NOW!")
+                return
+            avg_price = round(float(_est), 2)
+            executed_qty = quantity
+            print(f"⚠️ Avg price unavailable for BUY {order_id} — using LTP estimate ₹{avg_price}; managing position.")
+            send_telegram(f"⚠️ BUY {order_id} executed; avg price unavailable — using LTP ₹{avg_price} as entry estimate. Position is being managed.")
+        quantity = executed_qty
+        target_price = round_to_nearest_5_paise(avg_price + quick_pts)
+        print(f"🎯 BUY EXECUTED @ ₹{avg_price} | Target: ₹{target_price} (+{quick_pts}pt)")
     else:
-        # Testing mode: Use entry price estimate, skip validation
-        avg_price = entry_price
-        target_price = round(entry_price + quick_pts, 2)
-        print(f"⚠️ Testing mode: Using entry price estimate ₹{avg_price}, target ₹{target_price}")
+        # No-validate mode: use dashboard LTP or fallback to a quick post-order fetch
+        if _ref_ltp:
+            avg_price = _ref_ltp
+            print(f"⚡ No-validate: using dashboard ref LTP ₹{avg_price} as entry estimate")
+        else:
+            _fetched = get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
+            avg_price = round(float(_fetched), 2) if _fetched else 0
+            if not avg_price:
+                print("⚠️ Could not determine entry price — using 0 as fallback")
+        target_price = round_to_nearest_5_paise(avg_price + quick_pts)
+        print(f"⚠️ No-validate mode: entry estimate ₹{avg_price}, target ₹{target_price}")
+
+    send_telegram(f"⚡ QUICK BUY PLACED: fill≈₹{avg_price} | Target: ₹{target_price} | {instrument.get('internal_trading_symbol')} | qty={quantity}")
 
     # ── SL calculation — supports HIST ATR (candle) and TICK RNG (scan) ──
     atr_val     = 0.0
@@ -1856,30 +1916,33 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                 sl_price = round(avg_price - hard_sl_pts, 2)
                 print(f"🛡️ Tick range unavailable → Fixed Hard SL: ₹{sl_price}  ({hard_sl_pts}pts)")
         else:
-            # ── HIST ATR: 14-period EMA ATR from 1-min candles (same as manual mode) ──
+            # ── HIST ATR: 14-period EMA ATR from 5-min candles (150 min lookback = 30 candles) ──
             try:
                 from threading import Thread
                 import queue
                 result_queue = queue.Queue()
                 def fetch_technicals():
                     try:
-                        techs = get_technicals(instrument['groww_symbol'], groww, segment="FNO", instrument=instrument)
+                        techs = get_technicals(instrument['groww_symbol'], groww, segment="FNO", instrument=instrument,
+                                               interval="5minute", lookback_minutes=150)
                         result_queue.put(techs)
                     except Exception:
                         result_queue.put(None)
                 thread = Thread(target=fetch_technicals, daemon=True)
                 thread.start()
-                thread.join(timeout=3)
+                thread.join(timeout=5)
                 if not result_queue.empty():
                     techs = result_queue.get()
                     if techs and techs.get("atr"):
                         atr_val = float(techs["atr"])
-                        print(f"✅ Hist ATR fetched: {atr_val:.2f}")
+                        print(f"✅ Hist ATR fetched (5-min): {atr_val:.2f}")
             except Exception:
                 pass
             if atr_val > 0:
-                sl_price = round(avg_price - (mult * atr_val), 2)
-                print(f"🛡️ HIST ATR Hard SL: ₹{sl_price}  ({mult:.1f} × ATR {atr_val:.2f})")
+                raw_sl = mult * atr_val
+                sl_pts = max(hard_sl_pts, raw_sl)  # floor at HARD_SL_POINTS so SL is never tighter than fixed fallback
+                sl_price = round(avg_price - sl_pts, 2)
+                print(f"🛡️ HIST ATR Hard SL: ₹{sl_price}  ({mult:.1f} × ATR {atr_val:.2f} = {raw_sl:.2f}, floor={hard_sl_pts})")
             else:
                 sl_price = round(avg_price - hard_sl_pts, 2)
                 print(f"🛡️ Hist ATR unavailable → Fixed Hard SL: ₹{sl_price}  ({hard_sl_pts}pts)")
@@ -1909,22 +1972,21 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
         send_telegram(f"❌ Limit SELL failed: {e}")
         return
 
-    # Trail configuration — matches manual mode (ATR-based or CONFIG["TRAIL_STEP"])
-    trail_buffer  = CONFIG.get("QUICK_TRAIL_BUFFER", 1.0)   # pts above target to confirm run
-    trail_gap     = _resolve_trail_step(atr_val)              # full trail: ATR-based or fixed step
-    trail_trigger = round(target_price + trail_buffer, 2)
+    # Reversal step for PARTIAL profit exits (ATR-based or CONFIG["TRAIL_STEP"]).
+    # Quick target mode is a HARD TARGET: the resting limit sell caps the exit at
+    # target and is the guaranteed exit even if this bot dies. There is no trailing
+    # past target — a resting limit sell fills the instant price touches target, so
+    # price can never run above it while the order is open.
+    trail_gap  = _resolve_trail_step(atr_val)
     _trail_src = ('ATR×'+str(CONFIG.get('TRAIL_SL_ATR_MULTIPLIER',1.0))) if CONFIG.get('TRAIL_SL_ATR_BASED') and atr_val>0 else 'fixed CONFIG[TRAIL_STEP]'
-    print(f"📐 Trail step: ₹{trail_gap:.2f}  ({_trail_src})")
+    print(f"📐 Partial reversal step: ₹{trail_gap:.2f}  ({_trail_src})")
 
-    # Monitor price until target / trail stop / SL is hit
-    print(f"⏳ Monitoring price... Target: ₹{target_price} | Trail trigger: ₹{trail_trigger} | SL: ₹{sl_price}")
+    # Monitor price until target or SL is hit
+    print(f"⏳ Monitoring price... Target: ₹{target_price} | SL: ₹{sl_price}")
     start_time = time.time()
     max_monitor_time = 3600  # 1 hour max
 
-    trailing_active  = False
-    peak_ltp         = 0.0
-    trail_sl         = 0.0
-    limit_sell_alive = True   # False once we cancel the limit sell to start trailing
+    limit_sell_alive = True   # False while the resting limit sell is temporarily cancelled (partial exit)
 
     # ── Partial profit state ─────────────────────────────────────────────
     lot_size         = int(instrument.get("lot_size", 1))
@@ -1952,41 +2014,6 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                 continue
             ltp = float(ltp)
 
-            # ── TRAILING PHASE ───────────────────────────────────────────────
-            if trailing_active:
-                if ltp > peak_ltp:
-                    peak_ltp = ltp
-                    trail_sl = round(peak_ltp - trail_gap, 2)
-                    print(f"📈 New peak: ₹{peak_ltp} | Trail SL: ₹{trail_sl}")
-
-                if ltp <= trail_sl:
-                    print(f"🎯 TRAIL STOP HIT! LTP: ₹{ltp} | Peak was: ₹{peak_ltp}")
-                    send_telegram(f"🎯 TRAIL STOP HIT @ ₹{ltp} | Peak ₹{peak_ltp}")
-                    play_sound_async(SOUND_PROFIT)
-                    try:
-                        trail_sell_resp = place_market_order_groww(instrument, quantity, "SELL", "MIS")
-                        trail_sell_id = trail_sell_resp.get("payload", {}).get("groww_order_id") or trail_sell_resp.get("groww_order_id")
-                        if CONFIG.get("VALIDATE_ORDERS", True) and trail_sell_id:
-                            final_status = wait_for_order_status(trail_sell_id, access_token, "SELL")
-                            if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                                sell_price, sold_qty = get_order_executed_price(trail_sell_id, access_token)
-                                if sell_price and sold_qty:
-                                    profit = (sell_price - avg_price) * sold_qty
-                                    print(f"💰 TRAIL PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
-                                    send_telegram(f"💰 TRAIL PROFIT: ₹{profit:.2f}")
-                                    log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
-                                    break
-                        # Fallback: use trail_sl as estimated exit (price was at trail_sl when triggered)
-                        profit = (trail_sl - avg_price) * quantity
-                        print(f"💰 Estimated TRAIL PROFIT: ₹{profit:.2f}")
-                        log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, trail_sl, quantity, profit)
-                    except Exception as e:
-                        print(f"❌ Trail sell failed: {e}")
-                    break
-
-                time.sleep(1)
-                continue
-
             # ── RUNTIME PARTIAL UPDATE (dashboard SET button) ───────────────────
             if _QUICK_RUNTIME_PARTIAL[0] is not None and not partial_booked:
                 _rp = _QUICK_RUNTIME_PARTIAL[0]
@@ -2000,7 +2027,7 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                     print(f"   trigger≥₹{partial_trigger_lvl} | drop={trail_gap}pt")
 
             # ── PARTIAL PROFIT EXIT ──────────────────────────────────────────────
-            if partial and not partial_booked and not trailing_active and limit_sell_alive and partial_qty > 0:
+            if partial and not partial_booked and limit_sell_alive and partial_qty > 0:
                 if ltp >= partial_trigger_lvl:
                     # Price in partial zone — track local peak
                     if ltp > partial_sub_peak:
@@ -2049,10 +2076,10 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                             print(f"❌ Partial exit failed: {_pe}")
 
             # ── RUNTIME TARGET UPDATE (dashboard "SET" button mid-trade) ────────
-            if not trailing_active and limit_sell_alive and _QUICK_RUNTIME_TARGET[0] is not None:
+            if limit_sell_alive and _QUICK_RUNTIME_TARGET[0] is not None:
                 _new_tgt_pts = float(_QUICK_RUNTIME_TARGET[0])
                 _QUICK_RUNTIME_TARGET[0] = None   # consume immediately
-                _new_target = round(avg_price + _new_tgt_pts, 2)
+                _new_target = round_to_nearest_5_paise(avg_price + _new_tgt_pts)
                 if _new_target != target_price:
                     print(f"\n🔄 [RUNTIME] Target updated: ₹{target_price} → ₹{_new_target} (+{_new_tgt_pts}pt)")
                     # Cancel old limit sell, replace with new target
@@ -2070,12 +2097,11 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                             print(f"⚠️  Cancel for target update failed: {_ce}")
                     if _cancelled or not sell_order_id:
                         target_price   = _new_target
-                        trail_trigger  = round(target_price + trail_buffer, 2)
                         try:
                             _new_sell_resp  = place_limit_order_groww(instrument, quantity, target_price, transaction_type="SELL", product="MIS")
                             sell_order_id   = _new_sell_resp.get("payload", {}).get("groww_order_id") or _new_sell_resp.get("groww_order_id")
                             send_telegram(f"🔄 Target updated → ₹{target_price} (+{_new_tgt_pts}pt)")
-                            print(f"✅ New LIMIT SELL @ ₹{target_price} placed | trail trigger: ₹{trail_trigger}")
+                            print(f"✅ New LIMIT SELL @ ₹{target_price} placed")
                         except Exception as _ne:
                             print(f"❌ New limit sell failed after target update: {_ne}")
 
@@ -2113,59 +2139,7 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                     print(f"❌ SL execution failed: {e}")
                 break
 
-            # ── TRAIL TRIGGER: price exceeded target + buffer ────────────────
-            if ltp >= trail_trigger and limit_sell_alive:
-                print(f"🚀 Price ₹{ltp} exceeded trail trigger ₹{trail_trigger} — switching to trailing stop")
-                switched = False
-                if sell_order_id:
-                    # In live mode check if limit already filled before we can cancel
-                    if CONFIG.get("VALIDATE_ORDERS", True):
-                        current_status = get_order_status(sell_order_id, access_token)
-                        if current_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                            print(f"ℹ️  Limit sell already filled before trail switch")
-                            sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
-                            if sell_price and sold_qty:
-                                profit = (sell_price - avg_price) * sold_qty
-                                print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
-                                send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
-                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
-                            else:
-                                profit = (target_price - avg_price) * quantity
-                                print(f"💰 Estimated PROFIT: ₹{profit:.2f} (filled at target)")
-                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, target_price, quantity, profit)
-                            break
-                    cancel_success = cancel_order_groww(sell_order_id, access_token)
-                    if cancel_success:
-                        limit_sell_alive = False
-                        switched = True
-                        print(f"✅ Limit sell cancelled — trailing stop active")
-                    else:
-                        # Cancel failed: order already filled at target
-                        print(f"⚠️ Limit sell cancel failed — likely filled at ₹{target_price}")
-                        if CONFIG.get("VALIDATE_ORDERS", True):
-                            sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
-                            if sell_price and sold_qty:
-                                profit = (sell_price - avg_price) * sold_qty
-                                print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
-                                send_telegram(f"💰 PROFIT: ₹{profit:.2f}")
-                                log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, sell_price, sold_qty, profit)
-                                break
-                        profit = (target_price - avg_price) * quantity
-                        print(f"💰 Estimated PROFIT: ₹{profit:.2f} (at target)")
-                        log_trade_to_excel(instrument.get('internal_trading_symbol') or instrument.get('trading_symbol'), avg_price, target_price, quantity, profit)
-                        break
-                else:
-                    switched = True  # no limit order to cancel (VALIDATE_ORDERS=False paper path)
-
-                if switched:
-                    trailing_active = True
-                    peak_ltp = ltp
-                    trail_sl = round(peak_ltp - trail_gap, 2)
-                    print(f"🎯 TRAILING STOP ACTIVE | Peak: ₹{peak_ltp} | Trail SL: ₹{trail_sl} | Gap: {trail_gap}pts")
-                    send_telegram(f"🎯 TRAILING | Peak: ₹{peak_ltp} | Trail SL: ₹{trail_sl}")
-                continue
-
-            # ── NORMAL TARGET HIT (touched target, below trail trigger) ──────
+            # ── TARGET HIT (resting limit sell fills at target — hard cap) ───
             if ltp >= target_price:
                 print(f"🎯 TARGET HIT! LTP: ₹{ltp}")
                 send_telegram(f"🎯 TARGET HIT @ ₹{ltp}")
@@ -2333,8 +2307,12 @@ def place_cp_order(command, is_auto=False):
             # Fetch actual executed price and quantity
             avg_price, executed_qty = get_order_executed_price(order_id, access_token)
             if not avg_price or not executed_qty:
-                print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ❌ Could not get executed price/qty for BUY order {order_id}. Aborting.")
-                return
+                # BUY is confirmed EXECUTED — never abandon the position. Use the
+                # pre-order LTP as the entry estimate so target/SL management still runs.
+                avg_price = entry_price
+                executed_qty = quantity
+                print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] ⚠️ Avg price unavailable for BUY {order_id} — using pre-order LTP ₹{entry_price}; managing position.")
+                send_telegram(f"⚠️ BUY {order_id} executed; avg price unavailable — using entry estimate ₹{entry_price}. Position is being managed.")
             quantity = executed_qty # Use the actual executed quantity
             validation_end = datetime.now()
             validation_duration = (validation_end - validation_start).total_seconds()
@@ -3379,6 +3357,7 @@ def auto_mode_runner():
           f"MEDIUM={AUTO_V2_CONFIG['SL_PCT_MEDIUM']*100:.0f}%  "
           f"Target R:R ≥ {AUTO_V2_CONFIG['TARGET_MULTIPLIER']:.1f}:1")
     print("="*68)
+    start_webhook_server()
     send_telegram(f"🤖 AUTO v2 [{mode_lbl}] started  |  {index}")
 
     total_pnl   = 0.0
@@ -3722,6 +3701,7 @@ if __name__ == "__main__":
                     _quick_pts   = float(_data.get("quick_pts", 1.5))
                     _partial     = bool(_data.get("partial", False))
                     _partial_pct = int(_data.get("partial_pct", 50))
+                    _ltp_hint    = float(_data.get("ltp", 0) or 0)  # chain LTP from dashboard
                     # ── Runtime target update (no new trade, just changes target mid-run) ──
                     if _cmd == "set_quick_pts":
                         _new_tgt = float(_data.get("quick_pts", 0))
@@ -3744,7 +3724,7 @@ if __name__ == "__main__":
                             print(f"\n\n🌐 [DASHBOARD] Command received: {_cmd or '(auto)'}  (mode={_mode}{' PAPER' if _paper else ''}{' MOCK-RUN' if _mock else ''}{_vflag})")
                             def _run(_c=_cmd, _m=_mode, _p=_paper, _mk=_mock, _v=_validate, _lk=_bridge_lock,
                                      _af=_atr_flag, _as=_atr_src, _qp=_quick_pts,
-                                     _pt=_partial, _pp=_partial_pct):
+                                     _pt=_partial, _pp=_partial_pct, _lh=_ltp_hint):
                                 _orig       = CONFIG.get("PAPER_TRADING")
                                 _orig_mock  = CONFIG.get("MOCK_LTP_RUN", False)
                                 _orig_val   = CONFIG.get("VALIDATE_ORDERS", False)
@@ -3757,7 +3737,7 @@ if __name__ == "__main__":
                                     if _m == "auto":
                                         auto_mode_runner()
                                     elif _m == "quick":
-                                        place_quick_order(_c, atr_based=_af, quick_pts=_qp, atr_source=_as, partial=_pt, partial_pct=_pp)
+                                        place_quick_order(_c, atr_based=_af, quick_pts=_qp, atr_source=_as, partial=_pt, partial_pct=_pp, ltp_hint=_lh)
                                     else:
                                         place_cp_order(_c)
                                 except Exception as _exc:

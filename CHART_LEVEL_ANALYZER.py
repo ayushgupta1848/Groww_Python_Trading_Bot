@@ -67,6 +67,8 @@ except ImportError:
     print("❗ growwapi not found. Install it or add to PYTHONPATH.")
     sys.exit(1)
 
+from groww_token import init_client
+
 
 # ─────────────────────────────────────────────────────────────
 #  ANSI COLORS
@@ -204,9 +206,9 @@ _opt_chain_cache: dict = {"data": {}, "ts": 0.0}
 #  INIT / TELEGRAM
 # ─────────────────────────────────────────────────────────────
 def init_groww() -> tuple:
-    totp = pyotp.TOTP(TOTP_SECRET).now()
-    access_token = GrowwAPI.get_access_token(api_key=API_KEY, totp=totp)
-    client = GrowwAPI(access_token)
+    # Shared on-disk token cache — avoids re-minting a token on every start,
+    # which trips the Groww token-endpoint rate limit when several bots run.
+    client, access_token = init_client(API_KEY, TOTP_SECRET)
     print(f"{C.B_GREEN}✅ Chart Level Analyzer: Groww API initialized{C.RESET}")
     return client, access_token
 

@@ -340,9 +340,11 @@ def _cc(key: str) -> str:
 # ─────────────────────────────────────────────────────────────
 #  GROWW AUTH
 # ─────────────────────────────────────────────────────────────
+from groww_token import get_access_token as get_cached_access_token
+
+
 def init_groww():
-    totp = pyotp.TOTP(TOTP_SECRET).now()
-    access_token = GrowwAPI.get_access_token(api_key=API_KEY, totp=totp)
+    access_token = get_cached_access_token(API_KEY, TOTP_SECRET)
     client = GrowwAPI(access_token)
     return client, access_token
 

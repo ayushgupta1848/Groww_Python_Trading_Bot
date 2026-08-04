@@ -26,6 +26,7 @@ STALE_SECS  = 300
 #  BOT CONTROL CENTER — registry + terminal-based process management
 # ─────────────────────────────────────────────────────────────
 import subprocess as _bsp
+import signal as _signal
 
 # Bounds mirror the layout in START_ALL_BOTS.command (x1, y1, x2, y2)
 _BOT_REGISTRY = [
@@ -200,6 +201,100 @@ _BOT_LOG_DIRS = {
     "momentum":          ("logs/momentum_bot",   "Momentum_Bot_"),
     "trade_bot":         ("logs/groww_bot",      "Groww_Bot_"),
 }
+
+# ─────────────────────────────────────────────────────────────
+#  DECISION ENGINE (trading_decision_engine) PROCESS MANAGER
+# ─────────────────────────────────────────────────────────────
+_DE_PROC_MARK = "trading_decision_engine.app.run"   # pgrep/pkill marker
+_de_expiry_cache: dict = {}                          # {index: (fetched_at, [expiries])}
+
+def _engine_running() -> dict:
+    r = _bsp.run(["pgrep", "-f", _DE_PROC_MARK], capture_output=True, text=True)
+    pids = [p for p in r.stdout.split() if p.strip()]
+    return {"running": bool(pids), "pid": int(pids[0]) if pids else None}
+
+def _engine_expiries(index: str) -> list:
+    """Live expiries for an index from instrument.csv (nearest first), cached 10 min."""
+    import csv as _csv
+    from datetime import date as _date
+    now = time.time()
+    cached = _de_expiry_cache.get(index)
+    if cached and now - cached[0] < 600:
+        return cached[1]
+    expiries = set()
+    try:
+        today = _date.today().isoformat()
+        with open(os.path.join(BASE, "instrument.csv"), newline="", encoding="utf-8") as fh:
+            for row in _csv.DictReader(fh):
+                if row.get("underlying_symbol") == index and row.get("expiry_date", "") >= today:
+                    expiries.add(row["expiry_date"])
+    except Exception:
+        pass
+    out = sorted(expiries)[:6]
+    _de_expiry_cache[index] = (now, out)
+    return out
+
+def _engine_start(cfg: dict) -> dict:
+    if _engine_running()["running"]:
+        return {"ok": False, "error": "Decision engine already running"}
+    mode = str(cfg.get("mode", "shadow")).lower()
+    if mode not in ("live", "shadow"):
+        return {"ok": False, "error": f"Mode must be live or shadow (got {mode!r})"}
+    # LIVE places real orders with real money — the UI must send explicit confirmation,
+    # mirroring the CLI's type-'yes' guard.
+    if mode == "live" and str(cfg.get("confirm_live", "")).strip().upper() != "YES":
+        return {"ok": False, "error": "LIVE mode requires typing YES in the confirmation box"}
+    try:
+        index   = str(cfg.get("index", "NIFTY")).upper()
+        expiry  = str(cfg.get("expiry", "")).strip()
+        lots    = int(cfg.get("lots", 1))
+        pmin    = float(cfg.get("premium_min", 60))
+        pmax    = float(cfg.get("premium_max", 250))
+        profile = str(cfg.get("profile", "")).strip()
+        validate = bool(cfg.get("validate_orders", True))
+        if not expiry:
+            return {"ok": False, "error": "Expiry is required"}
+        if lots < 1 or pmin >= pmax:
+            return {"ok": False, "error": "Check lots / premium range"}
+    except (TypeError, ValueError) as e:
+        return {"ok": False, "error": f"Bad config value: {e}"}
+
+    cmd = [_PY_BIN, "-m", "trading_decision_engine.app.run",
+           "--mode", mode, "--index", index, "--expiry", expiry,
+           "--lots", str(lots), "--premium-min", str(pmin), "--premium-max", str(pmax),
+           "--validate-orders" if validate else "--no-validate-orders",
+           "--no-dashboard"]   # headless: this browser tab IS the dashboard
+    if profile:
+        cmd += ["--profile", profile]
+    try:
+        proc = _bsp.Popen(cmd, stdout=_bsp.PIPE, stderr=_bsp.STDOUT, text=True, bufsize=1, cwd=BASE)
+        with _bot_lock:
+            _bot_procs["decision_engine"] = proc
+            _bot_logs["decision_engine"] = []
+        threading.Thread(target=_bot_log_reader, args=("decision_engine", proc), daemon=True).start()
+        return {"ok": True, "pid": proc.pid, "cmd": " ".join(cmd)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+def _engine_stop() -> dict:
+    try:
+        with _bot_lock:
+            proc = _bot_procs.get("decision_engine")
+        if proc and proc.poll() is None:
+            # SIGINT first: run.py's handler stops the feed and prints/saves session stats.
+            proc.send_signal(_signal.SIGINT)
+            try:
+                proc.wait(timeout=8)
+            except Exception:
+                proc.terminate()
+                try: proc.wait(timeout=3)
+                except Exception: proc.kill()
+        else:
+            # Started outside the dashboard — best effort, INT for a clean shutdown.
+            _bsp.run(["pkill", "-INT", "-f", _DE_PROC_MARK])
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 def _bot_get_logs(bot_id: str, n: int = 60) -> list:
     # Try in-memory pipe capture first (bots launched by dashboard)
@@ -549,6 +644,8 @@ def _update_oi_history(snap: dict):
         if len(_oi_history) > _OI_HISTORY_MAX:
             _oi_history[:] = _oi_history[-_OI_HISTORY_MAX:]
 
+_VIX_CACHE_FILE = os.path.join(BASE, ".vix_cache.json")
+
 def _update_vix_history(vix: float, ts: str):
     """Append a new VIX tick; skip duplicates. Records session-open on first call."""
     if not vix:
@@ -561,6 +658,37 @@ def _update_vix_history(vix: float, ts: str):
         _vix_history.append({"t": ts, "v": round(vix, 2)})
         if len(_vix_history) > _VIX_HISTORY_MAX:
             _vix_history[:] = _vix_history[-_VIX_HISTORY_MAX:]
+        # Persist to disk so data survives server restarts
+        try:
+            with open(_VIX_CACHE_FILE, "w") as _f:
+                import json as _json
+                _json.dump({
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "session_open": _vix_session_open[0],
+                    "history": list(_vix_history)
+                }, _f)
+        except Exception:
+            pass
+
+def _load_vix_cache():
+    """On startup: load today's VIX history from disk if it exists."""
+    try:
+        with open(_VIX_CACHE_FILE) as f:
+            import json as _json
+            data = _json.load(f)
+        if data.get("date") != datetime.now().strftime("%Y-%m-%d"):
+            return  # stale — different day, discard
+        hist = data.get("history", [])
+        if not hist:
+            return
+        with _vix_history_lock:
+            _vix_history.clear()
+            _vix_history.extend(hist[-_VIX_HISTORY_MAX:])
+            if not _vix_session_open[0] and data.get("session_open"):
+                _vix_session_open[0] = data["session_open"]
+        print(f"[VIX] Loaded {len(hist)} cached ticks from disk (session open: {data.get('session_open')})")
+    except (FileNotFoundError, Exception):
+        pass
 
 def _vix_fetch_loop():
     """Background thread: poll India VIX from NSE allIndices every 2 min."""
@@ -619,43 +747,56 @@ def read_oi_snapshot() -> dict:
 _idx_state: dict  = {}          # {nifty, banknifty, sensex}
 _idx_lock         = threading.Lock()
 _idx_prev: dict   = {}          # {sym: prev_close} — fetched once via Quote API
+_idx_ohlc: dict   = {}          # {nifty: {open,high,low,close}} — refreshed every 60s from Quote API
 
 def _idx_entry(ltp: float, prev: float) -> dict:
     chg = round(ltp - prev, 2) if prev else 0.0
     pct = round(chg / prev * 100, 2) if prev else 0.0
     return {"last": round(ltp, 2), "chg": chg, "pct": pct}
 
-def _fetch_idx_prev_close():
-    """Fetch prev_close for each index via Groww Quote API (called once at startup)."""
-    global _idx_prev
+def _fetch_idx_quote():
+    """Fetch prev_close and OHLC for each index via Groww Quote API. Called at startup and every 60s."""
+    global _idx_prev, _idx_ohlc
     items = [
-        ("NIFTY",     "NSE", "CASH"),
-        ("BANKNIFTY", "NSE", "CASH"),
-        ("SENSEX",    "BSE", "CASH"),
+        ("NIFTY",     "NSE", "CASH", "nifty"),
+        ("BANKNIFTY", "NSE", "CASH", "banknifty"),
+        ("SENSEX",    "BSE", "CASH", "sensex"),
     ]
-    for sym, exch, seg in items:
+    for sym, exch, seg, label in items:
         try:
             pl = _groww_get("/v1/live-data/quote",
                             {"exchange": exch, "segment": seg, "trading_symbol": sym})
             if pl:
-                # day_change = current - prev_close  →  prev_close = last_price - day_change
                 last_p = float(pl.get("last_price") or pl.get("ohlc", {}).get("close") or 0)
                 day_c  = float(pl.get("day_change") or 0)
                 prev   = round(last_p - day_c, 2)
                 if prev > 0:
                     _idx_prev[sym] = prev
-                    print(f"[idx] {sym} prev_close={prev}")
+                ohlc = pl.get("ohlc") or {}
+                high = float(ohlc.get("high") or pl.get("high") or pl.get("day_high") or 0)
+                low  = float(ohlc.get("low")  or pl.get("low")  or pl.get("day_low")  or 0)
+                open_= float(ohlc.get("open") or pl.get("open") or 0)
+                if high > 0 and low > 0:
+                    _idx_ohlc[label] = {"high": round(high,2), "low": round(low,2), "open": round(open_,2)}
+                    print(f"[idx ohlc] {sym} H={high} L={low}")
         except Exception as e:
-            print(f"[idx prev] {sym}: {e}")
+            print(f"[idx quote] {sym}: {e}")
+
+def _fetch_idx_prev_close():
+    """Backward-compat alias."""
+    _fetch_idx_quote()
 
 def _idx_refresh_loop():
-    """Background thread: fetch index LTPs every 3s using Groww LTP API."""
+    """Background thread: fetch index LTPs every 3s using Groww LTP API.
+    Also refreshes Quote (OHLC / day range) every 60s — no bots needed for day high/low."""
     global _idx_state
-    # Fetch prev_close once before starting loop
-    threading.Thread(target=_fetch_idx_prev_close, daemon=True).start()
-    time.sleep(2)   # let prev_close fetch complete
+    # Fetch quote (prev_close + OHLC) once before starting loop
+    threading.Thread(target=_fetch_idx_quote, daemon=True).start()
+    time.sleep(2)   # let quote fetch complete
+    _last_ohlc_refresh = 0.0
     while True:
         try:
+            now = time.time()
             result = {}
             # ── CASH indices: NIFTY + BANKNIFTY + SENSEX in one call ──
             cash_pl = _groww_get("/v1/live-data/ltp",
@@ -670,12 +811,19 @@ def _idx_refresh_loop():
                         result[label] = _idx_entry(ltp, prev)
             if result:
                 with _idx_lock: _idx_state.update(result)
+            # Refresh OHLC (day high/low) every 60s via Quote API
+            if now - _last_ohlc_refresh >= 60:
+                threading.Thread(target=_fetch_idx_quote, daemon=True).start()
+                _last_ohlc_refresh = now
         except Exception as e:
             print(f"[idx loop] {e}")
         time.sleep(3)   # 1 LTP call/3s = 20/min
 
 def read_market_indices() -> dict:
-    with _idx_lock: return dict(_idx_state)
+    with _idx_lock:
+        state = dict(_idx_state)
+    state["_ohlc"] = dict(_idx_ohlc)   # include day range data in every snapshot
+    return state
 
 # ─────────────────────────────────────────────────────────────
 #  PERSONAL TRADING AI — PnL + Market Intelligence
@@ -1621,7 +1769,7 @@ def _lot_size_from_csv(index: str, expiry: str) -> int:
     return {"NIFTY":75,"BANKNIFTY":35,"SENSEX":20,"FINNIFTY":65,"MIDCPNIFTY":75}.get(index.upper(),75)
 
 _chain_cache: dict = {}   # {(index, expiry): (ts, result)}
-_CHAIN_CACHE_TTL  = 30   # seconds
+_CHAIN_CACHE_TTL  = 5    # seconds — 5s for Quick Trade Mode live premium refresh
 
 def fetch_option_chain(index:str, expiry:str) -> dict:
     key = (index.upper(), expiry)
@@ -1846,8 +1994,8 @@ def _get_ltp_token() -> str:
         sys.path.insert(0, BASE)
         from growwapi import GrowwAPI  # type: ignore
         import pyotp
-        totp = pyotp.TOTP(_GROWW_TOTP_SECRET).now()
-        token = GrowwAPI.get_access_token(api_key=_GROWW_API_KEY, totp=totp)
+        from groww_token import get_access_token as _get_cached_token
+        token = _get_cached_token(_GROWW_API_KEY, _GROWW_TOTP_SECRET)
         if token:
             _ltp_access_token = token
             _ltp_token_ts = time.time()
@@ -1979,7 +2127,7 @@ AI_REFRESH_SECS    = 180  # AI summary: every 3 min
 SCALP_REFRESH_SECS = 60   # Scalp plan: every 1 min
 
 # Feature on/off flags (toggled via /api/toggle?f=ai or /api/toggle?f=scalp or /api/toggle?f=oi_ai)
-_features = {"ai": False, "scalp": False, "ptai_ai": False, "oi_ai": False}
+_features = {"ai": False, "scalp": False, "ptai_ai": False, "oi_ai": False, "mb_ai": False, "qs_ai": False}
 
 # ── Personal Trading AI (pre-market check) ────────────────────────────────
 _pai_cache: dict = {"output": None, "score": None, "verdict": None,
@@ -2020,11 +2168,22 @@ _ai_session_lock = threading.Lock()
 _ai_lock    = threading.Lock()
 _scalp_lock = threading.Lock()
 _oi_ai_lock = threading.Lock()
+_mb_ai_lock = threading.Lock()
 _ai_summary: dict = {"text": "", "ts": "", "status": "init", "error": "", "source": ""}
+_mb_ai_cache: dict = {
+    "intraday": "", "longterm": "", "key_levels": "", "risks": "", "bottom_line": "",
+    "ts": "", "status": "idle", "error": "", "context_lines": 0
+}
 _scalp_plan: dict = {"text": "", "ts": "", "status": "init", "error": ""}
 _oi_ai:      dict = {"text": "", "ts": "", "status": "init", "error": "", "source": ""}
 
+# Quick Summary — AI-generated paragraph (auto-refresh, no toggle)
+_qs_lock  = threading.Lock()
+_qs_cache: dict = {"text": "", "ts": "", "status": "idle", "error": ""}
+
 OI_AI_REFRESH_SECS = 120  # OI Intelligence AI: every 2 min
+MB_AI_REFRESH_SECS = 300  # AI Brain: every 5 min
+QS_AI_REFRESH_SECS = 300  # Quick Summary AI: every 5 min
 
 # OI History — rolling buffer of snapshots so the UI can show tick-over-tick trend
 _oi_history: list = []
@@ -2395,6 +2554,484 @@ def generate_oi_summary(snap: dict) -> None:
                   "error": "no_cli", "source": ""}
 
 # ─────────────────────────────────────────────────────────────
+#  AI BRAIN  (OpenAI gpt-4o → comprehensive dual summary)
+# ─────────────────────────────────────────────────────────────
+def _read_conv_signals() -> list:
+    path = os.path.join(BASE, ".convergence_signals.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("signals", [])[-5:]
+    except Exception:
+        return []
+
+def _read_auto_mode_status() -> dict:
+    path = os.path.join(BASE, ".auto_mode_status.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _build_mb_ai_prompt(snap: dict) -> tuple:
+    """Build comprehensive prompt from ALL bot state. Returns (prompt, context_lines)."""
+    now_str = datetime.now().strftime("%H:%M  %d-%b-%Y")
+    spot  = snap.get("spot", 0)
+    idx   = snap.get("index", "NIFTY")
+    bots  = snap.get("bots", {})
+    m     = bots.get("master", {})
+    fi    = bots.get("fibo", {})
+    cdec  = bots.get("chart_decision", {})
+    prem  = bots.get("premium", {})
+    mb    = bots.get("momentum_bot", {})
+    tb    = bots.get("trendline_bot", {})
+    oi    = snap.get("oi_snapshot", {})
+    cons  = snap.get("consensus", {})
+    vix_h = snap.get("vix_history", [])
+    mkt   = snap.get("mkt_idx", {})
+    conv  = _read_conv_signals()
+    auto  = _read_auto_mode_status()
+
+    lines = []
+    lines.append(f"Time: {now_str}")
+    lines.append(f"Index: {idx}  Spot: ₹{spot:,.2f}")
+
+    # ── VIX ──
+    vix_val = 0.0; vix_chg = 0.0
+    if vix_h:
+        vix_val = vix_h[-1].get("vix", 0) if isinstance(vix_h[-1], dict) else 0
+        if len(vix_h) >= 2:
+            v0 = vix_h[0].get("vix", 0) if isinstance(vix_h[0], dict) else 0
+            vix_chg = round(vix_val - v0, 2) if v0 else 0
+    if not vix_val and mkt:
+        vix_val = mkt.get("vix", {}).get("last", 0) or 0
+    if vix_val:
+        lines.append(f"\nINDIA VIX: {vix_val:.2f}  (session change: {vix_chg:+.2f})")
+        zone = "HIGH FEAR" if vix_val > 15 else "MODERATE" if vix_val > 13 else "LOW FEAR"
+        lines.append(f"  VIX Zone: {zone} — {'premium expensive, tight stops' if vix_val > 15 else 'normal conditions'}")
+
+    # ── OI & PCR ──
+    if oi and not oi.get("_stale"):
+        pcr_all  = oi.get("pcr_all", 0)
+        pcr_atm  = oi.get("pcr_atm", 0)
+        atm      = oi.get("atm", 0)
+        sent     = oi.get("sentiment", "")
+        wbias    = oi.get("writer_bias", "")
+        max_pain = oi.get("max_pain", 0)
+        vol_pcr  = oi.get("vol_pcr", 0)
+        bull_v2  = oi.get("bull_score_v2", 0)
+        bear_v2  = oi.get("bear_score_v2", 0)
+        mkt_sig  = oi.get("market_signal", "")
+        tot_ce   = oi.get("total_oi_ce", 0)
+        tot_pe   = oi.get("total_oi_pe", 0)
+        chg_ce   = oi.get("total_chg_ce", 0)
+        chg_pe   = oi.get("total_chg_pe", 0)
+        resist   = oi.get("resistance", [])
+        support  = oi.get("support", [])
+        sm_ce    = oi.get("smart_money_ce", [])
+        sm_pe    = oi.get("smart_money_pe", [])
+        ce_writ  = oi.get("ce_writing_strikes", [])
+        pe_writ  = oi.get("pe_writing_strikes", [])
+        lines.append(f"\nOI & PCR DATA (age: {oi.get('_age_sec',0)}s):")
+        lines.append(f"  PCR all: {pcr_all:.2f}  PCR ATM±3: {pcr_atm:.2f}  Vol-PCR: {vol_pcr:.2f}")
+        lines.append(f"  ATM: {atm}  Max Pain: {max_pain}  (spot vs maxpain: {spot-max_pain:+.0f}pts)")
+        lines.append(f"  OI Sentiment: {sent}  Writer Bias: {wbias}")
+        lines.append(f"  10-Factor Signal: {mkt_sig}  Bull:{bull_v2}/100  Bear:{bear_v2}/100")
+        lines.append(f"  Total CE OI: {tot_ce/1e7:.2f}Cr ({chg_ce/1e7:+.2f}Cr today)")
+        lines.append(f"  Total PE OI: {tot_pe/1e7:.2f}Cr ({chg_pe/1e7:+.2f}Cr today)")
+        if resist: lines.append(f"  Key Resistance (CE wall): {', '.join(str(r) for r in resist[:4])}")
+        if support: lines.append(f"  Key Support (PE wall):    {', '.join(str(s) for s in support[:4])}")
+        if ce_writ: lines.append(f"  Call writers adding:      {', '.join(str(s) for s in ce_writ[:4])} → resistance")
+        if pe_writ: lines.append(f"  Put writers adding:       {', '.join(str(s) for s in pe_writ[:4])} → support")
+        if sm_ce:   lines.append(f"  Smart money CE: " + "  ".join(f"{x['strike']}(+{x['oi_change']/1e3:.0f}K)" for x in sm_ce[:3]))
+        if sm_pe:   lines.append(f"  Smart money PE: " + "  ".join(f"{x['strike']}(+{x['oi_change']/1e3:.0f}K)" for x in sm_pe[:3]))
+
+    # ── Fibonacci ──
+    if fi:
+        lines.append(f"\nFIBONACCI ANALYSIS:")
+        lines.append(f"  1H Zone: {fi.get('zone_1h','—')}  15M Zone: {fi.get('zone_15m','—')}")
+        dh = fi.get("day_high", 0) or spot; dl = fi.get("day_low", 0) or spot
+        pos_pct = f"{(spot-dl)/(dh-dl)*100:.0f}%" if dh != dl else "N/A"
+        lines.append(f"  Day H: {dh:,.0f}  L: {dl:,.0f}  (price at {pos_pct} of range)")
+        lines.append(f"  Day Direction: {fi.get('day_dir','—').upper()}")
+        if fi.get("ce_trigger"): lines.append(f"  CE Entry trigger: {fi['ce_trigger']}")
+        if fi.get("pe_trigger"): lines.append(f"  PE Entry trigger: {fi['pe_trigger']}")
+        conf = (fi.get("confluence") or [])[:5]
+        if conf:
+            lines.append("  Confluence zones (nearest first):")
+            for c in conf:
+                d = c.get("dist_pts", 0)
+                lines.append(f"    {'★'*c.get('stars',1)} ₹{c.get('price',0):,.0f} ({'+' if d>0 else ''}{d:.0f}pts) [{c.get('tags','')}]")
+
+    # ── Master Signal ──
+    if m:
+        lines.append(f"\nMASTER SIGNAL:")
+        lines.append(f"  Direction: {m.get('direction','WAIT')}  Confidence: {float(m.get('confidence',0)):.0f}%")
+        lines.append(f"  Scores — 1H:{m.get('s1h',0)} 15M:{m.get('s15m',0)} 5M:{m.get('s5m',0)} Prem:{m.get('sprem',0)}")
+        lines.append(f"  Pattern: {m.get('pattern','—')}  Zone: {m.get('zone','—')}")
+        if m.get("stop"):    lines.append(f"  Stop: ₹{m['stop']:,.1f}  Target: ₹{m.get('target',0):,.1f}  R:R: {m.get('rr',0):.1f}")
+        if m.get("sl15m"):   lines.append(f"  15M Floor: ₹{m['sl15m']:,.1f}  Ceiling: ₹{m.get('sh15m',0):,.1f}")
+
+    # ── Consensus ──
+    if cons:
+        lines.append(f"\nCONSENSUS: {cons.get('signal','—')}  (bull:{cons.get('bull',0)} bear:{cons.get('bear',0)})")
+        if cons.get("sources"): lines.append(f"  Sources: {', '.join(cons['sources'])}")
+
+    # ── Chart S/R Levels ──
+    if cdec:
+        lines.append(f"\nCHART ANALYSIS:")
+        if cdec.get("decision"):    lines.append(f"  Trade Decision: {cdec['decision']}")
+        if cdec.get("option_text"): lines.append(f"  Option Suggestion: {cdec['option_text']}")
+
+    # ── Premium Flow ──
+    if prem:
+        lines.append(f"\nPREMIUM FLOW:")
+        if prem.get("direction"):  lines.append(f"  Direction: {prem.get('direction','—')}  Strength: {prem.get('strength','—')}")
+        if prem.get("ce_trend"):   lines.append(f"  CE Trend: {prem['ce_trend']}  PE Trend: {prem.get('pe_trend','—')}")
+        if prem.get("momentum"):   lines.append(f"  Momentum: {prem['momentum']}")
+
+    # ── Momentum Bot ──
+    if mb:
+        lines.append(f"\nMOMENTUM BOT:")
+        lines.append(f"  Trades today: {mb.get('trades_today',0)}  Wins: {mb.get('wins',0)}  Losses: {mb.get('losses',0)}")
+        if mb.get("last_signal"):  lines.append(f"  Last signal: {mb['last_signal']}")
+        if mb.get("last_trade"):   lines.append(f"  Last trade: {mb['last_trade']}")
+
+    # ── Convergence Signals ──
+    if conv:
+        lines.append(f"\nCONVERGENCE SIGNALS (last {len(conv)}):")
+        for cs in conv[-3:]:
+            lines.append(f"  [{cs.get('time','?')}] {cs.get('side','?')} strength:{cs.get('strength','?')} "
+                         f"strikes:{cs.get('conv_count',0)} vel:{cs.get('avg_vel_pct',0):.2f}%")
+
+    # ── Trendline Signals ──
+    ts_sigs = (tb.get("signals") or [])[-3:] if tb else []
+    if ts_sigs:
+        lines.append(f"\nTRENDLINE SIGNALS (last {len(ts_sigs)}):")
+        for s in ts_sigs:
+            lines.append(f"  [{s.get('time','?')}] {s.get('type','?')} {s.get('symbol','?')} @ ₹{s.get('ltp',0):.0f}")
+
+    # ── Auto Mode ──
+    if auto:
+        lines.append(f"\nAUTO MODE: {auto.get('state','—')}  enabled:{auto.get('enabled',False)}")
+
+    context = "\n".join(lines)
+    n_lines = len(lines)
+
+    prompt = f"""You are an expert NIFTY F&O trading analyst. Based on ALL available live data below, generate a comprehensive market summary.
+
+{context}
+
+Respond in EXACTLY this format (be specific with numbers, avoid generic advice):
+
+📊 INTRADAY VIEW (Next 1-2 hours):
+[2-3 sentences: current market state, momentum direction, immediate bias, what is likely to happen in next 1-2 hours based on all signals]
+
+📈 LONG-TERM VIEW (Positional/Swing — 2-5 days):
+[2-3 sentences: overall trend direction, key levels that define the trend, whether to hold positions overnight, swing trade bias]
+
+⚡ KEY LEVELS TO WATCH:
+• ₹[price] — [level name]: [what to do if price reaches here — CE or PE trade]
+• ₹[price] — [level name]: [what to do if price reaches here]
+• ₹[price] — [level name]: [what to do if price reaches here]
+
+⚠️ RISKS:
+• [specific risk 1 — data-backed]
+• [specific risk 2 — data-backed]
+
+💡 BOTTOM LINE: [ONE clear action sentence: STAY CASH / BUY CE at ₹X / BUY PE at ₹X — with one specific reason]
+
+Use specific price levels from the data. Max 250 words total."""
+
+    return prompt, n_lines
+
+def _build_qs_prompt(snap: dict) -> str:
+    """Build a focused, short prompt for the Quick Summary AI call."""
+    spot  = snap.get("spot", 0) or 0
+    idx   = snap.get("index", "NIFTY")
+    oi    = snap.get("oi_snapshot", {})
+    cons  = snap.get("consensus", {})
+    bots  = snap.get("bots", {})
+    m     = bots.get("master", {})
+    prem  = bots.get("premium", {})
+    vix_h = snap.get("vix_history", [])
+    mkt   = snap.get("mkt_idx", {})
+
+    # OI levels
+    res_str  = oi.get("resistance_strength", [])
+    sup_str  = oi.get("support_strength", [])
+    res_list = oi.get("resistance", [])
+    sup_list = oi.get("support", [])
+
+    ce_strike = res_str[0]["strike"] if res_str else (res_list[0] if res_list else "N/A")
+    ce_oi_cr  = res_str[0]["ce_oi"] / 1e7 if res_str else 0.0
+    pe_strike = sup_str[0]["strike"] if sup_str else (sup_list[0] if sup_list else "N/A")
+    pe_oi_cr  = sup_str[0]["pe_oi"] / 1e7 if sup_str else 0.0
+    ce_next   = res_str[1]["strike"] if len(res_str) > 1 else (res_list[1] if len(res_list) > 1 else "N/A")
+    pe_next   = sup_str[1]["strike"] if len(sup_str) > 1 else (sup_list[1] if len(sup_list) > 1 else "N/A")
+
+    # VIX
+    vix_val = 0.0
+    vix_chg = 0.0
+    if vix_h:
+        last = vix_h[-1]
+        vix_val = last.get("vix", 0.0) if isinstance(last, dict) else 0.0
+        if len(vix_h) >= 2:
+            first = vix_h[0]
+            v0 = first.get("vix", 0.0) if isinstance(first, dict) else 0.0
+            vix_chg = round(vix_val - v0, 2) if v0 else 0.0
+    if not vix_val and mkt:
+        vix_val = float(mkt.get("vix", {}).get("last", 0) or 0)
+
+    # ATM straddle
+    atm_straddle = oi.get("atm_straddle", 0)
+    atm_ce_iv    = oi.get("atm_ce_iv", 0)
+    atm_pe_iv    = oi.get("atm_pe_iv", 0)
+
+    # Sentiment + signal
+    sentiment  = oi.get("sentiment", "")
+    mkt_signal = oi.get("market_signal", "")
+    master_dir = m.get("direction", "") or cons.get("signal", "")
+    master_conf = m.get("confidence", 0)
+    max_pain   = oi.get("max_pain", 0)
+    pcr_all    = oi.get("pcr_all", 0)
+    pcr_atm    = oi.get("pcr_atm", 0)
+
+    # Premium flow
+    prem_dir = (prem.get("direction","") if prem else "") or ""
+    prem_mom = (prem.get("momentum","") if prem else "") or ""
+
+    now_str = datetime.now().strftime("%H:%M %d-%b-%Y")
+
+    return f"""You are an expert NIFTY options trader. Write a concise market snapshot in EXACTLY 3 short paragraphs. Use plain English, specific price levels from the data, and no generic advice.
+
+DATA ({now_str}):
+Index: {idx}  Spot: {int(spot):,}
+Put OI (Call favours / Support wall): {pe_strike}  OI: ₹{pe_oi_cr:.1f}Cr  Next support: {pe_next}
+Call OI (Put favours / Resistance wall): {ce_strike}  OI: ₹{ce_oi_cr:.1f}Cr  Next resistance: {ce_next}
+Max Pain: {max_pain}  PCR all: {pcr_all:.2f}  PCR ATM: {pcr_atm:.2f}
+OI Sentiment: {sentiment}  Market Signal: {mkt_signal}
+Master Signal: {master_dir}  Confidence: {master_conf}%
+India VIX: {vix_val:.2f}  Session change: {vix_chg:+.2f}
+ATM Straddle: ₹{atm_straddle}  CE IV: {atm_ce_iv:.1f}%  PE IV: {atm_pe_iv:.1f}%
+Premium flow: {prem_dir} {prem_mom}
+
+Write EXACTLY this structure (3 paragraphs, no headers, no bullets):
+
+Paragraph 1 — OI PICTURE: Start with "Market is [Bullish/Bearish/Sideways]." Then mention Put OI (Call favours) at {pe_strike} with its ₹Cr value acting as support, and Call OI (Put favours) at {ce_strike} with its ₹Cr value acting as resistance. Current spot. Then: if it breaks below {pe_strike} next move to {pe_next}, if it breaks above {ce_strike} next move to {ce_next}.
+
+Paragraph 2 — VIX & PREMIUMS: Start with "VIX at {vix_val:.2f}..." Explain what VIX level means (calm/elevated/fearful), session change direction, whether premiums are cheap or expensive, and what the straddle price tells us about expected range.
+
+Paragraph 3 — ACTION: Start with "Action:" Give ONE clear recommendation — STAY CASH / BUY CE / BUY PE — with the exact price trigger and target. If sideways, say which side to favour first and why. Keep it to 2 sentences max.
+
+Max 120 words total. Be specific, crisp, trader-language."""
+
+
+def generate_qs_ai(snap: dict) -> None:
+    """Call Claude CLI to generate the Quick Summary paragraph. Runs in background thread."""
+    global _qs_cache
+    try:
+        # Use OI snapshot price as fallback when bots are stale
+        spot = snap.get("spot") or snap.get("oi_snapshot", {}).get("price", 0)
+        if not snap or not spot:
+            with _qs_lock:
+                _qs_cache.update({"status": "no_data", "text": "",
+                                  "error": "No spot data — start calculate_oi_pcr.py first",
+                                  "ts": datetime.now().isoformat(timespec="seconds")})
+            return
+
+        # Mark running (guard against double-start)
+        with _qs_lock:
+            if _qs_cache.get("status") == "running":
+                return
+            _qs_cache["status"] = "running"
+
+        # Inject OI price into snap if spot was 0
+        if not snap.get("spot"):
+            snap = dict(snap)
+            snap["spot"] = spot
+
+        prompt = _build_qs_prompt(snap)
+        raw = _try_claude_cli(prompt, timeout=60, feature_key="")
+
+        if not raw:
+            with _qs_lock:
+                _qs_cache.update({"status": "no_cli", "text": "",
+                                  "error": "Claude CLI not found — run: npm install -g @anthropic-ai/claude-code",
+                                  "ts": datetime.now().isoformat(timespec="seconds")})
+            return
+
+        with _qs_lock:
+            _qs_cache.update({"text": raw.strip(), "status": "ok", "error": "",
+                              "ts": datetime.now().isoformat(timespec="seconds")})
+
+    except Exception as exc:
+        print(f"[qs_ai] ERROR: {exc}")
+        with _qs_lock:
+            _qs_cache.update({"status": "error", "text": "",
+                              "error": str(exc),
+                              "ts": datetime.now().isoformat(timespec="seconds")})
+
+
+def generate_mb_ai(snap: dict) -> None:
+    """Call Claude CLI to generate comprehensive dual (intraday + long-term) summary."""
+    global _mb_ai_cache
+    if not _features.get("mb_ai"): return
+
+    with _mb_ai_lock:
+        _mb_ai_cache["status"] = "running"
+
+    if not snap or not snap.get("spot"):
+        with _mb_ai_lock:
+            _mb_ai_cache.update({"status": "no_data", "error": "No live bot data yet — start the bots first",
+                                  "ts": datetime.now().isoformat(timespec="seconds")})
+        return
+
+    prompt, n_lines = _build_mb_ai_prompt(snap)
+    raw = _try_claude_cli(prompt, timeout=60, feature_key="mb_ai")
+
+    if not _features.get("mb_ai"): return  # was disabled while running
+
+    if not raw:
+        with _mb_ai_lock:
+            _mb_ai_cache.update({"status": "no_cli",
+                                  "error": "Claude CLI not found — install with: npm install -g @anthropic-ai/claude-code",
+                                  "ts": datetime.now().isoformat(timespec="seconds")})
+        return
+
+    def _extract(label: str, next_labels: list) -> str:
+        pattern = _re.escape(label) + r'\s*(.*?)(?=' + '|'.join(_re.escape(l) for l in next_labels) + r'|$)'
+        m = _re.search(pattern, raw, _re.DOTALL)
+        return m.group(1).strip() if m else ""
+
+    ALL = ["📊 INTRADAY VIEW", "📈 LONG-TERM VIEW", "⚡ KEY LEVELS", "⚠️ RISKS", "💡 BOTTOM LINE"]
+    intraday   = _extract("📊 INTRADAY VIEW (Next 1-2 hours):", ALL[1:])
+    longterm   = _extract("📈 LONG-TERM VIEW (Positional/Swing — 2-5 days):", ALL[2:])
+    key_levels = _extract("⚡ KEY LEVELS TO WATCH:", ALL[3:])
+    risks      = _extract("⚠️ RISKS:", ALL[4:])
+    bottom     = _extract("💡 BOTTOM LINE:", [])
+
+    # Fallback: model deviated from format — store full response as intraday
+    if not intraday and not longterm:
+        intraday = raw
+
+    with _mb_ai_lock:
+        _mb_ai_cache.update({
+            "intraday":    intraday,
+            "longterm":    longterm,
+            "key_levels":  key_levels,
+            "risks":       risks,
+            "bottom_line": bottom,
+            "ts":          datetime.now().isoformat(timespec="seconds"),
+            "status":      "ok",
+            "error":       "",
+            "context_lines": n_lines,
+        })
+
+# ─────────────────────────────────────────────────────────────
+#  DECISION ENGINE (trading_decision_engine) COLLECTOR
+# ─────────────────────────────────────────────────────────────
+_DE_DIR  = os.path.join(BASE, "trading_decision_engine")
+_DE_LOGS = os.path.join(_DE_DIR, "logs")
+# Incremental tail-follow state: the events JSONL grows all session (every cycle logs a
+# full diagnostics object), so we keep a byte offset + running counters and read only
+# what's new on each refresh instead of re-parsing the whole file every 15s.
+_de_state: dict = {"file": None, "offset": 0, "cycles": 0, "actions": {}, "gates": {},
+                   "eng": {}, "latest": None, "trades": [], "mode": None, "partial": False}
+
+def read_decision_engine() -> dict:
+    import glob as _g
+    out: dict = {"available": False}
+
+    # Strategy config + profiles (small files, re-read each refresh so live edits show)
+    try:
+        with open(os.path.join(_DE_DIR, "config", "strategy.json"), encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        prof_dir = os.path.join(_DE_DIR, "config", "profiles")
+        out["profiles"] = sorted(p[:-5] for p in os.listdir(prof_dir) if p.endswith(".json")) if os.path.isdir(prof_dir) else []
+        out["config"] = {k: cfg.get(k) for k in (
+            "active_profile", "trend_threshold", "decision_score_threshold", "min_resistance_distance",
+            "momentum_threshold", "premium_velocity_scale", "signal_stability_min_seconds",
+            "signal_stability_max_seconds", "max_trades_per_day", "cooldown_seconds",
+            "daily_loss_limit", "daily_profit_lock")}
+    except Exception:
+        out["config"], out["profiles"] = {}, []
+
+    files = sorted(_g.glob(os.path.join(_DE_LOGS, "events_*.jsonl")))
+    if not files:
+        out.update(_engine_running())
+        return out
+    path = files[-1]
+    st = _de_state
+    if st["file"] != path:  # new session/day file -> reset counters
+        st.update({"file": path, "offset": 0, "cycles": 0, "actions": {}, "gates": {},
+                   "eng": {}, "latest": None, "trades": [], "mode": None, "partial": False})
+    try:
+        size = os.path.getsize(path)
+        if size < st["offset"]:
+            st["offset"] = 0  # file replaced/truncated
+        if size > st["offset"]:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                if st["offset"] == 0 and size > 30_000_000:
+                    # Dashboard started mid-session against a huge file: only the last
+                    # ~10MB is aggregated (stats flagged partial) — never block refresh.
+                    fh.seek(size - 10_000_000); fh.readline(); st["partial"] = True
+                else:
+                    fh.seek(st["offset"])
+                for line in fh:
+                    try:
+                        ev = json.loads(line)
+                    except Exception:
+                        continue
+                    typ = ev.get("event")
+                    if typ in ("decision", "rejected"):
+                        st["cycles"] += 1
+                        st["mode"] = ev.get("mode") or st["mode"]
+                        act = ev.get("action", "?")
+                        st["actions"][act] = st["actions"].get(act, 0) + 1
+                        diag = ev.get("diagnostics")
+                        if diag:
+                            st["latest"] = diag
+                            for gate in diag.get("stage1", {}).get("failed_checks", []):
+                                st["gates"][gate] = st["gates"].get(gate, 0) + 1
+                            for name, info in diag.get("engines", {}).items():
+                                agg = st["eng"].setdefault(name, [0, 0, 0.0])  # [passes, samples, score_sum]
+                                agg[1] += 1
+                                agg[2] += info.get("score", 0.0)
+                                agg[0] += 1 if info.get("passed") else 0
+                    elif typ in ("trade_opened", "trade_closed"):
+                        st["trades"].append(ev)
+                        del st["trades"][:-30]
+                st["offset"] = fh.tell()
+    except Exception:
+        pass
+
+    total_rej = sum(st["gates"].values())
+    out.update(_engine_running())
+    out.update({
+        "available": st["latest"] is not None or st["cycles"] > 0 or bool(st["trades"]),
+        "file": os.path.basename(path),
+        "mode": st["mode"],
+        "partial": st["partial"],
+        "age_seconds": round(max(0.0, time.time() - os.path.getmtime(path)), 1),
+        "latest": st["latest"],
+        "stats": {
+            "cycles": st["cycles"],
+            "actions": dict(st["actions"]),
+            "rejections": [
+                {"gate": g, "count": c, "pct": round(c / total_rej * 100.0, 1)}
+                for g, c in sorted(st["gates"].items(), key=lambda kv: -kv[1])
+            ] if total_rej else [],
+            "engines": {
+                name: {"pass_pct": round(p / max(1, n) * 100.0, 1), "avg_score": round(s / max(1, n), 1), "samples": n}
+                for name, (p, n, s) in sorted(st["eng"].items())
+            },
+        },
+        "trades": st["trades"][::-1][:10],
+    })
+    return out
+
+# ─────────────────────────────────────────────────────────────
 #  DATA REFRESH LOOP
 # ─────────────────────────────────────────────────────────────
 _lock     = threading.Lock()
@@ -2414,8 +3051,14 @@ def _refresh() -> None:
     orders    = read_today_orders()
     with _ltp_result_lock: ltp_result = dict(_ltp_result)
     cons   = build_consensus(master, fibo, csig, sigmon)
-    # Pick spot from the freshest live source
+    # Pick spot — always prefer the live Groww LTP (3s index poller), bot logs only as fallback
     def _best_spot():
+        idx = (master.get("index") or fibo.get("index") or "NIFTY").lower()
+        try:
+            live = float((mkt_idx.get(idx) or {}).get("last") or 0)
+        except (TypeError, ValueError):
+            live = 0.0
+        if live > 0: return live
         candidates = [
             (cdec,   cdec.get("spot",   0)),
             (csig,   csig.get("spot",   0)),
@@ -2460,11 +3103,16 @@ def _refresh() -> None:
         "oi_history":   list(_oi_history),
         "vix_history":  list(_vix_history),
         "vix_session_open": _vix_session_open[0],
+        "mb_ai":           dict(_mb_ai_cache),
+        "decision_engine": read_decision_engine(),
     }
     with _lock: _snapshot = snap
 
 def _loop():
-    _last: dict = {"ai": 0.0, "scalp": 0.0, "ptai": 0.0, "ptai_ai": 0.0, "oi_ai": 0.0}
+    _now = time.time()
+    # qs_ai: start after 10s so the snapshot has time to populate
+    _last: dict = {"ai": 0.0, "scalp": 0.0, "ptai": 0.0, "ptai_ai": 0.0, "oi_ai": 0.0, "mb_ai": 0.0,
+                   "qs_ai": _now - QS_AI_REFRESH_SECS + 10}
     while True:
         try:
             _refresh()
@@ -2493,6 +3141,20 @@ def _loop():
                 _last["oi_ai"] = now
                 threading.Thread(target=generate_oi_summary,
                                  args=(snap_copy,), daemon=True).start()
+
+            if _features.get("mb_ai") and (now - _last["mb_ai"]) >= MB_AI_REFRESH_SECS:
+                _last["mb_ai"] = now
+                threading.Thread(target=generate_mb_ai,
+                                 args=(snap_copy,), daemon=True).start()
+
+            # Quick Summary: auto-refreshes every 5 min when feature is ON
+            if _features.get("qs_ai") and (now - _last["qs_ai"]) >= QS_AI_REFRESH_SECS:
+                with _qs_lock:
+                    qs_running = _qs_cache.get("status") == "running"
+                if not qs_running:
+                    _last["qs_ai"] = now
+                    threading.Thread(target=generate_qs_ai,
+                                     args=(snap_copy,), daemon=True).start()
 
         except Exception as e:
             print(f"[refresh] {e}")
@@ -2808,6 +3470,56 @@ input[type=range]::-webkit-slider-thumb{
 .plan-card .plan-note {color:var(--dim);font-size:10px;line-height:1.5;}
 .ai-error{color:var(--warn);font-size:12px;padding:10px 14px;border:1px solid #78350f;border-radius:6px;background:#0c0800;}
 
+/* ── AI Brain Tab ── */
+#tab-aibrain{padding:16px 18px;overflow-y:auto;max-height:calc(100vh - 118px);}
+.mb-ai-wrap{max-width:960px;margin:0 auto;}
+.mb-ai-toggle-bar{display:flex;align-items:center;gap:14px;margin-bottom:18px;
+  background:linear-gradient(135deg,#0c0820,#110a1e);border:1px solid #4c1d95;
+  border-radius:12px;padding:16px 20px;}
+.mb-ai-toggle-bar .mb-ai-title{font-size:18px;font-weight:800;color:#c084fc;flex:1;font-family:'Inter',sans-serif;}
+.mb-ai-toggle-bar .mb-ai-subtitle{font-size:11px;color:var(--dim);margin-top:3px;}
+.mb-ai-on{background:linear-gradient(135deg,#7c3aed,#4c1d95)!important;color:#fff!important;
+  border-color:#7c3aed!important;box-shadow:0 0 18px rgba(124,58,237,.4)!important;}
+.mb-ai-meta{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.mb-ai-ts{font-size:11px;color:var(--dim);}
+.mb-ai-ctx{font-size:10px;color:#7c3aed;padding:2px 8px;border:1px solid #4c1d95;border-radius:10px;}
+.mb-ai-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;
+  padding:18px;margin-bottom:14px;transition:border-color .3s;}
+.mb-ai-card:hover{border-color:#2a4060;}
+.mb-ai-card.intraday-card{border-left:3px solid var(--info);}
+.mb-ai-card.longterm-card{border-left:3px solid var(--bull);}
+.mb-ai-card.levels-card{border-left:3px solid var(--accent);}
+.mb-ai-card.risks-card{border-left:3px solid var(--warn);}
+.mb-ai-card.bottom-card{border-left:3px solid #f97316;background:linear-gradient(135deg,#0c1220,#0c0a06);}
+.mb-ai-card-title{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bdr);}
+.intraday-card .mb-ai-card-title{color:var(--info);}
+.longterm-card .mb-ai-card-title{color:var(--bull);}
+.levels-card .mb-ai-card-title{color:var(--accent);}
+.risks-card .mb-ai-card-title{color:var(--warn);}
+.bottom-card .mb-ai-card-title{color:#f97316;}
+.mb-ai-body{font-size:13px;line-height:1.8;color:#cbd5e1;white-space:pre-wrap;font-family:'Inter',sans-serif;}
+.bottom-card .mb-ai-body{font-size:14px;font-weight:700;color:#fff;line-height:1.6;}
+.mb-ai-idle{text-align:center;padding:40px 20px;color:var(--dim);}
+.mb-ai-idle .idle-icon{font-size:40px;margin-bottom:14px;}
+.mb-ai-idle .idle-msg{font-size:14px;margin-bottom:6px;color:var(--txt);}
+.mb-ai-idle .idle-sub{font-size:12px;color:var(--dim);line-height:1.6;}
+.mb-ai-loading{display:flex;align-items:center;gap:12px;padding:30px 20px;
+  background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;margin-bottom:14px;}
+.mb-ai-spinner{width:22px;height:22px;border:3px solid #4c1d95;border-top-color:#c084fc;
+  border-radius:50%;animation:mb-spin 0.8s linear infinite;}
+@keyframes mb-spin{to{transform:rotate(360deg)}}
+.mb-ai-loading-text{color:#c084fc;font-size:13px;font-weight:600;}
+.mb-ai-refresh-btn{background:rgba(124,58,237,.2);border:1px solid #7c3aed;color:#c084fc;
+  border-radius:8px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:600;
+  transition:all .2s;}
+.mb-ai-refresh-btn:hover{background:rgba(124,58,237,.4);}
+.mb-ai-refresh-btn:disabled{opacity:.4;cursor:not-allowed;}
+.mb-ai-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:700px){.mb-ai-2col{grid-template-columns:1fr;}}
+#qs-text{transition:opacity .3s;}
+#qs-text b{color:#38bdf8;}
+
 /* ── Color Picker Button ── */
 #picker-btn{
   display:flex;align-items:center;gap:7px;background:none;
@@ -2996,7 +3708,13 @@ input[type=range]::-webkit-slider-thumb{
 /* Config bar — horizontal compact strip */
 .tb-cbar{display:flex;flex-direction:column;gap:0;background:var(--bg2);
          border-bottom:1px solid var(--bdr);}
-.tb-cbar-row{display:flex;align-items:flex-end;gap:10px;padding:6px 14px;flex-wrap:nowrap;}
+.tb-cbar-row{display:flex;align-items:flex-end;gap:10px;padding:6px 14px;flex-wrap:nowrap;
+             overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--bdr) transparent;}
+.tb-cbar-row::-webkit-scrollbar{height:3px;}
+.tb-cbar-row::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px;}
+.mb-vel-cons-badge{display:flex;flex-direction:column;gap:2px;min-width:54px;}
+.mb-vel-cons-val{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4ade80;}
+.mb-vel-cons-val.vix-set{color:#60b8f0;}
 .tb-cbar-row+.tb-cbar-row{border-top:1px solid var(--bdr);}
 .tb-cfg-grp{display:flex;flex-direction:column;gap:3px;}
 .tb-lbl-sm{font-size:9px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;}
@@ -3132,9 +3850,10 @@ select.tb-inp-sm{width:96px;}
 .chain-btn{font-size:11px;font-weight:700;padding:5px 12px;border-radius:5px;border:1px solid;
            cursor:pointer;background:none;transition:all .1s;text-align:center;width:100%;max-width:110px;}
 .chain-btn.ce{color:var(--bull);border-color:var(--bull);}
-.chain-btn.ce:hover{background:rgba(0,229,160,.18);transform:scale(1.03);}
+.chain-btn.ce:hover:not([disabled]){background:rgba(0,229,160,.18);transform:scale(1.03);}
 .chain-btn.pe{color:var(--bear);border-color:var(--bear);}
-.chain-btn.pe:hover{background:rgba(255,77,109,.18);transform:scale(1.03);}
+.chain-btn.pe:hover:not([disabled]){background:rgba(255,77,109,.18);transform:scale(1.03);}
+.chain-btn[disabled],.chain-btn.qt-over-budget{opacity:.22!important;cursor:not-allowed!important;filter:grayscale(.6);}
 /* Trade history table */
 #th-table tbody tr{border-bottom:1px solid #060e1a;transition:background .1s;}
 #th-table tbody tr:hover{background:rgba(56,189,248,.04);}
@@ -3377,6 +4096,10 @@ select.tb-inp-sm{width:96px;}
   <button class="tab-btn" onclick="switchTab('perf',this);initPerfTab()">📈 Performance</button>
   <button class="tab-btn" onclick="switchTab('bots',this);initBotsTab()">🤖 Bot Control</button>
   <button class="tab-btn" onclick="switchTab('scanner',this);initScannerTab()">🔭 Scanner</button>
+  <button class="tab-btn" id="aibrain-tab-btn" onclick="switchTab('aibrain',this);initAiBrainTab()" style="color:#c084fc">🧠 AI Brain</button>
+  <button class="tab-btn" onclick="switchTab('vix',this);initVixTab()">🌡 VIX</button>
+  <button class="tab-btn" onclick="switchTab('engine',this)" style="color:#4ade80">⚡ Decision Engine</button>
+  <button class="tab-btn" onclick="switchTab('control',this);initControlTab()" style="color:#f85149">🛡 Control</button>
   <button class="tab-btn" onclick="switchTab('guide',this)">🗺️ Guide</button>
 </div>
 
@@ -3868,13 +4591,17 @@ select.tb-inp-sm{width:96px;}
 
       <!-- Quick mode controls — hidden until mode=quick -->
       <div class="tb-cfg-grp" id="tb-quick-pts-grp" style="display:none"
-           title="Profit target in points for Quick mode. Bot places a limit SELL at entry + this value immediately after buy. If price blows past, switches to trailing stop.">
+           title="Profit target for Quick mode. Bot places a limit SELL at entry + target immediately after buy. If price blows past, switches to trailing stop.&#10;PTS: target is a premium move in points.&#10;₹: enter a profit amount — converted to points using lots × lot size, then snapped to the nearest 5 paise on the actual fill price.">
         <span class="tb-lbl-sm">QK TGT</span>
         <div style="display:flex;align-items:center;gap:3px">
-          <input type="number" id="tb-quick-pts" class="tb-inp-sm" value="1.5" min="0.5" max="20" step="0.5" style="width:48px" oninput="tbSaveCfg()">
+          <button id="tb-quick-mode-btn" onclick="tbToggleQuickTargetMode()"
+                  title="Toggle target input: PTS = points of premium move · ₹ = profit amount (converted to points via lots × lot size)."
+                  style="font-size:9px;padding:3px 6px;border-radius:4px;border:1px solid var(--accent);background:rgba(0,200,130,.12);color:var(--accent);cursor:pointer;font-weight:700;white-space:nowrap">PTS</button>
+          <input type="number" id="tb-quick-pts" class="tb-inp-sm" value="1.5" min="0.5" max="20" step="0.5" style="width:56px" oninput="tbSaveCfg();tbUpdateQuickTargetHint()">
           <button onclick="tbUpdateQuickTarget()" title="Push updated target to the bot mid-trade — cancels current limit sell and places a new one at the new target. Only works while limit sell is still open (before trail phase)."
                   style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid var(--accent);background:rgba(0,200,130,.12);color:var(--accent);cursor:pointer;font-weight:600">SET</button>
         </div>
+        <span id="tb-quick-tgt-hint" style="font-size:8px;color:var(--muted);white-space:nowrap;align-self:center"></span>
       </div>
 
       <div class="tb-cfg-grp" id="tb-partial-grp" style="display:none"
@@ -3919,12 +4646,48 @@ select.tb-inp-sm{width:96px;}
       </div>
 
       <div style="width:1px;background:var(--bdr);align-self:stretch;margin:0 2px"></div>
+      <div class="tb-cfg-grp" title="Quick Trade Mode: auto-calculates max affordable premium from capital, disables over-budget strikes, and places orders instantly on BUY CE/PE click — no confirmation step.">
+        <button id="tb-quick-trade-btn" class="toggle-btn toggle-off"
+                onclick="tbToggleQuickTrade()"
+                style="font-size:10px;padding:3px 9px;border-color:#f59e0b;white-space:nowrap">⚡ Quick Trade</button>
+      </div>
       <div class="tb-cfg-grp" style="justify-content:center">
         <button onclick="tbStartProd10()" id="tb-start-p10-btn"
                 title="Launch PROD10 bot in a new Terminal window"
                 style="padding:4px 14px;font-size:10px;font-weight:700;border-radius:6px;cursor:pointer;
                        background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;
                        white-space:nowrap">▶ Start PROD10</button>
+      </div>
+    </div>
+
+    <!-- Quick Trade config row — hidden until Quick Trade Mode is ON -->
+    <div id="tb-quick-trade-row" class="tb-cbar-row" style="display:none;background:rgba(245,158,11,.05);border-top:1px solid rgba(245,158,11,.2)">
+      <div style="font-size:9px;font-weight:700;color:#f59e0b;letter-spacing:1px;align-self:center;white-space:nowrap;min-width:48px">⚡ QUICK</div>
+      <div class="tb-cfg-grp" title="Fetch F&amp;O Buy Balance from Groww API, or enter total available capital manually">
+        <span class="tb-lbl-sm" style="color:#f59e0b">CAPITAL SRC</span>
+        <select id="tb-cap-source" class="tb-inp-sm" onchange="tbOnCapSourceChange()">
+          <option value="api">Fetch from API</option>
+          <option value="manual">Pass Manually</option>
+        </select>
+      </div>
+      <div class="tb-cfg-grp" id="tb-cap-fetch-grp">
+        <button onclick="tbFetchCapital()" id="tb-cap-fetch-btn"
+                style="font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid #f59e0b;background:rgba(245,158,11,.15);color:#f59e0b;cursor:pointer;font-weight:600">FETCH CAPITAL</button>
+      </div>
+      <div class="tb-cfg-grp" id="tb-cap-manual-grp" style="display:none" title="Total capital available to trade (e.g. 260000)">
+        <span class="tb-lbl-sm" style="color:#f59e0b">CAPITAL ₹</span>
+        <input type="number" id="tb-cap-manual" class="tb-inp-sm" placeholder="260000" min="1000" step="1000" style="width:80px" oninput="tbOnManualCapital()">
+      </div>
+      <div class="tb-cfg-grp" id="tb-cap-display-grp" style="display:none">
+        <span class="tb-lbl-sm" style="color:#f59e0b">CAPITAL</span>
+        <span id="tb-cap-display" style="font-size:11px;color:#f59e0b;font-weight:700;font-family:'JetBrains Mono',monospace">—</span>
+      </div>
+      <div class="tb-cfg-grp" id="tb-max-prem-grp" style="display:none" title="Max premium per share you can afford based on capital ÷ (lots × lot_size)">
+        <span class="tb-lbl-sm" style="color:#10b981">MAX PREM</span>
+        <span id="tb-max-prem-display" style="font-size:11px;color:#10b981;font-weight:700;font-family:'JetBrains Mono',monospace">—</span>
+      </div>
+      <div class="tb-cfg-grp" id="tb-max-prem-calc-grp" style="display:none">
+        <span id="tb-max-prem-calc" style="font-size:9px;color:var(--dim)"></span>
       </div>
     </div>
 
@@ -3999,6 +4762,24 @@ select.tb-inp-sm{width:96px;}
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Velocity filter — ON requires best strike to clear vel% threshold; OFF picks highest-score rising strike regardless">VEL FILTER</span>
         <button id="mb-vel-filter-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleVelFilter()" title="Velocity filter ON — best strike must clear velocity threshold (default 0.5%). OFF = pick highest-score rising strike on winning side regardless of velocity.">ON</button>
       </div>
+      <div class="tb-cfg-grp" title="Velocity threshold — min % premium move over scan window to trigger a signal. Set manually or auto-set by VIX AUTO CONFIG.">
+        <span class="tb-lbl-sm">VEL %</span>
+        <div class="mb-vel-cons-badge">
+          <span id="mb-vel-display" class="mb-vel-cons-val" title="Current velocity_pct threshold">0.5%</span>
+        </div>
+      </div>
+      <div class="tb-cfg-grp" title="Consistency threshold — min % of ticks moving in signal direction. Set manually or auto-set by VIX AUTO CONFIG.">
+        <span class="tb-lbl-sm">CONS %</span>
+        <div class="mb-vel-cons-badge">
+          <span id="mb-cons-display" class="mb-vel-cons-val" title="Current consistency_pct threshold">55%</span>
+        </div>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#60b8f0" title="VIX Auto Config — reads India VIX, determines market regime, and sets velocity%+consistency% thresholds automatically. Refresh after every 3–4 trades to stay aligned with market conditions.">VIX AUTO</span>
+        <div style="display:flex;gap:3px;align-items:center">
+          <button id="mb-vix-auto-btn" class="toggle-btn toggle-off" onclick="mbVixAutoToggle()" title="VIX Auto Config — auto-sets vel% and cons% from India VIX level+trend. Enable before launching the bot.">OFF</button>
+          <button id="mb-vix-refresh-btn" onclick="mbVixRefreshConfig()" title="Refresh VIX and recompute config — use after every 3–4 trades" style="display:none;font-size:11px;padding:2px 8px;border-radius:12px;cursor:pointer;border:1px solid #60b8f0;background:rgba(96,184,240,.15);color:#60b8f0;font-weight:700">↻</button>
+        </div>
+      </div>
       <div class="tb-cfg-grp" style="justify-content:center">
         <button onclick="mbStartAutoBot()" id="mb-start-btn" class="mb-launch-btn">🚀 Auto Bot</button>
       </div>
@@ -4028,6 +4809,18 @@ select.tb-inp-sm{width:96px;}
       </div>
     </div>
 
+    <!-- VIX Auto Config status panel — shown when VIX AUTO toggle is ON -->
+    <div id="mb-vix-status-panel" style="display:none;background:rgba(96,184,240,.07);border:1px solid rgba(96,184,240,.28);border-radius:6px;margin-top:6px;font-size:10px;font-family:'JetBrains Mono',monospace;overflow:hidden">
+      <!-- Clickable header row -->
+      <div onclick="mbVixTogglePanel()" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(96,184,240,.15)" id="mb-vix-panel-header">
+        <span style="color:#60b8f0;font-weight:700;letter-spacing:.5px">⚡ VIX AUTO CONFIG</span>
+        <span id="mb-vix-status-text" style="color:var(--dim);font-size:9px;flex:1">fetching…</span>
+        <span id="mb-vix-chevron" style="color:#60b8f0;font-size:11px;transition:transform .2s">▲</span>
+      </div>
+      <!-- Collapsible body -->
+      <div id="mb-vix-panel-body" style="padding:10px 12px;line-height:1.5"></div>
+    </div>
+
   </div>
 
   <!-- ── Action bar ── -->
@@ -4054,6 +4847,8 @@ select.tb-inp-sm{width:96px;}
         <span style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--dim)">OPTION CHAIN</span>
         <span id="chain-spot" style="color:var(--info);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700"></span>
         <span id="chain-refresh-badge" style="font-size:9px;padding:2px 8px;border-radius:10px;display:none"></span>
+        <!-- Quick Trade max premium badge — shown when QTM is ON -->
+        <span id="chain-qt-badge" style="display:none;font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,.15);border:1px solid #f59e0b;color:#f59e0b;font-weight:700;font-family:'JetBrains Mono',monospace"></span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;font-size:10px;color:var(--dim)">
         <button onclick="tbLoadChain()" style="background:none;border:1px solid var(--bdr);color:var(--dim);border-radius:4px;padding:2px 8px;cursor:pointer;font-size:9px">↺ Refresh</button>
@@ -4772,6 +5567,37 @@ select.tb-inp-sm{width:96px;}
 
   <!-- ── TRENDLINE CHARTS ──────────────────────────────────────────── -->
   <div style="margin-top:16px;background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:14px;position:relative">
+    <!-- ── STATUS PANEL ──────────────────────────────────────────── -->
+    <div id="sc-status-panel" style="background:#0a0e1a;border:1px solid #1e2a3a;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px">
+      <!-- Row 1: bot dot + spot + bars + tl count -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+        <span id="sc-st-dot" style="display:inline-flex;align-items:center;gap:5px;font-weight:700">
+          <span style="width:8px;height:8px;border-radius:50%;background:#555;display:inline-block" id="sc-st-dot-circle"></span>
+          <span id="sc-st-dot-label" style="color:#666">OFFLINE</span>
+        </span>
+        <span style="color:#888">│</span>
+        <span style="color:var(--dim)">NIFTY <span id="sc-st-spot" style="color:#e0e0e0;font-weight:700">—</span></span>
+        <span style="color:#888">│</span>
+        <span style="color:var(--dim)">Bars: <span id="sc-st-bars" style="color:#ccc">—</span></span>
+        <span style="color:#888">│</span>
+        <span style="color:var(--dim)">TL: <span id="sc-st-tl" style="color:#00c853;font-weight:700">—</span> active</span>
+        <span style="color:#888">│</span>
+        <span style="color:var(--dim)">In range: <span id="sc-st-inrange" style="color:#40c4ff;font-weight:700">—</span></span>
+      </div>
+      <!-- Row 2: open trade or no trade -->
+      <div id="sc-st-trade-row" style="margin-bottom:6px;display:none">
+        <span style="color:#ff5252;font-weight:700">● OPEN TRADE</span>
+        <span id="sc-st-trade-info" style="color:#ccc;margin-left:8px"></span>
+      </div>
+      <!-- Row 3: watching list -->
+      <div>
+        <span style="color:var(--dim);letter-spacing:.5px;font-size:10px">WATCHING (nearest to signal)</span>
+        <div id="sc-st-watching" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:5px">
+          <span style="color:#444;font-size:10px">—</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Header row -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px">
@@ -4934,6 +5760,16 @@ select.tb-inp-sm{width:96px;}
 </div>
 
 <!-- Guide tab -->
+<!-- Trade Control tab — embeds the standalone TRADE_CONTROL_PANEL.py (port 8790) -->
+<div id="tab-control" class="tab-pane">
+  <iframe id="controlFrame" src="" style="width:100%;height:calc(100vh - 128px);border:none;background:#0d1117"></iframe>
+  <div id="controlHint" style="display:none;padding:36px;text-align:center;color:#8b949e;font-size:14px">
+    🛡 Control panel not reachable.<br><br>
+    Start it with: <code style="color:#58a6ff">python3 TRADE_CONTROL_PANEL.py</code><br>
+    then reopen this tab (it is auto-started with the dashboard normally).
+  </div>
+</div>
+
 <div id="tab-guide" class="tab-pane">
 <div class="guide" style="max-width:1400px">
 
@@ -5277,6 +6113,69 @@ select.tb-inp-sm{width:96px;}
 </div><!-- end #tab-guide -->
 
 <!-- ══════════════════════════════════════════════════════════
+     AI BRAIN TAB
+════════════════════════════════════════════════════════════ -->
+<div id="tab-aibrain" class="tab-pane" style="overflow-y:auto;max-height:calc(100vh - 118px)">
+<div id="aibrain-inner" style="padding:16px 18px">
+
+  <div class="mb-ai-wrap">
+
+    <!-- Quick Summary card — AI-generated via Claude CLI, auto-refresh -->
+    <div class="mb-ai-toggle-bar" style="background:linear-gradient(135deg,#061220,#071828);border-color:#1e3a5f;flex-direction:column;align-items:flex-start;gap:10px;padding:18px 22px">
+      <div style="display:flex;align-items:center;gap:10px;width:100%">
+        <div style="font-size:14px;font-weight:800;color:#38bdf8;letter-spacing:.5px">📊 QUICK MARKET SUMMARY</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span id="qs-ts" style="font-size:10px;color:var(--dim)"></span>
+          <button id="qs-refresh-btn" onclick="qsRefresh()"
+            style="display:none;background:rgba(56,189,248,.15);border:1px solid #1e3a5f;color:#38bdf8;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:600;transition:all .2s"
+            title="Regenerate via Claude AI">↻</button>
+          <button id="qs-toggle-btn" class="toggle-btn toggle-off" onclick="qsToggle()" style="font-size:10px;padding:2px 10px">OFF</button>
+        </div>
+      </div>
+      <div id="qs-text" style="font-size:14px;line-height:1.9;color:#e2e8f0;font-family:'Inter',sans-serif;width:100%">
+        <span style="color:var(--dim)">Toggle ON to generate a live market summary.</span>
+      </div>
+      <!-- Status debug line -->
+      <div id="qs-status-dbg" style="font-size:10px;color:#334155;margin-top:4px"></div>
+    </div>
+
+    <!-- AI Details toggle bar -->
+    <div class="mb-ai-toggle-bar" style="margin-top:14px">
+      <div>
+        <div class="mb-ai-title">🧠 Get AI Details</div>
+        <div class="mb-ai-subtitle">Feeds ALL bot signals to Claude AI → Intraday + Long-term view + Key levels + Risks</div>
+      </div>
+      <button id="mb-ai-toggle-btn" class="toggle-btn toggle-off"
+              style="font-size:13px;padding:8px 22px;border-radius:8px"
+              onclick="mbAiToggle()">OFF</button>
+    </div>
+
+    <!-- AI meta row -->
+    <div class="mb-ai-meta" id="mb-ai-meta" style="display:none">
+      <span class="mb-ai-ts" id="mb-ai-ts"></span>
+      <span class="mb-ai-ctx" id="mb-ai-ctx"></span>
+      <button class="mb-ai-refresh-btn" id="mb-ai-refresh-btn" onclick="mbAiRefresh()">↻ Refresh Now</button>
+      <span style="font-size:10px;color:var(--dim)">Auto-refreshes every 5 min</span>
+    </div>
+
+    <!-- AI content area -->
+    <div id="mb-ai-content">
+      <div class="mb-ai-idle">
+        <div class="idle-icon">🧠</div>
+        <div class="idle-msg">AI Brain is OFF</div>
+        <div class="idle-sub">Toggle ON above for a detailed Claude AI analysis of all bot signals.<br>
+        Reads: India VIX · OI/PCR · Fibonacci · Chart S/R · Master Signal · Momentum Bot · Convergence · Trendline<br>
+        Generates INTRADAY (next 1-2h) + LONG-TERM (2-5 day) summary via Claude AI.<br><br>
+        <b style="color:#c084fc">Requires:</b> Claude Code CLI logged in (<code>claude login</code>)</div>
+      </div>
+    </div>
+
+  </div><!-- end .mb-ai-wrap -->
+
+</div><!-- end #aibrain-inner -->
+</div><!-- end #tab-aibrain -->
+
+<!-- ══════════════════════════════════════════════════════════
      BOT CONTROL CENTER TAB
 ════════════════════════════════════════════════════════════ -->
 <div id="tab-bots" class="tab-pane" style="padding:16px 18px;overflow-y:auto;max-height:calc(100vh - 118px)">
@@ -5291,6 +6190,256 @@ select.tb-inp-sm{width:96px;}
   <div id="bots-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px"></div>
 
 </div><!-- end #tab-bots -->
+
+<!-- ════════════════════════════════════════════════════════════
+     DECISION ENGINE TAB (trading_decision_engine)
+════════════════════════════════════════════════════════════ -->
+<div id="tab-engine" class="tab-pane" style="padding:16px 18px;overflow-y:auto;max-height:calc(100vh - 118px)">
+
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="font-size:18px;font-weight:700;color:var(--info)">⚡ Decision Engine</div>
+    <span id="de-mode" class="badge off">OFFLINE</span>
+    <span id="de-run" class="badge off">STOPPED</span>
+    <span id="de-profile" style="color:var(--warn);font-size:12px;font-weight:600"></span>
+    <span id="de-file" style="color:var(--dim);font-size:11px;margin-left:auto"></span>
+  </div>
+
+  <!-- launch / config bar -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="font-size:11px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">LAUNCH CONTROL</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <label style="font-size:11px;color:var(--dim)">Mode<br>
+        <select id="dec-mode" onchange="deModeChanged()" style="background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px">
+          <option value="shadow" selected>shadow (paper)</option>
+          <option value="live">live (REAL MONEY)</option>
+        </select></label>
+      <label style="font-size:11px;color:var(--dim)">Profile<br>
+        <select id="dec-profile" style="background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px">
+          <option value="">none (strategy.json)</option>
+        </select></label>
+      <label style="font-size:11px;color:var(--dim)">Index<br>
+        <select id="dec-index" onchange="deLoadExpiries()" style="background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px">
+          <option>NIFTY</option><option>BANKNIFTY</option><option>SENSEX</option><option>FINNIFTY</option>
+        </select></label>
+      <label style="font-size:11px;color:var(--dim)">Expiry<br>
+        <select id="dec-expiry" style="background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px;min-width:120px">
+          <option value="">loading…</option>
+        </select></label>
+      <label style="font-size:11px;color:var(--dim)">Lots<br>
+        <input id="dec-lots" type="number" value="1" min="1" style="width:56px;background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px"></label>
+      <label style="font-size:11px;color:var(--dim)">Premium min<br>
+        <input id="dec-pmin" type="number" value="60" style="width:70px;background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px"></label>
+      <label style="font-size:11px;color:var(--dim)">Premium max<br>
+        <input id="dec-pmax" type="number" value="250" style="width:70px;background:#0a111e;color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:5px 8px;margin-top:3px"></label>
+      <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px;padding-bottom:6px">
+        <input id="dec-validate" type="checkbox" checked> validate orders</label>
+      <span id="dec-live-confirm-wrap" style="display:none">
+        <label style="font-size:11px;color:var(--bear)">Type YES to arm LIVE<br>
+          <input id="dec-live-confirm" type="text" placeholder="YES" style="width:80px;background:#1a0a0a;color:var(--bear);border:1px solid var(--bear);border-radius:6px;padding:5px 8px;margin-top:3px"></label></span>
+      <button id="dec-start-btn" onclick="deStart()" style="background:var(--bull);color:#04110b;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;font-weight:700">▶ Start</button>
+      <button id="dec-stop-btn" onclick="deStop()" style="background:var(--bear);color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;font-weight:700">■ Stop</button>
+      <span id="dec-launch-msg" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div id="dec-console" style="display:none;margin-top:10px;background:#050a12;border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;max-height:180px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dim);white-space:pre-wrap"></div>
+  </div>
+
+  <div id="de-offline-msg" class="card" style="color:var(--dim)">
+    No decision-engine session yet — configure above and press <b style="color:var(--bull)">▶ Start</b>
+    (shadow mode recommended first). This tab lights up automatically once
+    <code>trading_decision_engine/logs/events_*.jsonl</code> starts flowing.
+  </div>
+
+  <div id="de-body" style="display:none">
+    <!-- row 1: live decision + confidences | stage gates -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;margin-bottom:14px">
+      <div class="card" id="de-decision-card"></div>
+      <div class="card" id="de-gates-card"></div>
+    </div>
+    <!-- row 2: engine grid -->
+    <div class="card" id="de-engines-card" style="margin-bottom:14px"></div>
+    <!-- row 3: session stats | trades -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;margin-bottom:14px">
+      <div class="card" id="de-stats-card"></div>
+      <div class="card" id="de-trades-card"></div>
+    </div>
+    <!-- row 4: config / profile -->
+    <div class="card" id="de-config-card"></div>
+  </div>
+
+</div><!-- end #tab-engine -->
+
+<div id="tab-vix" class="tab-pane" style="padding:16px 18px;overflow-y:auto;max-height:calc(100vh - 118px)">
+
+  <!-- Market Regime card — top of VIX tab -->
+  <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:16px;margin-bottom:16px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span style="font-size:10px;letter-spacing:1px;color:var(--dim)">MARKET REGIME DETECTOR
+        <span style="font-size:9px;color:#475569;font-weight:400;letter-spacing:0;margin-left:6px">hover ⓘ cards for details</span>
+      </span>
+      <span id="mr-badge" style="font-size:11px;font-weight:800;letter-spacing:1.5px;padding:4px 14px;border-radius:20px;border:1px solid currentColor">—</span>
+    </div>
+
+    <!-- 4-metric grid — no position:relative so fixed tooltip never clips -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+
+      <div style="background:#060d1a;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px 12px;cursor:default"
+           data-mrtip="range">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">NIFTY DAY RANGE ⓘ</div>
+        <div id="mr-range-pts" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--txt)">—</div>
+        <div id="mr-range-pct" style="font-size:10px;margin-top:3px">—</div>
+        <div id="mr-range-lbl" style="font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:.5px">—</div>
+      </div>
+
+      <div style="background:#060d1a;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px 12px;cursor:default"
+           data-mrtip="straddle">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">ATM STRADDLE ⓘ</div>
+        <div id="mr-straddle" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--txt)">—</div>
+        <div id="mr-straddle-sub" style="font-size:10px;color:var(--dim);margin-top:3px">CE + PE LTP</div>
+        <div id="mr-straddle-lbl" style="font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:.5px">—</div>
+      </div>
+
+      <div style="background:#060d1a;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px 12px;cursor:default"
+           data-mrtip="prem">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">PREMIUM ACTIVITY ⓘ</div>
+        <div id="mr-prem-move" style="font-size:15px;font-weight:700">—</div>
+        <div id="mr-prem-sub" style="font-size:10px;margin-top:3px;color:var(--dim)">CE/PE LTP change</div>
+        <div id="mr-prem-lbl" style="font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:.5px">—</div>
+      </div>
+
+      <div style="background:#060d1a;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px 12px;cursor:default"
+           data-mrtip="score">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:6px">REGIME SCORE ⓘ</div>
+        <div id="mr-score-bar" style="display:flex;gap:4px;margin-bottom:6px">
+          <span class="mrseg" data-pos="1" style="flex:1;height:8px;border-radius:3px;background:#1e293b"></span>
+          <span class="mrseg" data-pos="2" style="flex:1;height:8px;border-radius:3px;background:#1e293b"></span>
+          <span class="mrseg" data-pos="3" style="flex:1;height:8px;border-radius:3px;background:#1e293b"></span>
+          <span class="mrseg" data-pos="4" style="flex:1;height:8px;border-radius:3px;background:#1e293b"></span>
+          <span class="mrseg" data-pos="5" style="flex:1;height:8px;border-radius:3px;background:#1e293b"></span>
+          <span class="mrseg" data-pos="6" style="flex:1;height:8px;border-radius:3px;background:#1e293b"></span>
+        </div>
+        <div id="mr-score" style="font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--txt)">—</div>
+        <div id="mr-score-breakdown" style="font-size:9px;color:var(--dim);margin-top:3px">Range · Prem · VIX</div>
+        <div id="mr-score-lbl" style="font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:.5px">—</div>
+      </div>
+
+    </div>
+
+    <!-- Regime verdict text -->
+    <div id="mr-verdict" style="font-size:12px;line-height:1.7;color:var(--txt);border-top:1px solid rgba(255,255,255,.06);padding-top:10px">
+      Waiting for market data…
+    </div>
+
+  </div>
+
+  <!-- Global fixed tooltip for Market Regime cards — never affects layout -->
+  <div id="mr-tooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;
+       background:#0c1a30;border:1px solid var(--bdr);border-radius:10px;padding:12px 15px;
+       max-width:340px;font-size:11px;line-height:1.7;color:var(--txt);
+       box-shadow:0 10px 32px rgba(0,0,0,.8);font-family:'Inter',sans-serif"></div>
+
+  <!-- Top row: big VIX number + stats -->
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-bottom:16px">
+
+    <!-- VIX Big Number card -->
+    <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:20px 28px;text-align:center;min-width:160px">
+      <div style="font-size:10px;letter-spacing:1.5px;color:var(--dim);margin-bottom:6px">INDIA VIX</div>
+      <div id="vt-curr" style="font-size:52px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1">—</div>
+      <div id="vt-regime" style="font-size:11px;font-weight:700;letter-spacing:1.2px;margin-top:6px">—</div>
+      <div style="margin-top:10px;display:flex;gap:10px;justify-content:center;font-size:10px;font-family:'JetBrains Mono',monospace">
+        <span style="color:var(--dim)">SESS Δ <span id="vt-sess-chg" style="color:var(--txt)">—</span></span>
+        <span style="color:var(--dim)">10m <span id="vt-10m" style="color:var(--txt)">—</span></span>
+      </div>
+      <div style="margin-top:6px;font-size:9px;color:var(--dim)">Updated <span id="vt-ts">—</span></div>
+    </div>
+
+    <!-- Stats row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">SESSION HIGH</div>
+        <div id="vt-hi" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--bear)">—</div>
+      </div>
+
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">SESSION LOW</div>
+        <div id="vt-lo" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--bull)">—</div>
+      </div>
+
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">SESSION OPEN</div>
+        <div id="vt-open" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--txt)">—</div>
+      </div>
+
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">VIX RANGE</div>
+        <div id="vt-range" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--info)">—</div>
+        <div style="font-size:9px;color:var(--dim);margin-top:2px">session spread</div>
+      </div>
+
+      <!-- Velocity card -->
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">VELOCITY (30m)</div>
+        <div id="vt-vel" style="font-size:16px;font-weight:700;font-family:'JetBrains Mono',monospace">—</div>
+        <div id="vt-vel-lbl" style="font-size:9px;color:var(--dim);margin-top:2px">—</div>
+      </div>
+
+      <!-- Trend -->
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">TREND</div>
+        <div id="vt-trend" style="font-size:16px;font-weight:700">—</div>
+        <div id="vt-trend-lbl" style="font-size:9px;color:var(--dim);margin-top:2px">—</div>
+      </div>
+
+      <!-- Options premium implication -->
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">OPTION PREMIUM</div>
+        <div id="vt-prem" style="font-size:13px;font-weight:700">—</div>
+        <div id="vt-prem-lbl" style="font-size:9px;color:var(--dim);margin-top:2px">—</div>
+      </div>
+
+      <!-- Data points -->
+      <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">DATA POINTS</div>
+        <div id="vt-pts" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--txt)">—</div>
+        <div style="font-size:9px;color:var(--dim);margin-top:2px">2-min ticks today</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Full-width sparkline -->
+  <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:10px;letter-spacing:1px;color:var(--dim)">INTRADAY VIX CHART</span>
+      <span id="vt-spark-tt" style="display:none;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--info)"></span>
+    </div>
+    <canvas id="vt-sparkline" style="width:100%;height:130px;display:block"></canvas>
+    <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:4px;font-family:'JetBrains Mono',monospace">
+      <span id="vt-spark-t0">—</span>
+      <span style="opacity:.5">hover for value</span>
+      <span id="vt-spark-tn">—</span>
+    </div>
+  </div>
+
+  <!-- Analysis + Regime + Recent ticks -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+    <!-- Analysis card -->
+    <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:16px">
+      <div style="font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:12px">ANALYSIS</div>
+      <div id="vt-analysis" style="font-size:12px;line-height:1.7;color:var(--txt)">Waiting for VIX data…</div>
+    </div>
+
+    <!-- Recent ticks log -->
+    <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:16px">
+      <div style="font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">RECENT TICKS (last 15)</div>
+      <div id="vt-ticks" style="font-size:11px;font-family:'JetBrains Mono',monospace;line-height:1.9;max-height:260px;overflow-y:auto"></div>
+    </div>
+
+  </div>
+
+</div><!-- end #tab-vix -->
 
 <div class="footer" id="footer">Last updated: — | Read-only — no API calls — log aggregator only</div>
 
@@ -5333,6 +6482,7 @@ function render(d){
   if(!d) return;
   renderPnl(d);
   renderVix(d);
+  renderVixTab(d);
   const b=d.bots||{}, master=b.master||{}, fibo=b.fibo||{},
         csig=b.chart_signal||{}, cdec=b.chart_decision||{},
         prem=b.premium||{}, trade=b.trade||{}, momentum_bot=b.momentum_bot||{},
@@ -5340,6 +6490,13 @@ function render(d){
         sigmon=b.signal_monitor||{},
         cons=d.consensus||{}, liveChain=(d.live_chain||{}).chain||{};
   const spot=d.spot||0;
+
+  // Recompute fib/confluence distances against the LIVE spot — the dist_pts
+  // parsed from bot logs were computed at log time and go stale off-market
+  if(spot>0){
+    (fibo.fib_levels||[]).forEach(f=>{ if(f.price) f.dist_pts=f.price-spot; });
+    (fibo.confluence||[]).forEach(c=>{ if(c.price) c.dist_pts=c.price-spot; });
+  }
 
   // Header
   $('htitle').textContent=`📡 ${d.index||'NIFTY'} LIVE DASHBOARD`;
@@ -5997,6 +7154,20 @@ function switchTab(id, btn){
   btn.classList.add('active');
 }
 
+/* ── Trade Control tab (standalone panel on :8790) ── */
+function initControlTab(){
+  const f = document.getElementById('controlFrame');
+  const url = 'http://' + (location.hostname || '127.0.0.1') + ':8790/';
+  fetch(url, {mode:'no-cors'}).then(()=>{
+    f.style.display = '';
+    document.getElementById('controlHint').style.display = 'none';
+    if(f.getAttribute('src') !== url) f.setAttribute('src', url);
+  }).catch(()=>{
+    f.style.display = 'none';
+    document.getElementById('controlHint').style.display = 'block';
+  });
+}
+
 /* ── Glow intensity ── */
 function setGlow(pct){
   const a = parseFloat(pct) / 100;
@@ -6103,10 +7274,240 @@ function renderPivots(d){
   el.innerHTML=html;
 }
 
+/* ─── Decision Engine tab (trading_decision_engine) ─────────── */
+function deBar(pct,color){
+  pct=Math.max(0,Math.min(100,pct||0));
+  return `<div style="background:var(--bdr);height:9px;border-radius:5px;flex:1;min-width:70px">
+    <div style="width:${pct}%;background:${color};height:9px;border-radius:5px"></div></div>`;
+}
+function dePassBadge(ok){
+  return ok? '<span style="color:var(--bull);font-weight:700;font-size:11px">PASS</span>'
+           : '<span style="color:var(--bear);font-weight:700;font-size:11px">FAIL</span>';
+}
+const DE_ENGINE_ORDER=[['trend','Trend'],['market_structure','Market Structure'],['support_resistance','Support/Resist'],
+  ['premium_momentum','Premium Momentum'],['breakout','Breakout'],['market_strength','Market Strength'],
+  ['option_selection','Option Selection'],['volatility','Volatility'],['trading_rules','Trading Rules'],
+  ['risk','Risk'],['signal_stability','Signal Stability']];
+
+/* launch control */
+let _deExpiriesLoaded=false, _deConsoleTimer=null;
+function deModeChanged(){
+  const live=document.getElementById('dec-mode').value==='live';
+  document.getElementById('dec-live-confirm-wrap').style.display=live?'inline-block':'none';
+}
+async function deLoadExpiries(){
+  const idx=document.getElementById('dec-index').value;
+  const sel=document.getElementById('dec-expiry');
+  sel.innerHTML='<option value="">loading…</option>';
+  try{
+    const r=await fetch('/api/engine/expiries?index='+idx); const d=await r.json();
+    sel.innerHTML=(d.expiries||[]).map((e,i)=>`<option value="${e}"${i===0?' selected':''}>${e}${i===0?' (current)':i===1?' (next)':''}</option>`).join('')
+      ||'<option value="">none found — refresh instrument.csv</option>';
+  }catch(e){sel.innerHTML='<option value="">error loading</option>';}
+}
+async function deStart(){
+  const msg=document.getElementById('dec-launch-msg');
+  const mode=document.getElementById('dec-mode').value;
+  const body={
+    mode, profile:document.getElementById('dec-profile').value,
+    index:document.getElementById('dec-index').value,
+    expiry:document.getElementById('dec-expiry').value,
+    lots:parseInt(document.getElementById('dec-lots').value||'1'),
+    premium_min:parseFloat(document.getElementById('dec-pmin').value||'60'),
+    premium_max:parseFloat(document.getElementById('dec-pmax').value||'250'),
+    validate_orders:document.getElementById('dec-validate').checked,
+    confirm_live:document.getElementById('dec-live-confirm').value,
+  };
+  if(mode==='live' && body.confirm_live.trim().toUpperCase()!=='YES'){
+    msg.textContent='⚠ LIVE mode: type YES in the confirmation box first'; msg.style.color='var(--bear)'; return;
+  }
+  msg.textContent='starting…'; msg.style.color='var(--dim)';
+  try{
+    const r=await fetch('/api/engine/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.ok){ msg.textContent='✓ started (pid '+d.pid+')'; msg.style.color='var(--bull)'; deShowConsole(); }
+    else    { msg.textContent='✗ '+(d.error||'failed'); msg.style.color='var(--bear)'; }
+  }catch(e){ msg.textContent='✗ '+e; msg.style.color='var(--bear)'; }
+}
+async function deStop(){
+  const msg=document.getElementById('dec-launch-msg');
+  if(!confirm('Stop the decision engine? Any open trade keeps running on the broker — the engine exits after printing session stats.')) return;
+  msg.textContent='stopping…'; msg.style.color='var(--dim)';
+  try{
+    const r=await fetch('/api/engine/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    msg.textContent=d.ok?'✓ stopped':'✗ '+(d.error||'failed');
+    msg.style.color=d.ok?'var(--bull)':'var(--bear)';
+  }catch(e){ msg.textContent='✗ '+e; msg.style.color='var(--bear)'; }
+}
+function deShowConsole(){
+  const el=document.getElementById('dec-console');
+  el.style.display='block';
+  if(_deConsoleTimer) clearInterval(_deConsoleTimer);
+  const poll=async()=>{
+    try{
+      const r=await fetch('/api/engine/console?n=40'); const d=await r.json();
+      if((d.lines||[]).length){ el.textContent=d.lines.join('\\n'); el.scrollTop=el.scrollHeight; }
+      if(!d.running && _deConsoleTimer && el.textContent.length){ /* keep last output visible */ }
+    }catch(e){}
+  };
+  poll(); _deConsoleTimer=setInterval(poll,3000);
+}
+
+function renderDecisionEngine(de){
+  const pane=document.getElementById('tab-engine'); if(!pane||!de) return;
+  /* one-time init of launch-control dropdowns */
+  if(!_deExpiriesLoaded){ _deExpiriesLoaded=true; deLoadExpiries(); }
+  const profSel=document.getElementById('dec-profile');
+  if(profSel && profSel.options.length<=1 && (de.profiles||[]).length){
+    (de.profiles||[]).forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;profSel.appendChild(o);});
+  }
+  const runEl=document.getElementById('de-run');
+  runEl.className='badge '+(de.running?'live':'off');
+  runEl.textContent=de.running?('RUNNING pid '+de.pid):'STOPPED';
+  document.getElementById('dec-start-btn').style.opacity=de.running?0.35:1;
+  document.getElementById('dec-stop-btn').style.opacity=de.running?1:0.35;
+
+  const modeEl=document.getElementById('de-mode');
+  const live=de.available && de.age_seconds!=null && de.age_seconds<60;
+  modeEl.className='badge '+(live?'live':(de.available?'stale':'off'));
+  modeEl.textContent=de.available?((de.mode||'?').toUpperCase()+(live?'':' · stale '+Math.round(de.age_seconds)+'s')):'OFFLINE';
+  document.getElementById('de-profile').textContent=(de.config&&de.config.active_profile)?('profile: '+de.config.active_profile):'';
+  document.getElementById('de-file').textContent=de.file||'';
+  document.getElementById('de-offline-msg').style.display=de.available?'none':'block';
+  document.getElementById('de-body').style.display=de.available?'block':'none';
+  if(!de.available){ renderDeConfig(de); return; }
+
+  const L=de.latest||{};
+  const conf=L.confidence||{buy:0,sell:0,hold:100};
+  const act=L.action||'—';
+  const actColor=act==='BUY'?'var(--bull)':act==='SELL'?'var(--bear)':act==='REJECT'?'var(--bear)':'var(--warn)';
+
+  /* decision card */
+  let h=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <span style="font-size:11px;letter-spacing:1px;color:var(--dim)">LIVE DECISION</span>
+    <span style="font-size:20px;font-weight:800;color:${actColor}">${act}</span>
+    <span style="color:var(--dim);font-size:11px;margin-left:auto">${(L.timestamp||'').split('T')[1]||''}</span></div>`;
+  [['BUY',conf.buy,'var(--bull)'],['SELL',conf.sell,'var(--bear)'],['HOLD',conf.hold,'var(--dim)']].forEach(([lbl,v,c])=>{
+    h+=`<div style="display:flex;align-items:center;gap:10px;margin:5px 0">
+      <span style="width:40px;font-size:11px;color:var(--dim)">${lbl}</span>${deBar(v,c)}
+      <span style="width:48px;text-align:right;font-size:12px;font-weight:600">${(v||0).toFixed(1)}%</span></div>`;
+  });
+  const s2=L.stage2||{};
+  if(s2.evaluated){
+    h+=`<div style="margin-top:10px;font-size:12px;color:var(--txt)">buy <b>${s2.buy_score}</b>/${s2.required_buy}
+      &nbsp;sell <b>${s2.sell_score}</b>/${s2.required_sell}
+      &nbsp;quality <b>${s2.trade_quality}</b>&nbsp;agreement <b>${s2.engine_agreement||''}</b></div>`;
+  }
+  const reasons=(L.final&&L.final.reasons)||[];
+  if(reasons.length){
+    h+='<div style="margin-top:8px;font-size:11px;color:var(--dim)">'+reasons.slice(0,5).map(r=>'• '+r).join('<br>')+'</div>';
+  }
+  document.getElementById('de-decision-card').innerHTML=h;
+
+  /* gates card */
+  const s1=L.stage1||{checks:{}};
+  h=`<div style="font-size:11px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">STAGE 1 — MANDATORY GATES
+     <span style="float:right;font-weight:700;color:${s1.passed?'var(--bull)':'var(--bear)'}">${s1.passed?'PASS':'FAIL'}</span></div>`;
+  Object.entries(s1.checks||{}).forEach(([gate,c])=>{
+    if(!c.enabled){h+=`<div style="display:flex;gap:8px;margin:4px 0;font-size:12px;opacity:.4">
+      <span style="width:150px">${gate.replace(/_/g,' ')}</span><span style="color:var(--dim)">gate off</span></div>`;return;}
+    h+=`<div style="display:flex;gap:8px;margin:4px 0;font-size:12px">
+      <span style="width:150px">${gate.replace(/_/g,' ')}</span>${dePassBadge(c.passed)}
+      ${c.passed?'':`<span style="color:var(--dim);font-size:11px">${c.actual} <span style="color:var(--bear)">vs</span> ${c.required}</span>`}</div>`;
+  });
+  document.getElementById('de-gates-card').innerHTML=h;
+
+  /* engines card */
+  h=`<div style="font-size:11px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">ENGINES — CURRENT CYCLE</div>`;
+  const eng=L.engines||{};
+  DE_ENGINE_ORDER.forEach(([key,label])=>{
+    const e=eng[key]; if(!e) return;
+    const dirC=e.direction==='BULLISH'?'var(--bull)':e.direction==='BEARISH'?'var(--bear)':'var(--dim)';
+    h+=`<div style="display:flex;align-items:center;gap:10px;margin:5px 0;font-size:12px">
+      <span style="width:132px">${label}</span>${deBar(e.score,dirC)}
+      <span style="width:44px;text-align:right;font-weight:600">${(e.score||0).toFixed(0)}</span>
+      <span style="width:56px;color:var(--dim);font-size:11px">w ${((e.weight||0)*100).toFixed(1)}%</span>
+      <span style="width:52px;color:${e.contribution?'var(--bull)':'var(--dim)'};font-size:11px">${e.contribution?('+'+e.contribution.toFixed(1)):'—'}</span>
+      ${dePassBadge(e.passed)}</div>`;
+  });
+  const mom=eng.premium_momentum||{}, sr=eng.support_resistance||{}, st=eng.signal_stability||{};
+  h+=`<div style="margin-top:8px;font-size:11px;color:var(--dim)">
+    velocity ${mom.velocity!=null?mom.velocity.toFixed(2):'—'}/s · accel ${mom.acceleration!=null?mom.acceleration.toFixed(2):'—'}
+    · consistency ${mom.consistency_pct!=null?mom.consistency_pct.toFixed(0):'—'}%
+    &nbsp;|&nbsp; room: res ${sr.distance_to_resistance!=null?sr.distance_to_resistance:'—'} / sup ${sr.distance_to_support!=null?sr.distance_to_support:'—'}
+    &nbsp;|&nbsp; stability ${st.elapsed_seconds!=null?st.elapsed_seconds.toFixed(1):'—'}s of ${st.required_seconds!=null?st.required_seconds.toFixed(1):'—'}s</div>`;
+  document.getElementById('de-engines-card').innerHTML=h;
+
+  /* session stats card */
+  const S=de.stats||{cycles:0,actions:{},rejections:[],engines:{}};
+  h=`<div style="font-size:11px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">SESSION STATISTICS${de.partial?' <span style="color:var(--warn)">(partial)</span>':''}</div>
+  <div style="font-size:12px;margin-bottom:8px">cycles <b>${(S.cycles||0).toLocaleString()}</b>
+    &nbsp;BUY <b style="color:var(--bull)">${S.actions.BUY||0}</b>
+    &nbsp;SELL <b style="color:var(--bear)">${S.actions.SELL||0}</b>
+    &nbsp;HOLD <b>${S.actions.HOLD||0}</b>
+    &nbsp;REJECT <b>${(S.actions.REJECT||0).toLocaleString()}</b></div>`;
+  if((S.rejections||[]).length){
+    h+='<div style="font-size:11px;color:var(--dim);margin:6px 0 4px">TOP REJECTION REASONS</div>';
+    S.rejections.slice(0,6).forEach(r=>{
+      h+=`<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px">
+        <span style="width:130px">${r.gate.replace(/_/g,' ')}</span>${deBar(r.pct,'var(--bear)')}
+        <span style="width:70px;text-align:right">${r.pct}% (${r.count.toLocaleString()})</span></div>`;
+    });
+  }
+  const engStats=Object.entries(S.engines||{});
+  if(engStats.length){
+    h+=`<table class="perf-table" style="margin-top:8px;font-size:11px"><tr><th style="text-align:left">engine</th><th>pass%</th><th>avg score</th></tr>`;
+    engStats.forEach(([n,e])=>{h+=`<tr><td>${n.replace(/_/g,' ')}</td>
+      <td style="text-align:center;color:${e.pass_pct>=50?'var(--bull)':'var(--bear)'}">${e.pass_pct}%</td>
+      <td style="text-align:center">${e.avg_score}</td></tr>`;});
+    h+='</table>';
+  }
+  document.getElementById('de-stats-card').innerHTML=h;
+
+  /* trades card */
+  h=`<div style="font-size:11px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">RECENT TRADES</div>`;
+  const trades=de.trades||[];
+  if(!trades.length){h+='<div style="color:var(--dim);font-size:12px">No trades yet this session.</div>';}
+  else{
+    h+='<table class="perf-table" style="font-size:11px"><tr><th style="text-align:left">time</th><th style="text-align:left">event</th><th style="text-align:left">instrument</th><th>price</th><th>P&L / reason</th></tr>';
+    trades.forEach(t=>{
+      const time=(t.timestamp||'').split('T')[1]||'';
+      if(t.event==='trade_opened'){
+        h+=`<tr><td>${time}</td><td style="color:var(--bull)">OPEN</td><td>${t.instrument||''}</td>
+          <td style="text-align:center">${(t.entry_price!=null?t.entry_price.toFixed(2):'')}</td><td style="text-align:center;color:var(--dim)">x${t.lots||''} lot</td></tr>`;
+      }else{
+        const pc=(t.pnl||0)>=0?'var(--bull)':'var(--bear)';
+        h+=`<tr><td>${time}</td><td style="color:var(--bear)">CLOSE</td><td>${t.instrument||''}</td>
+          <td style="text-align:center">${(t.exit_price!=null?t.exit_price.toFixed(2):'')}</td>
+          <td style="text-align:center"><b style="color:${pc}">₹${(t.pnl||0).toFixed(0)}</b> <span style="color:var(--dim);font-size:10px">${(t.exit_reason||'').split(':')[0]}</span></td></tr>`;
+      }
+    });
+    h+='</table>';
+  }
+  document.getElementById('de-trades-card').innerHTML=h;
+  renderDeConfig(de);
+}
+function renderDeConfig(de){
+  const el=document.getElementById('de-config-card'); if(!el) return;
+  const c=de.config||{};
+  let h=`<div style="font-size:11px;letter-spacing:1px;color:var(--dim);margin-bottom:10px">STRATEGY CONFIG
+    <span style="float:right;color:var(--dim);font-weight:400">profiles: ${(de.profiles||[]).join(' · ')||'—'} — edits hot-reload in ~5s</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px;font-size:12px">`;
+  Object.entries(c).forEach(([k,v])=>{
+    if(k==='active_profile') return;
+    h+=`<div style="display:flex;justify-content:space-between;background:#0a111e;border:1px solid var(--bdr);border-radius:6px;padding:5px 9px">
+      <span style="color:var(--dim)">${k.replace(/_/g,' ')}</span><b>${v!=null?v:'—'}</b></div>`;
+  });
+  h+='</div>';
+  el.innerHTML=h;
+}
+
 async function load(){
   try{const r=await fetch('/api/data'); const d=await r.json(); render(d);
     // Update pivot spot from live data and re-render
     if(d.spot){ _pivotSpot=d.spot; renderPivots(_pivotCache||{}); }
+    try{renderDecisionEngine(d.decision_engine);}catch(e){console.error('decision engine tab:',e);}
   }catch(e){console.error(e);}
 }
 let _pivotCache={};
@@ -6622,6 +8023,10 @@ function renderVix(d){
   // Draw sparkline
   _drawVixSparkline(hist, curr);
 
+  // Store globally for VIX Auto Config
+  window._mbVixCurrent = curr;
+  window._mbVixDayChg  = dayChgPct;
+
   // Browser alarm — VIX fast spike (>3% in 10 min)
   if(_vixAlarmOn && tenPct != null && tenPct > 3){
     const now = Date.now();
@@ -6720,6 +8125,436 @@ function _drawVixSparkline(hist, curr){
     const tt = $('vix-spark-tt'); if(tt) tt.style.display = 'none';
   };
 }
+
+// ─────────────────────────────── VIX TAB ────────────────────────────────────
+
+let _vtLastData = null;
+
+function initVixTab(){
+  if(_vtLastData) renderVixTab(_vtLastData);
+}
+
+function renderVixTab(d){
+  _vtLastData = d;
+  const hist = d.vix_history || [];
+  const sessOpen = d.vix_session_open || 0;
+  if(!hist.length){
+    const h=new Date().getHours();
+    const mktClosed=h<9||h>=16;
+    $('vt-analysis').textContent=mktClosed
+      ? 'Market is closed. VIX data appears when market opens at 9:15 AM. Cached data from the current session loads automatically on restart.'
+      : 'Fetching VIX from NSE — data will appear within 2 minutes. If this persists, NSE API may be rate-limiting. The fetch loop retries automatically.';
+    return;
+  }
+
+  const curr   = hist[hist.length-1].v;
+  const vals   = hist.map(h=>h.v);
+  const hi     = Math.max(...vals), lo = Math.min(...vals);
+  const regime = _vixRegime(curr);
+
+  // Big number
+  const cEl=$('vt-curr'); if(cEl){ cEl.textContent=curr.toFixed(2); cEl.style.color=regime.color; }
+  const rEl=$('vt-regime'); if(rEl){ rEl.textContent=regime.label; rEl.style.color=regime.color; }
+
+  // Session stats
+  const sessChg = sessOpen ? (curr-sessOpen)/sessOpen*100 : null;
+  const scEl=$('vt-sess-chg'); if(scEl){ scEl.textContent=sessChg!=null?(sessChg>=0?'+':'')+sessChg.toFixed(2)+'%':'—'; scEl.style.color=_vixChgClr(sessChg); }
+
+  // 10-min change (~5 ticks at 2-min interval)
+  const ref10Idx=Math.max(0,hist.length-6); const ref10V=hist[ref10Idx].v;
+  const tenPct=ref10V?(curr-ref10V)/ref10V*100:null;
+  const t10El=$('vt-10m'); if(t10El){ t10El.textContent=tenPct!=null?(tenPct>=0?'+':'')+tenPct.toFixed(2)+'%':'—'; t10El.style.color=_vixChgClr(tenPct); }
+
+  // Hi / Lo / Open / Range
+  const hiEl=$('vt-hi'); if(hiEl) hiEl.textContent=hi.toFixed(2);
+  const loEl=$('vt-lo'); if(loEl) loEl.textContent=lo.toFixed(2);
+  const opEl=$('vt-open'); if(opEl) opEl.textContent=sessOpen?sessOpen.toFixed(2):'—';
+  const rgEl=$('vt-range'); if(rgEl) rgEl.textContent=(hi-lo).toFixed(2);
+
+  // Data points
+  const ptEl=$('vt-pts'); if(ptEl) ptEl.textContent=hist.length;
+
+  // Timestamp
+  const tsEl=$('vt-ts'); if(tsEl) tsEl.textContent=hist[hist.length-1].t;
+
+  // Velocity (30-min = ~15 ticks)
+  const ref30Idx=Math.max(0,hist.length-16); const ref30V=hist[ref30Idx].v;
+  const vel30Pct=ref30V?(curr-ref30V)/ref30V*100:null;
+  const velEl=$('vt-vel');
+  const velLblEl=$('vt-vel-lbl');
+  if(velEl){
+    velEl.textContent=vel30Pct!=null?(vel30Pct>=0?'↑+':'↓')+Math.abs(vel30Pct).toFixed(2)+'%':'—';
+    velEl.style.color=vel30Pct!=null?(vel30Pct>2?'var(--bear)':vel30Pct<-2?'var(--bull)':'var(--txt)'):'var(--dim)';
+    if(velLblEl) velLblEl.textContent=vel30Pct==null?'—':vel30Pct>3?'FAST RISE — PANIC':vel30Pct>1.5?'Rising — caution':vel30Pct<-3?'FAST DROP — RELIEF':vel30Pct<-1.5?'Falling — calming':'Stable';
+  }
+
+  // Trend (compare first-half avg vs second-half avg)
+  const mid=Math.floor(vals.length/2);
+  const avgFirst=vals.slice(0,mid).reduce((a,b)=>a+b,0)/(mid||1);
+  const avgSecond=vals.slice(mid).reduce((a,b)=>a+b,0)/((vals.length-mid)||1);
+  const trendDiff=avgSecond-avgFirst;
+  const trendEl=$('vt-trend'); const trendLblEl=$('vt-trend-lbl');
+  if(trendEl){
+    if(Math.abs(trendDiff)<0.1){ trendEl.textContent='→ SIDEWAYS'; trendEl.style.color='var(--dim)'; if(trendLblEl) trendLblEl.textContent='VIX drifting sideways'; }
+    else if(trendDiff>0){ trendEl.textContent='↑ RISING'; trendEl.style.color='var(--bear)'; if(trendLblEl) trendLblEl.textContent='Anxiety building intraday'; }
+    else { trendEl.textContent='↓ FALLING'; trendEl.style.color='var(--bull)'; if(trendLblEl) trendLblEl.textContent='Market calming intraday'; }
+  }
+
+  // Option premium implication
+  const premEl=$('vt-prem'); const premLblEl=$('vt-prem-lbl');
+  if(premEl){
+    if(curr<12){      premEl.textContent='CHEAP'; premEl.style.color='#4ade80'; if(premLblEl) premLblEl.textContent='Buy options — low IV'; }
+    else if(curr<15){ premEl.textContent='FAIR'; premEl.style.color='var(--bull)'; if(premLblEl) premLblEl.textContent='Normal pricing'; }
+    else if(curr<18){ premEl.textContent='MODERATE'; premEl.style.color='var(--warn)'; if(premLblEl) premLblEl.textContent='Slightly elevated IV'; }
+    else if(curr<22){ premEl.textContent='EXPENSIVE'; premEl.style.color='#fb923c'; if(premLblEl) premLblEl.textContent='Sell premium bias'; }
+    else{             premEl.textContent='VERY RICH'; premEl.style.color='var(--bear)'; if(premLblEl) premLblEl.textContent='High IV — extreme caution'; }
+  }
+
+  // Analysis text
+  const analysisEl=$('vt-analysis');
+  if(analysisEl){
+    const trendWord=trendDiff>0.1?'rising':'falling';
+    const velWord=vel30Pct!=null?(vel30Pct>2?'rapidly rising':vel30Pct<-2?'rapidly falling':'stable'):'stable';
+    let analysis='';
+    const sessNote=sessChg!=null?` Session change: ${sessChg>=0?'+':''}${sessChg.toFixed(2)}%.`:'';
+    if(curr<12)
+      analysis=`VIX is at an ultra-low level (${curr.toFixed(2)}), signaling extreme complacency. Options premiums are cheap — IV is depressed, making directional buys attractive.${sessNote} Watch for a sudden VIX spike which can catch sellers off-guard. Trend today: ${trendWord}. Velocity: ${velWord}. Strategy: prefer buying cheap options; avoid writing spreads at very thin premium.`;
+    else if(curr<15)
+      analysis=`VIX is calm (${curr.toFixed(2)}). Market participants are relaxed, options are fairly priced.${sessNote} Momentum moves tend to be steady. Trend: ${trendWord}. Velocity: ${velWord}. Strategy: directional option buying works well; SL distances can be tighter than usual.`;
+    else if(curr<18)
+      analysis=`VIX is moderate (${curr.toFixed(2)}). IV is slightly elevated — options are a bit pricier than normal.${sessNote} Trend: ${trendWord}. Velocity: ${velWord}. Intraday moves can be choppy. Strategy: use quick-target mode with tighter points; avoid holding options overnight.`;
+    else if(curr<22)
+      analysis=`VIX is elevated (${curr.toFixed(2)}) — fear is present.${sessNote} Options are expensive; buying premium has negative edge unless the directional move is strong. Trend: ${trendWord}. Velocity: ${velWord}. Strategy: reduce lot size, widen targets, be ready for whipsaw. Avoid FOMO entries.`;
+    else
+      analysis=`VIX is in DANGER territory (${curr.toFixed(2)}).${sessNote} Extreme fear / panic in the market. Options are very expensive — every buy is against a headwind of high IV. Trend: ${trendWord}. Velocity: ${velWord}. Strategy: strongly consider sitting out or using very small size. If trading, prefer selling far-OTM spreads or wait for VIX to peak and start reversing.`;
+    analysisEl.textContent=analysis;
+  }
+
+  // Recent ticks log (last 15, newest first)
+  const ticksEl=$('vt-ticks');
+  if(ticksEl){
+    const recent=[...hist].reverse().slice(0,15);
+    ticksEl.innerHTML=recent.map((h,i)=>{
+      const prev=i<recent.length-1?recent[i+1].v:h.v;
+      const delta=h.v-prev;
+      const arrow=delta>0.01?'▲':delta<-0.01?'▼':'─';
+      const color=delta>0.01?'var(--bear)':delta<-0.01?'var(--bull)':'var(--dim)';
+      return `<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04);padding:1px 0">
+        <span style="color:var(--dim)">${h.t}</span>
+        <span style="font-weight:600;color:${_vixRegime(h.v).color}">${h.v.toFixed(2)}</span>
+        <span style="color:${color}">${arrow} ${delta!==0?Math.abs(delta).toFixed(2):''}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Big sparkline
+  _drawVixTabSparkline(hist, curr);
+
+  // Market Regime section (uses full snapshot data stored in _vtLastData)
+  renderMarketRegime(_vtLastData);
+}
+
+function _drawVixTabSparkline(hist, curr){
+  const canvas=$('vt-sparkline');
+  if(!canvas||!hist.length) return;
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.offsetWidth||900, H=130;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  const vals=hist.map(h=>h.v);
+  const lo=Math.min(...vals)*0.997, hi=Math.max(...vals)*1.003;
+  const range=hi-lo||1;
+  const pad={l:42,r:12,t:10,b:14};
+  const w=W-pad.l-pad.r, h=H-pad.t-pad.b;
+  const xOf=i=>pad.l+(i/(hist.length-1||1))*w;
+  const yOf=v=>pad.t+h-((v-lo)/range)*h;
+
+  // Zone fills
+  [{thr:22,color:'rgba(239,68,68,.09)'},{thr:18,color:'rgba(251,146,60,.07)'},{thr:15,color:'rgba(250,204,21,.05)'}].forEach(({thr,color})=>{
+    if(thr>lo&&thr<hi*1.05){
+      const y=yOf(Math.min(thr,hi));
+      ctx.fillStyle=color; ctx.fillRect(pad.l,y,w,H-pad.b-y);
+    }
+  });
+
+  // Reference lines
+  [12,15,18,22].forEach(thr=>{
+    if(thr>=lo&&thr<=hi*1.05){
+      const y=yOf(thr);
+      ctx.beginPath(); ctx.setLineDash([4,4]);
+      ctx.strokeStyle=thr>=22?'rgba(239,68,68,.5)':thr>=18?'rgba(251,146,60,.4)':thr>=15?'rgba(250,204,21,.3)':'rgba(74,222,128,.3)';
+      ctx.lineWidth=1; ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+w,y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='rgba(148,163,184,.7)'; ctx.font='9px JetBrains Mono,monospace';
+      ctx.fillText(thr,3,y+3);
+    }
+  });
+
+  // Gradient area fill
+  const grad=ctx.createLinearGradient(0,pad.t,0,H-pad.b);
+  const col=_vixRegime(curr).color;
+  grad.addColorStop(0,col.replace('#','rgba(').replace(/(..)(..)(..)$/,(_,r,g,b)=>`${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},.25)`)||'rgba(56,189,248,.25)');
+  grad.addColorStop(1,'rgba(56,189,248,.02)');
+  ctx.beginPath();
+  hist.forEach((h,i)=>{ i===0?ctx.moveTo(xOf(i),yOf(h.v)):ctx.lineTo(xOf(i),yOf(h.v)); });
+  ctx.lineTo(xOf(hist.length-1),H-pad.b); ctx.lineTo(xOf(0),H-pad.b); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  hist.forEach((h,i)=>{ i===0?ctx.moveTo(xOf(i),yOf(h.v)):ctx.lineTo(xOf(i),yOf(h.v)); });
+  ctx.strokeStyle=col||'#38bdf8'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+
+  // Dot + label at current
+  const cx=xOf(hist.length-1),cy=yOf(curr);
+  ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fillStyle=col||'#38bdf8'; ctx.fill();
+  ctx.fillStyle=col||'#38bdf8'; ctx.font='bold 11px JetBrains Mono,monospace';
+  ctx.fillText(curr.toFixed(2),cx-16,cy-8);
+
+  // Time axis labels
+  const t0El=$('vt-spark-t0'), tnEl=$('vt-spark-tn');
+  if(t0El) t0El.textContent=hist[0].t;
+  if(tnEl) tnEl.textContent=hist[hist.length-1].t;
+
+  // Hover tooltip
+  canvas.onmousemove=function(e){
+    const rect=canvas.getBoundingClientRect();
+    const mx=e.clientX-rect.left;
+    const idx=Math.round((mx-pad.l)/w*(hist.length-1));
+    const tt=$('vt-spark-tt');
+    if(tt&&idx>=0&&idx<hist.length){ tt.textContent=hist[idx].t+'  VIX: '+hist[idx].v.toFixed(2); tt.style.display='inline'; }
+  };
+  canvas.onmouseleave=function(){ const tt=$('vt-spark-tt'); if(tt) tt.style.display='none'; };
+}
+
+// ─────────────────────── MARKET REGIME RENDERER ─────────────────────────────
+
+function renderMarketRegime(d){
+  const oi   = d.oi_snapshot  || {};
+  const fibo = (d.bots || {}).fibo || {};
+  const spot = d.spot || oi.price || 0;
+  const hist = d.vix_history  || [];
+
+  // ── 1. NIFTY day range — fibo bot preferred; Groww Quote API as live fallback ──
+  const ohlcFallback = ((d.mkt_idx || {})._ohlc || {}).nifty || {};
+  const dh = fibo.day_high || ohlcFallback.high || 0;
+  const dl = fibo.day_low  || ohlcFallback.low  || 0;
+  const rangeSrc = (fibo.day_high && fibo.day_low) ? '' : (ohlcFallback.high ? ' (live)' : '');
+  const rangePts = (dh && dl) ? Math.round((dh - dl) * 10) / 10 : 0;
+  const rangePct = (rangePts && spot) ? rangePts / spot * 100 : 0;
+
+  // ── 2. ATM straddle from oi_snapshot.atm_momentum ───────────────────────
+  const mom = oi.atm_momentum || {};
+  const ceLtp = mom.ce_ltp || 0, peLtp = mom.pe_ltp || 0;
+  const straddle = ceLtp + peLtp;
+  const ceDelta = mom.ce_ltp_chg || 0, peDelta = mom.pe_ltp_chg || 0;
+  const totalPremMove = Math.abs(ceDelta) + Math.abs(peDelta);
+
+  // ── 3. VIX ───────────────────────────────────────────────────────────────
+  const vix = hist.length ? hist[hist.length-1].v : 0;
+  const sessOpen = d.vix_session_open || 0;
+  const vixSessChgPct = (vix && sessOpen) ? (vix - sessOpen) / sessOpen * 100 : 0;
+
+  // ── 4. IV squeeze proxy ─ avg ATM IV vs expected (VIX/√252·10) ──────────
+  const ceIV = oi.atm_ce_iv || 0, peIV = oi.atm_pe_iv || 0;
+  const avgIV = (ceIV && peIV) ? (ceIV + peIV) / 2 : (ceIV || peIV);
+  // expected 1-day move% implied by VIX: VIX/√252
+  const expectedMovePct = vix ? vix / Math.sqrt(252) : 0;
+  const ivSqueeze = (avgIV && expectedMovePct) ? avgIV < expectedMovePct * 0.8 : false;
+
+  // ── 5. Scoring ───────────────────────────────────────────────────────────
+  // Range score (0-2)
+  let rangeScore = rangePct >= 1.5 ? 2 : rangePct >= 0.75 ? 1 : 0;
+  // Premium movement score (0-2)
+  let premScore  = totalPremMove >= 8 ? 2 : totalPremMove >= 3 ? 1 : 0;
+  // VIX score (0-2): rising VIX = more trending; high VIX = more volatile
+  let vixScore   = (vix >= 15 || vixSessChgPct >= 2) ? 2 : (vix >= 12 || vixSessChgPct >= 0.8) ? 1 : 0;
+
+  const totalScore = rangeScore + premScore + vixScore; // 0–6
+
+  // Both-side whipsaw: range present but premiums stagnant/falling
+  const bothSideWhipsaw = rangePct >= 0.8 && totalPremMove < 3 && (ceDelta < 0 || peDelta < 0);
+  // Premium crush: both CE and PE declining
+  const premCrush = ceDelta < 0 && peDelta < 0;
+
+  // ── 6. Verdict ───────────────────────────────────────────────────────────
+  let regimeLabel, regimeColor, verdictText;
+
+  if(premCrush && rangePct < 1.2){
+    regimeLabel = '⚡ THETA DECAY';
+    regimeColor = '#94a3b8';
+    verdictText = `Market is extremely range-bound with both call (${ceDelta>0?'+':''}${ceDelta.toFixed(1)}) and put (${peDelta>0?'+':''}${peDelta.toFixed(1)}) premiums bleeding. NIFTY day range is only ${rangePts} pts (${rangePct.toFixed(2)}% of spot). This is a classic theta-decay / time-value bleed session — option buyers are losing on both sides regardless of direction. VIX is ${vix ? vix.toFixed(2) : '—'}. Strategy: avoid directional option buying; consider iron condors or simply stay out of intraday options.`;
+  } else if(bothSideWhipsaw){
+    regimeLabel = '↔ BOTH-SIDE CHOP';
+    regimeColor = '#f59e0b';
+    verdictText = `Market is oscillating both ways (day range: ${rangePts} pts, ${rangePct.toFixed(2)}%) but option premiums are barely moving (CE Δ${ceDelta>0?'+':''}${ceDelta.toFixed(1)}, PE Δ${peDelta>0?'+':''}${peDelta.toFixed(1)}). This is exactly the whipsaw/sideways pattern — index moves are not sustained in any direction, so premiums decay. VIX ${vix ? vix.toFixed(2) : '—'}, straddle ₹${straddle.toFixed(0)}. Strategy: avoid momentum trades; premium buys will be eaten by chop. Wait for a clear directional break with premium expansion before entering.`;
+  } else if(totalScore <= 1){
+    regimeLabel = '— SIDEWAYS';
+    regimeColor = '#64748b';
+    verdictText = `Low-activity sideways market. NIFTY range ${rangePts} pts (${rangePct.toFixed(2)}%), ATM straddle ₹${straddle.toFixed(0)}, VIX ${vix ? vix.toFixed(2) : '—'}. Premium activity is minimal (CE Δ${ceDelta>0?'+':''}${ceDelta.toFixed(1)}, PE Δ${peDelta>0?'+':''}${peDelta.toFixed(1)}). No clear edge for directional buying. Strategy: reduce position size, widen targets if trading, or sit out and wait for setup.`;
+  } else if(totalScore <= 3){
+    regimeLabel = '〜 MIXED';
+    regimeColor = '#a78bfa';
+    verdictText = `Mixed conditions — some range (${rangePts} pts, ${rangePct.toFixed(2)}%) but not a clean trend. ATM straddle ₹${straddle.toFixed(0)}, VIX ${vix ? vix.toFixed(2) : '—'}. Premium activity moderate (CE Δ${ceDelta>0?'+':''}${ceDelta.toFixed(1)}, PE Δ${peDelta>0?'+':''}${peDelta.toFixed(1)}). Moves are happening but with inconsistent follow-through. Strategy: take quick scalps with tight targets; avoid holding for big moves. Use ATR-based SL.`;
+  } else if(totalScore <= 5){
+    regimeLabel = '↗ TRENDING';
+    regimeColor = '#4ade80';
+    verdictText = `Trending conditions developing. NIFTY range ${rangePts} pts (${rangePct.toFixed(2)}%), ATM straddle ₹${straddle.toFixed(0)}, VIX ${vix ? vix.toFixed(2) : '—'}. Premiums are moving (CE Δ${ceDelta>0?'+':''}${ceDelta.toFixed(1)}, PE Δ${peDelta>0?'+':''}${peDelta.toFixed(1)}). A directional bias is forming — follow premium expansion to identify the favored direction. Strategy: standard momentum setups with 1:1.5+ R:R.`;
+  } else {
+    regimeLabel = '🔥 STRONG TREND';
+    regimeColor = '#ef4444';
+    verdictText = `Strong trending day. NIFTY range ${rangePts} pts (${rangePct.toFixed(2)}%), ATM straddle ₹${straddle.toFixed(0)}, VIX ${vix ? vix.toFixed(2) : '—'} (session ${vixSessChgPct>=0?'+':''}${vixSessChgPct.toFixed(1)}%). Premiums are surging (CE Δ${ceDelta>0?'+':''}${ceDelta.toFixed(1)}, PE Δ${peDelta>0?'+':''}${peDelta.toFixed(1)}). This is a high-conviction directional session. Strategy: ride the trend — wider targets justified, use trailing SL rather than fixed exit. Follow the premium that's expanding.`;
+  }
+
+  if(ivSqueeze && regimeLabel.includes('SIDEWAYS'))
+    verdictText += ` IV squeeze detected (ATM IV ${avgIV.toFixed(1)}% vs expected ${expectedMovePct.toFixed(1)}%) — market may be coiling for a breakout.`;
+
+  // ── 7. Render ─────────────────────────────────────────────────────────────
+  const badge=$('mr-badge');
+  if(badge){ badge.textContent=regimeLabel; badge.style.color=regimeColor; badge.style.borderColor=regimeColor; badge.style.background=regimeColor+'18'; }
+
+  // ── Range card ───────────────────────────────────────────────────────────
+  const rpEl=$('mr-range-pts');
+  if(rpEl){ rpEl.textContent=rangePts ? rangePts+' pts'+rangeSrc : '—'; rpEl.style.color='var(--txt)'; }
+  const rpcEl=$('mr-range-pct');
+  if(rpcEl){
+    const rColor=rangePct>=1.5?'var(--bear)':rangePct>=0.75?'var(--warn)':'#64748b';
+    rpcEl.textContent=rangePct ? rangePct.toFixed(2)+'% of spot' : 'starting up…';
+    rpcEl.style.color=rColor;
+  }
+  const rlblEl=$('mr-range-lbl');
+  if(rlblEl){
+    if(!rangePts){     rlblEl.textContent=''; }
+    else if(rangePct>=1.5){ rlblEl.textContent='▲ WIDE RANGE'; rlblEl.style.color='var(--bear)'; }
+    else if(rangePct>=0.75){ rlblEl.textContent='◈ MODERATE'; rlblEl.style.color='var(--warn)'; }
+    else {             rlblEl.textContent='▬ NARROW RANGE'; rlblEl.style.color='#64748b'; }
+  }
+
+  // ── Straddle card ─────────────────────────────────────────────────────────
+  const strEl=$('mr-straddle');
+  if(strEl){ strEl.textContent=straddle ? '₹'+straddle.toFixed(0) : '—'; strEl.style.color=straddle>200?'var(--bear)':straddle>120?'var(--warn)':'var(--txt)'; }
+  const strSubEl=$('mr-straddle-sub');
+  if(strSubEl) strSubEl.textContent=ceLtp&&peLtp ? `CE ₹${ceLtp.toFixed(0)} + PE ₹${peLtp.toFixed(0)}` : 'CE + PE LTP';
+  const strLblEl=$('mr-straddle-lbl');
+  if(strLblEl){
+    if(!straddle){         strLblEl.textContent=''; }
+    else if(straddle>200){ strLblEl.textContent='HIGH IV — costly premiums'; strLblEl.style.color='var(--bear)'; }
+    else if(straddle>120){ strLblEl.textContent='NORMAL IV — fair pricing'; strLblEl.style.color='var(--warn)'; }
+    else {                 strLblEl.textContent='LOW IV — cheap premiums'; strLblEl.style.color='#4ade80'; }
+  }
+
+  // ── Premium Activity card ─────────────────────────────────────────────────
+  const pmEl=$('mr-prem-move');
+  if(pmEl){
+    if(!ceLtp && !peLtp){ pmEl.textContent='—'; pmEl.style.color='var(--dim)'; }
+    else if(premCrush){        pmEl.textContent='▼ BOTH FALLING'; pmEl.style.color='var(--txt)'; }
+    else if(totalPremMove>=8){ pmEl.textContent='⚡ HIGH ACTIVITY'; pmEl.style.color='var(--bull)'; }
+    else if(totalPremMove>=3){ pmEl.textContent='◐ MODERATE';      pmEl.style.color='var(--warn)'; }
+    else {                     pmEl.textContent='○ STAGNANT';      pmEl.style.color='var(--txt)'; }
+  }
+  const pmSubEl=$('mr-prem-sub');
+  if(pmSubEl){
+    pmSubEl.textContent=ceLtp ? `CE Δ${ceDelta>=0?'+':''}${ceDelta.toFixed(1)}  PE Δ${peDelta>=0?'+':''}${peDelta.toFixed(1)}` : 'OI PCR bot required';
+    pmSubEl.style.color=ceLtp?'var(--dim)':'#ef4444';
+  }
+  const pmLblEl=$('mr-prem-lbl');
+  if(pmLblEl){
+    if(!ceLtp){          pmLblEl.textContent='start OI PCR bot'; pmLblEl.style.color='#ef4444'; }
+    else if(premCrush){  pmLblEl.textContent='theta eating both sides'; pmLblEl.style.color='#94a3b8'; }
+    else if(ceDelta<0 && peDelta>0){ pmLblEl.textContent='bias: BEARISH'; pmLblEl.style.color='var(--bear)'; }
+    else if(ceDelta>0 && peDelta<0){ pmLblEl.textContent='bias: BULLISH'; pmLblEl.style.color='var(--bull)'; }
+    else if(ceDelta>0 && peDelta>0){ pmLblEl.textContent='both rising — big move ahead'; pmLblEl.style.color='var(--warn)'; }
+    else {               pmLblEl.textContent='no directional bias'; pmLblEl.style.color='#64748b'; }
+  }
+
+  // ── Regime Score card ─────────────────────────────────────────────────────
+  // Dot bar: positions 1-2=sideways(slate), 3-4=mixed(yellow), 5-6=trending(green)
+  const _segColors=['#64748b','#64748b','#eab308','#eab308','#4ade80','#4ade80'];
+  document.querySelectorAll('.mrseg').forEach(seg=>{
+    const pos=parseInt(seg.dataset.pos);
+    seg.style.background = pos<=totalScore ? _segColors[pos-1] : '#1e293b';
+  });
+  const scEl=$('mr-score');
+  const scoreWord=totalScore>=5?'TRENDING':totalScore>=3?'MIXED':'SIDEWAYS';
+  const scoreColor=totalScore>=5?'#4ade80':totalScore>=3?'#eab308':'#94a3b8';
+  if(scEl){ scEl.textContent=`${totalScore} pts — ${scoreWord}`; scEl.style.color=scoreColor; }
+  const scBdEl=$('mr-score-breakdown');
+  if(scBdEl) scBdEl.textContent=`Range ${rangeScore}/2 · Prem ${premScore}/2 · VIX ${vixScore}/2`;
+  const scLblEl=$('mr-score-lbl');
+  if(scLblEl){
+    const lbl=totalScore>=5?'strong trend — ride with trail SL':totalScore>=4?'trending — momentum setups valid':totalScore>=3?'mixed — quick scalps only':totalScore>=2?'choppy — reduce size':'sideways — sit out or scalp only';
+    scLblEl.textContent=lbl; scLblEl.style.color=totalScore>=4?'#4ade80':totalScore>=2?'#eab308':'#64748b';
+  }
+
+  const verdEl=$('mr-verdict'); if(verdEl) verdEl.textContent=verdictText;
+}
+
+// ── Market Regime fixed tooltip (position:fixed — never causes scroll jitter) ─
+const _mrTips = {
+  range: `<b style="font-size:11px;letter-spacing:.8px">NIFTY DAY RANGE</b>
+<div style="color:#64748b;font-size:10px;margin:4px 0 8px">Today's high minus low — how far the index actually moved regardless of direction.</div>
+<div style="display:grid;grid-template-columns:80px 1fr;gap:3px 8px;font-size:10px">
+  <span style="color:var(--info)">&lt; 80 pts</span><span style="color:#94a3b8">NARROW — sideways / theta-decay day, avoid directional buys</span>
+  <span style="color:var(--warn)">80–150 pts</span><span style="color:#94a3b8">MODERATE — some movement but no clear trend</span>
+  <span style="color:var(--bear)">&gt; 150 pts</span><span style="color:#94a3b8">WIDE — trending or event-driven session, momentum valid</span>
+</div>
+<div style="margin-top:8px;font-size:9px;color:#475569">Source: Fibonacci bot (live) · Groww Quote API (60s fallback)</div>`,
+
+  straddle: `<b style="font-size:11px;letter-spacing:.8px">ATM STRADDLE</b>
+<div style="color:#64748b;font-size:10px;margin:4px 0 8px">ATM Call LTP + ATM Put LTP. What option writers are pricing in as the expected daily move.</div>
+<div style="display:grid;grid-template-columns:80px 1fr;gap:3px 8px;font-size:10px">
+  <span style="color:#4ade80">&lt; ₹100</span><span style="color:#94a3b8">LOW IV — premiums cheap, very quiet market</span>
+  <span style="color:var(--warn)">₹100–₹200</span><span style="color:#94a3b8">NORMAL IV — standard pricing, fair to buy</span>
+  <span style="color:var(--bear)">&gt; ₹200</span><span style="color:#94a3b8">HIGH IV — expensive, buying is uphill battle</span>
+</div>
+<div style="margin-top:8px;font-size:9px;color:#475569">Low straddle + wide range = theta eating buyers · High straddle + narrow range = writers winning</div>`,
+
+  prem: `<b style="font-size:11px;letter-spacing:.8px">PREMIUM ACTIVITY</b>
+<div style="color:#64748b;font-size:10px;margin:4px 0 8px">How much ATM CE and PE prices moved since the last OI update (~60s). Shows if real money is entering options.</div>
+<div style="display:grid;grid-template-columns:100px 1fr;gap:3px 8px;font-size:10px">
+  <span style="color:#94a3b8">STAGNANT</span><span style="color:#94a3b8">Total Δ &lt; 3 pts — no conviction, premiums flat</span>
+  <span style="color:var(--warn)">MODERATE</span><span style="color:#94a3b8">Total Δ 3–8 pts — some directional flow</span>
+  <span style="color:var(--bull)">HIGH ACTIVITY</span><span style="color:#94a3b8">Total Δ &gt; 8 pts — strong trend, follow the money</span>
+  <span style="color:#94a3b8">BOTH FALLING</span><span style="color:#94a3b8">CE↓ + PE↓ = theta crush, stay out of buys</span>
+</div>
+<div style="margin-top:8px;font-size:9px;color:#475569">CE↓ PE↑ = bearish · CE↑ PE↓ = bullish · CE↑ PE↑ = big undirected move coming</div>`,
+
+  score: `<b style="font-size:11px;letter-spacing:.8px">REGIME SCORE (0–6)</b>
+<div style="color:#64748b;font-size:10px;margin:4px 0 8px">Composite of 3 signals (2 pts each): NIFTY range + ATM premium movement + VIX level/direction.</div>
+<div style="display:grid;grid-template-columns:50px 1fr;gap:3px 8px;font-size:10px">
+  <span style="color:#94a3b8">0–1</span><span style="color:#94a3b8">SIDEWAYS — sit out or very small scalps only</span>
+  <span style="color:var(--warn)">2–3</span><span style="color:#94a3b8">MIXED / CHOPPY — quick scalps, tight targets, reduce size</span>
+  <span style="color:#4ade80">4–5</span><span style="color:#94a3b8">TRENDING — standard momentum setups valid</span>
+  <span style="color:var(--bull)">6</span><span style="color:#94a3b8">STRONG TREND — ride it, use trailing SL not fixed exit</span>
+</div>
+<div style="margin-top:8px;font-size:9px;color:#475569">Range 0–2 + Premium Δ 0–2 + VIX 0–2 = total</div>`
+};
+
+(function(){
+  const tip=$('mr-tooltip');
+  if(!tip) return;
+  document.querySelectorAll('[data-mrtip]').forEach(el=>{
+    el.addEventListener('mouseenter', e=>{
+      const key=el.dataset.mrtip;
+      if(!_mrTips[key]) return;
+      tip.innerHTML=_mrTips[key];
+      tip.style.display='block';
+      _mrPositionTip(e);
+    });
+    el.addEventListener('mousemove', _mrPositionTip);
+    el.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
+  });
+  function _mrPositionTip(e){
+    const pad=12, W=tip.offsetWidth||320, H=tip.offsetHeight||160;
+    let x=e.clientX+16, y=e.clientY+16;
+    if(x+W > window.innerWidth-pad)  x=e.clientX-W-8;
+    if(y+H > window.innerHeight-pad) y=e.clientY-H-8;
+    tip.style.left=x+'px'; tip.style.top=y+'px';
+  }
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function _age(ts){
   if(!ts) return '—';
@@ -7030,6 +8865,7 @@ document.addEventListener('mouseover', function(e){
 
 /* ── Trade Board ── */
 let _tbSym='',_tbExch='NSE',_tbDir='',_tbStrike=0,_tbLogTimer=null,_tbPaper=false,_tbAtr=false,_tbMock=false,_tbValidate=false,_tbClickTs=0,_tbExpiry='',_tbQuickPts=1.5,_tbAtrSource='candle',_tbPartial=false,_tbPartialPct=50;
+let _tbQuickTargetMode='points';  // 'points' | 'profit' — QK TGT input interpretation
 let _mbValidate=true;   // Auto bot: validate_orders — ON by default (matches CONFIG default)
 let _mbChopEnabled=true; // Auto bot: choppiness_enabled — ON by default
 let _mbConsSL=true;      // Auto bot: consec_sl_brake — ON by default
@@ -7037,6 +8873,8 @@ let _mbAtrSL=false;          // Auto bot: HARD_SL_ATR_BASED — OFF by default
 let _mbAtrSource='candle';   // Auto bot: atr_source — "candle" (PROD10 EMA) or "scan" (window range)
 let _mbMinScoreFilter=true;  // Auto bot: min_score_filter — ON by default
 let _mbVelFilter=true;      // Auto bot: velocity_filter — ON by default
+let _mbVixAutoConfig=false;  // VIX Auto Config — computes vel%/cons% from India VIX level+trend
+let _mbVixPanelExpanded=true; // VIX panel detail body open/closed
 // safe ms-precision timestamp formatter (toLocaleTimeString fractionalSecondDigits not supported in all browsers)
 const _fmtTs=ts=>{if(!ts)return'—';const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).padStart(3,'0')}`;};
 const _fmtExpiry=e=>{if(!e)return'';const d=new Date(e+'T00:00:00');const m=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];return`${String(d.getDate()).padStart(2,'0')}${m[d.getMonth()]}${String(d.getFullYear()).slice(2)}`;}
@@ -7044,6 +8882,12 @@ let _tbLotSize=75;      // updated from live chain response
 let _tbLotsLocked=false;
 let _tbGreeks=false; // false = LTP only, true = full chain (OI/VOL/IV)
 let _tbPrevUnr=null; // for trend arrow (↑↓) detection
+let _tbQuickTradeMode=false;  // Quick Trade Mode: premium filter + instant buy
+let _tbCapitalSource='api';   // 'api' | 'manual'
+let _tbAvailableCapital=0;    // total capital to trade with
+let _tbMaxPremium=0;          // max affordable premium per share (floor(capital/qty))
+let _tbQuickRefreshTimer=null; // 5s chain refresh timer when Quick Trade is ON
+let _tbSelectedLtp=0;         // LTP of selected strike (from chain data) — passed to bot to skip LTP fetch
 
 function initTradeTab(){
   if(!$('tb-expiry').options.length) tbLoadExpiries();
@@ -7155,11 +8999,13 @@ function tbRenderChainHeaders(){
   </div>`;
 }
 
-function tbUpdateLotInfo(){
+function tbUpdateLotInfo(_skipRender){
   const e=$('chain-lotinfo');
   if(!e) return;
   const lots=parseInt($('tb-lots').value||1);
   e.textContent=`Lot size: ${_tbLotSize} · ${lots} lot${lots>1?'s':''} = ${lots*_tbLotSize} qty`;
+  tbUpdateQuickTargetHint();
+  if(!_skipRender&&_tbQuickTradeMode&&_tbAvailableCapital>0){ tbComputeMaxPremium(); tbUpdateMaxPremiumDisplay(); tbRenderChain(); }
 }
 
 function mbUpdateLotInfo(){
@@ -7200,12 +9046,15 @@ async function tbFetchPrevClose(){
 async function tbLoadChain(_skipLoading){
   const idx=$('tb-index').value, expiry=$('tb-expiry').value;
   if(!expiry) return;
+  // Save scroll position before re-render so auto-refresh doesn't jump user back to ATM
+  const _chainEl=$('chain-list');
+  const _savedScroll=(_skipLoading && _chainEl) ? _chainEl.scrollTop : -1;
   if(!_skipLoading)
-    $('chain-list').innerHTML='<div style="text-align:center;color:var(--dim);padding:30px">Loading option chain…</div>';
+    _chainEl.innerHTML='<div style="text-align:center;color:var(--dim);padding:30px">Loading option chain…</div>';
   const r=await fetch(`/api/trade/chain?index=${idx}&expiry=${expiry}`);
   const d=await r.json();
   if(d.error&&!d.strikes?.length){
-    $('chain-list').innerHTML=`<div style="color:var(--warn);padding:12px">⚠ ${d.error}</div>`; return;
+    _chainEl.innerHTML=`<div style="color:var(--warn);padding:12px">⚠ ${d.error}</div>`; return;
   }
   // Expiry exists in CSV but Groww returned no strikes (e.g. non-Thursday date for NIFTY)
   if(!d.strikes?.length){
@@ -7214,7 +9063,7 @@ async function tbLoadChain(_skipLoading){
       sel.selectedIndex++;   // jump to next expiry automatically
       tbLoadChain(true); return;
     }
-    $('chain-list').innerHTML='<div style="color:var(--warn);padding:12px">⚠ No strikes available for this expiry</div>';
+    _chainEl.innerHTML='<div style="color:var(--warn);padding:12px">⚠ No strikes available for this expiry</div>';
     return;
   }
   _tbChainData = d.strikes||[];
@@ -7223,12 +9072,13 @@ async function tbLoadChain(_skipLoading){
   _tbPrevLTPs  = {};
   _tbCloseLTPs = {};
   (_tbChainData).forEach(s=>{ const k=Math.round(s.strike); if(s.ce_prev>0) _tbCloseLTPs['ce'+k]=s.ce_prev; if(s.pe_prev>0) _tbCloseLTPs['pe'+k]=s.pe_prev; });
-  tbUpdateLotInfo();
-  tbRenderChain();
+  tbUpdateLotInfo(true);  // skip inner tbRenderChain — we call it below with the saved scroll
+  tbRenderChain(_savedScroll);  // pass saved scroll: ≥0 = restore, -1 = initial → scroll to ATM
   tbStartChainRefresh();
 }
 
-function tbRenderChain(){
+function tbRenderChain(_savedScroll){
+  if(_savedScroll===undefined) _savedScroll=-1;
   const idx    = $('tb-index')?.value||'NIFTY';
   const exch   = (idx==='SENSEX'||idx==='BANKEX')?'BSE':'NSE';
   const spot   = _tbChainSpot;
@@ -7250,19 +9100,40 @@ function tbRenderChain(){
     const rowCls = isATM?'atm-row':isITMce?'itm-ce':isITMpe?'itm-pe':'';
     const stk    = Math.round(s.strike);
     const atmTag = isATM?'<span style="font-size:8px;color:var(--info);margin-left:3px;font-weight:700">ATM</span>':'';
+    // Quick Trade: live LTP first, fall back to prev close for premium comparison
+    const ceLtp = (s.ce_ltp && s.ce_ltp>0) ? s.ce_ltp : (s.ce_prev||0);
+    const peLtp = (s.pe_ltp && s.pe_ltp>0) ? s.pe_ltp : (s.pe_prev||0);
+    const qtOn  = _tbQuickTradeMode && _tbMaxPremium>0;
+    const ceOverBudget = qtOn && ceLtp>0 && ceLtp>_tbMaxPremium;
+    const peOverBudget = qtOn && peLtp>0 && peLtp>_tbMaxPremium;
+    const ceDisabled = (!s.ce_sym || ceOverBudget) ? 'disabled' : '';
+    const peDisabled = (!s.pe_sym || peOverBudget) ? 'disabled' : '';
+    const ceCls = 'chain-btn ce'+(ceOverBudget?' qt-over-budget':'');
+    const peCls = 'chain-btn pe'+(peOverBudget?' qt-over-budget':'');
+    const cePremLabel = _tbQuickTradeMode && ceLtp>0 ? ` <span style="font-size:8px;opacity:.65;font-family:'JetBrains Mono',monospace">₹${ceLtp}</span>` : '';
+    const pePremLabel = _tbQuickTradeMode && peLtp>0 ? ` <span style="font-size:8px;opacity:.65;font-family:'JetBrains Mono',monospace">₹${peLtp}</span>` : '';
+    const ceTitle = ceOverBudget ? ` title="₹${ceLtp} > max ₹${_tbMaxPremium} — over budget"` : '';
+    const peTitle = peOverBudget ? ` title="₹${peLtp} > max ₹${_tbMaxPremium} — over budget"` : '';
     return `<div class="tb-row ${rowCls}">
       <div class="tb-chain-minimal">
-        <span style="text-align:center;padding:2px 6px"><button class="chain-btn ce" onclick="tbSelect('${s.ce_sym}','${exch}','CE',${stk})" ${s.ce_sym?'':'disabled'}>BUY CE</button></span>
+        <span style="text-align:center;padding:2px 6px"><button class="${ceCls}" onclick="tbSelect('${s.ce_sym}','${exch}','CE',${stk})" ${ceDisabled}${ceTitle}>BUY CE${cePremLabel}</button></span>
         <span class="tc-strike" style="text-align:center;color:${isATM?'var(--info)':'var(--txt)'};font-size:13px">${fmtN(s.strike,0)}${atmTag}</span>
-        <span style="text-align:center;padding:2px 6px"><button class="chain-btn pe" onclick="tbSelect('${s.pe_sym}','${exch}','PE',${stk})" ${s.pe_sym?'':'disabled'}>BUY PE</button></span>
+        <span style="text-align:center;padding:2px 6px"><button class="${peCls}" onclick="tbSelect('${s.pe_sym}','${exch}','PE',${stk})" ${peDisabled}${peTitle}>BUY PE${pePremLabel}</button></span>
       </div>
     </div>`;
   }).join('');
 
-  setTimeout(()=>{
-    const atm=document.querySelector('#chain-list .atm-row');
-    if(atm) atm.scrollIntoView({block:'center',behavior:'smooth'});
-  }, 60);
+  if(_savedScroll>=0){
+    // Auto-refresh: restore user's scroll position — do NOT snap back to ATM
+    const _cl=$('chain-list');
+    if(_cl) _cl.scrollTop=_savedScroll;
+  } else {
+    // Initial load: scroll ATM row into view
+    setTimeout(()=>{
+      const atm=document.querySelector('#chain-list .atm-row');
+      if(atm) atm.scrollIntoView({block:'center',behavior:'smooth'});
+    }, 60);
+  }
 
   _tbLtpSyms = [];  // no LTP polling needed
 }
@@ -7294,6 +9165,11 @@ function tbStartChainRefresh(){
 function tbSelect(sym,exch,dir,strike){
   _tbSym=sym; _tbExch=exch; _tbDir=dir; _tbStrike=strike||0;
   _tbExpiry=$('tb-expiry')?.value||'';
+  // Capture LTP from chain data so bot can skip a redundant LTP API call
+  const _chainEntry=_tbChainData.find(s=>Math.round(s.strike)===strike);
+  _tbSelectedLtp=_chainEntry
+    ? (dir==='CE' ? (_chainEntry.ce_ltp||_chainEntry.ce_prev||0) : (_chainEntry.pe_ltp||_chainEntry.pe_prev||0))
+    : 0;
   $('tb-sym-inp').value=sym; $('tb-exch-inp').value=exch;
   $('tb-selected-display').innerHTML=`Selected: <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${dir==='CE'?'var(--bull)':'var(--bear)'}">${sym}</span>`;
   const expiryLabel=_fmtExpiry(_tbExpiry);
@@ -7306,14 +9182,23 @@ function tbSelect(sym,exch,dir,strike){
       : 'linear-gradient(135deg,var(--buy-pe-dark),var(--buy-pe))';
     btn.style.color=dir==='CE'?'#000':'#fff';
   }
+  // Quick Trade Mode: skip confirmation, fire immediately
+  if(_tbQuickTradeMode){ tbSendToProd10(); }
 }
 
 async function tbSendToProd10(){
   if(!_tbSym || !_tbStrike){ alert('Select a strike first'); return; }
-  const lots   = parseInt($('tb-lots').value||1);
-  const mode   = $('tb-p10-mode')?.value || 'manual';
-  const expiry = $('tb-expiry')?.value || '';
-  const index  = $('tb-index')?.value  || 'NIFTY';
+  // Always read ALL config fresh from DOM — no cached variables — so changing any value
+  // in the UI takes effect on the very next trade without restarting anything.
+  const lots        = parseInt($('tb-lots')?.value||'1') || 1;
+  const mode        = $('tb-p10-mode')?.value || 'manual';
+  const expiry      = $('tb-expiry')?.value || '';
+  const index       = $('tb-index')?.value  || 'NIFTY';
+  // QK TGT resolves to premium points whether the input is in PTS or ₹ profit mode
+  const quick_pts   = tbQuickTargetPoints() || 1.5;
+  const partial_pct = parseInt($('tb-partial-pct')?.value||'50') || 50;
+  // sync cached vars so they stay consistent with what we're about to send
+  _tbQuickPts = quick_pts; _tbPartialPct = partial_pct;
   _tbClickTs   = Date.now();
   const clickTimeStr = _fmtTs(_tbClickTs);
   // immediately log the click time in the session log
@@ -7321,7 +9206,7 @@ async function tbSendToProd10(){
   if(logEl){
     const row=document.createElement('div');
     row.style.cssText='color:var(--info);padding:2px 4px;border-bottom:1px solid rgba(255,255,255,.03);font-weight:600';
-    row.textContent=`[${clickTimeStr}] 🖱️ Dashboard → PROD10: ${index} ${_tbStrike}${_tbDir} ×${lots}lots (${mode}${_tbPaper?' PAPER':''}${_tbMock?' MOCK RUN':''}${_tbValidate?' VALIDATE':''})`;
+    row.textContent=`[${clickTimeStr}] 🖱️ Dashboard → PROD10: ${index} ${_tbStrike}${_tbDir} ×${lots}lots (${mode}${mode==='quick'?` tgt+${quick_pts}pt`:''}${_tbPaper?' PAPER':''}${_tbMock?' MOCK RUN':''}${_tbValidate?' VALIDATE':''})`;
     logEl.appendChild(row);
     logEl.scrollTop=logEl.scrollHeight;
   }
@@ -7330,7 +9215,7 @@ async function tbSendToProd10(){
   try{
     const r=await fetch('/api/prod10_buy',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({index,expiry,strike:_tbStrike,opt_type:_tbDir,lots,mode,paper:_tbPaper,atr:_tbAtr,atr_source:_tbAtrSource,mock:_tbMock,validate_orders:_tbValidate,quick_pts:_tbQuickPts,partial:_tbPartial,partial_pct:_tbPartialPct})});
+      body:JSON.stringify({index,expiry,strike:_tbStrike,opt_type:_tbDir,lots,mode,paper:_tbPaper,atr:_tbAtr,atr_source:_tbAtrSource,mock:_tbMock,validate_orders:_tbValidate,quick_pts,partial:_tbPartial,partial_pct,ltp:_tbSelectedLtp})});
     const d=await r.json();
     if(d.ok){
       const orig=`BUY ${_tbDir} ${_tbStrike} → PROD10`;
@@ -7480,16 +9365,177 @@ function tbOnModeChange(){
   tbSaveCfg();
 }
 
+// Effective quantity for the current QK TGT config (lots × lot size for the selected index).
+function tbQuickQty(){
+  const lots=parseInt($('tb-lots')?.value||'1')||1;
+  return lots*(_tbLotSize||75);
+}
+
+// Resolve the QK TGT input to premium points, regardless of PTS/₹ mode.
+// In profit mode: points = profit / qty, snapped to the nearest 5 paise so the
+// resulting limit price lands on a valid tick (the bot re-snaps on the real fill).
+function tbQuickTargetPoints(){
+  const raw=parseFloat($('tb-quick-pts')?.value||'0')||0;
+  if(_tbQuickTargetMode==='profit'){
+    const qty=tbQuickQty();
+    if(qty<=0||raw<=0) return 0;
+    return Math.round((raw/qty)/0.05)*0.05;
+  }
+  return raw;
+}
+
+// Toggle the QK TGT input between points (PTS) and profit amount (₹).
+function tbToggleQuickTargetMode(){
+  _tbQuickTargetMode=(_tbQuickTargetMode==='profit')?'points':'profit';
+  const inp=$('tb-quick-pts');
+  const btn=$('tb-quick-mode-btn');
+  if(_tbQuickTargetMode==='profit'){
+    if(btn) btn.textContent='₹';
+    if(inp){ inp.min='100'; inp.max='500000'; inp.step='100'; inp.value='2000'; inp.style.width='72px'; }
+  } else {
+    if(btn) btn.textContent='PTS';
+    if(inp){ inp.min='0.5'; inp.max='20'; inp.step='0.5'; inp.value='1.5'; inp.style.width='56px'; }
+  }
+  tbSaveCfg();
+  tbUpdateQuickTargetHint();
+}
+
+// Show the conversion the other way so the trader always sees both numbers.
+function tbUpdateQuickTargetHint(){
+  const el=$('tb-quick-tgt-hint'); if(!el) return;
+  const qty=tbQuickQty();
+  if(_tbQuickTargetMode==='profit'){
+    const pts=tbQuickTargetPoints();
+    el.textContent=pts>0?`≈ ${pts.toFixed(2)} pts · ${qty} qty`:'';
+  } else {
+    const pts=parseFloat($('tb-quick-pts')?.value||'0')||0;
+    const profit=pts*qty;
+    el.textContent=profit>0?`≈ ₹${profit.toLocaleString('en-IN')} · ${qty} qty`:'';
+  }
+}
+
+// ── Quick Trade Mode ──────────────────────────────────────────────────────────
+
+function tbToggleQuickTrade(){
+  _tbQuickTradeMode=!_tbQuickTradeMode;
+  const btn=$('tb-quick-trade-btn');
+  const row=$('tb-quick-trade-row');
+  if(btn){
+    btn.textContent=_tbQuickTradeMode?'⚡ Quick: ON':'⚡ Quick Trade';
+    btn.className=`toggle-btn ${_tbQuickTradeMode?'toggle-on':'toggle-off'}`;
+    btn.style.borderColor='#f59e0b';
+    btn.style.background=_tbQuickTradeMode?'rgba(245,158,11,.2)':'';
+    btn.style.color=_tbQuickTradeMode?'#f59e0b':'';
+  }
+  if(row) row.style.display=_tbQuickTradeMode?'':'none';
+  if(_tbQuickTradeMode){
+    _tbQuickRefreshStart();
+  } else {
+    _tbQuickRefreshStop();
+    _tbAvailableCapital=0; _tbMaxPremium=0;
+    const badge=$('chain-qt-badge'); if(badge) badge.style.display='none';
+    tbUpdateMaxPremiumDisplay();
+  }
+  tbRenderChain();
+}
+
+function _tbQuickRefreshStart(){
+  _tbQuickRefreshStop();
+  _tbQuickRefreshTimer=setInterval(async()=>{
+    if(!_tbQuickTradeMode){ _tbQuickRefreshStop(); return; }
+    const expiry=$('tb-expiry')?.value;
+    if(!expiry) return;
+    await tbLoadChain(true);  // silent — no spinner, just updates data + re-renders chain
+    if(_tbAvailableCapital>0){ tbComputeMaxPremium(); tbUpdateMaxPremiumDisplay(); }
+  }, 5000);
+}
+
+function _tbQuickRefreshStop(){
+  if(_tbQuickRefreshTimer){ clearInterval(_tbQuickRefreshTimer); _tbQuickRefreshTimer=null; }
+}
+
+function tbOnCapSourceChange(){
+  _tbCapitalSource=$('tb-cap-source')?.value||'api';
+  const fg=$('tb-cap-fetch-grp'), mg=$('tb-cap-manual-grp');
+  if(fg) fg.style.display=_tbCapitalSource==='api'?'':'none';
+  if(mg) mg.style.display=_tbCapitalSource==='manual'?'':'none';
+  _tbAvailableCapital=0; _tbMaxPremium=0;
+  tbUpdateMaxPremiumDisplay();
+  tbRenderChain();
+}
+
+async function tbFetchCapital(){
+  const btn=$('tb-cap-fetch-btn');
+  const orig=btn.textContent;
+  btn.textContent='⏳ Fetching…'; btn.disabled=true;
+  try{
+    const r=await fetch('/api/data'); const d=await r.json();
+    const mg=d.margin||{};
+    const cap=parseFloat(mg.opt_buy_avail||0);
+    if(cap<=0){
+      alert('F&O Buy Balance is ₹0 or unavailable. Use "Pass Manually" or check your Groww account.');
+      btn.textContent=orig; btn.disabled=false; return;
+    }
+    _tbAvailableCapital=cap;
+    tbComputeMaxPremium();
+    tbUpdateMaxPremiumDisplay();
+    tbRenderChain();
+    btn.textContent=`✅ ₹${Math.round(cap).toLocaleString('en-IN')}`;
+    setTimeout(()=>{ btn.textContent=orig; btn.disabled=false; },4000);
+  }catch(e){ alert('Failed to fetch capital: '+e); btn.textContent=orig; btn.disabled=false; }
+}
+
+function tbOnManualCapital(){
+  const val=parseFloat($('tb-cap-manual')?.value||'0');
+  _tbAvailableCapital=isNaN(val)||val<=0?0:val;
+  tbComputeMaxPremium();
+  tbUpdateMaxPremiumDisplay();
+  tbRenderChain();
+}
+
+function tbComputeMaxPremium(){
+  const lots=parseInt($('tb-lots')?.value||'1');
+  const qty=lots*(_tbLotSize||75);
+  _tbMaxPremium=qty>0&&_tbAvailableCapital>0?Math.floor(_tbAvailableCapital/qty):0;
+}
+
+function tbUpdateMaxPremiumDisplay(){
+  const capGrp=$('tb-cap-display-grp'), maxGrp=$('tb-max-prem-grp'), calcGrp=$('tb-max-prem-calc-grp');
+  const capDisp=$('tb-cap-display'), maxDisp=$('tb-max-prem-display'), calcDisp=$('tb-max-prem-calc');
+  const badge=$('chain-qt-badge');
+  const lots=parseInt($('tb-lots')?.value||'1');
+  const qty=lots*(_tbLotSize||75);
+  if(_tbAvailableCapital>0 && _tbQuickTradeMode){
+    if(capGrp) capGrp.style.display='';
+    if(capDisp) capDisp.textContent='₹'+Math.round(_tbAvailableCapital).toLocaleString('en-IN');
+    if(maxGrp) maxGrp.style.display='';
+    if(maxDisp) maxDisp.textContent=_tbMaxPremium>0?'≤ ₹'+_tbMaxPremium:'—';
+    if(calcGrp) calcGrp.style.display='';
+    if(calcDisp) calcDisp.textContent=`${lots}L × ${_tbLotSize||75} = ${qty} qty`;
+    // chain header badge
+    if(badge){
+      badge.style.display=_tbMaxPremium>0?'':'none';
+      badge.textContent=_tbMaxPremium>0?`⚡ MAX ₹${_tbMaxPremium}  (${qty} qty)`:'';
+    }
+  } else {
+    if(capGrp) capGrp.style.display='none';
+    if(maxGrp) maxGrp.style.display='none';
+    if(calcGrp) calcGrp.style.display='none';
+    if(badge) badge.style.display='none';
+  }
+}
+
 function tbSaveCfg(){
   const mode=$('tb-p10-mode')?.value||'manual';
-  const qpts=parseFloat($('tb-quick-pts')?.value||'1.5');
-  _tbQuickPts=isNaN(qpts)?1.5:qpts;
+  const qraw=parseFloat($('tb-quick-pts')?.value||'0');      // raw field value (points or ₹, per mode)
+  _tbQuickPts=tbQuickTargetPoints()||1.5;                    // cached resolved points
   try{
     const ppct=parseInt($('tb-partial-pct')?.value||'50');
     _tbPartialPct=isNaN(ppct)?50:ppct;
     localStorage.setItem('tb_cfg',JSON.stringify({
       mode, paper:_tbPaper, atr:_tbAtr, atr_source:_tbAtrSource, mock:_tbMock, validate:_tbValidate,
-      quick_pts:_tbQuickPts, partial:_tbPartial, partial_pct:_tbPartialPct
+      quick_pts:isNaN(qraw)?1.5:qraw, quick_target_mode:_tbQuickTargetMode,
+      partial:_tbPartial, partial_pct:_tbPartialPct
     }));
   }catch(e){}
 }
@@ -7501,9 +9547,20 @@ function tbRestoreCfg(){
     // mode
     const modeEl=$('tb-p10-mode');
     if(modeEl && c.mode){ modeEl.value=c.mode; tbOnModeChange(); }
-    // quick pts
+    // quick target mode (PTS / ₹) — apply attrs/button before restoring the field value
+    _tbQuickTargetMode=(c.quick_target_mode==='profit')?'profit':'points';
     const qEl=$('tb-quick-pts');
-    if(qEl && c.quick_pts!=null){ qEl.value=c.quick_pts; _tbQuickPts=c.quick_pts; }
+    const qBtn=$('tb-quick-mode-btn');
+    if(_tbQuickTargetMode==='profit'){
+      if(qBtn) qBtn.textContent='₹';
+      if(qEl){ qEl.min='100'; qEl.max='500000'; qEl.step='100'; qEl.style.width='72px'; }
+    } else {
+      if(qBtn) qBtn.textContent='PTS';
+      if(qEl){ qEl.min='0.5'; qEl.max='20'; qEl.step='0.5'; qEl.style.width='56px'; }
+    }
+    if(qEl && c.quick_pts!=null){ qEl.value=c.quick_pts; }
+    _tbQuickPts=tbQuickTargetPoints()||1.5;
+    tbUpdateQuickTargetHint();
     // paper
     if(c.paper){ _tbPaper=true; const b=$('tb-paper-btn'); if(b){b.textContent='ON';b.className='toggle-btn toggle-on';} }
     // atr
@@ -7522,8 +9579,8 @@ function tbRestoreCfg(){
 }
 
 async function tbUpdateQuickTarget(){
-  const qpts=parseFloat($('tb-quick-pts')?.value||'1.5');
-  if(isNaN(qpts)||qpts<=0){alert('Enter a valid target points value first.');return;}
+  const qpts=tbQuickTargetPoints();
+  if(isNaN(qpts)||qpts<=0){alert('Enter a valid target value first.');return;}
   const btn=event.currentTarget;
   const orig=btn.textContent;
   btn.textContent='...'; btn.disabled=true;
@@ -7652,6 +9709,218 @@ function mbToggleVelFilter(){
   btn.style.background=_mbVelFilter?'rgba(74,222,128,.15)':'';
   btn.style.color=_mbVelFilter?'#4ade80':'';
   _mbPushConfig();
+}
+
+// ── VIX Auto Config ─────────────────────────────────────────────────────────
+function mbVixComputeConfig(vix, chgPct){
+  // Returns rich config object based on VIX level + day-over-day % change
+  // Derived from 5-day backtest (Jun 15-19 2026)
+  if(vix == null || isNaN(vix)) return null;
+  const chg = chgPct || 0;
+  const falling = chg < 0;
+
+  if(vix > 15){
+    return {vel:1.5, cons:60, zone:'HIGH  (>15)', color:'#f87171',
+      velWhy:'VIX is elevated — real intraday moves present. vel≥1.5% confirms genuine premium acceleration.',
+      consWhy:'cons≥60% ensures at least 60% of ticks moved in the signal direction — directional conviction.',
+      cautions:['High VIX means wide ATM spreads — slippage on entry/exit can be larger','Options premiums decay fast after spike — hold time matters more'],
+      positives:['Strong trending moves are common on high-VIX days — momentum is real','Wider premium swings mean bigger per-lot profit when direction is right'],
+      ref:'Historical: best results on VIX>15 days come from catching 1 clean directional move rather than 6 choppy ones.'};
+  }
+  if(vix >= 14){
+    if(falling){
+      return {vel:1.0, cons:70, zone:'MOD-HIGH  FALLING (14–15)', color:'#fb923c',
+        velWhy:'VIX falling from moderate level — signals still have some strength, vel≥1.0% avoids very weak entries.',
+        consWhy:'HIGH consistency≥70% is the key filter here — falling VIX compresses premiums, so only high-consistency directional moves are worth trading.',
+        cautions:['Falling VIX = premiums shrinking — profits per trade will be smaller than yesterday','Avoid low-consistency signals even if velocity looks okay'],
+        positives:['Market is calming down — less whipsaw risk','Moderate vol still allows good momentum entries if consistency is strong'],
+        ref:'Jun 15 (VIX=14.24 falling): actual +₹30k → with cons≥70% filter → +₹60k (+₹29k saved). Consistency was the key lever.'};
+    }
+    return {vel:1.5, cons:60, zone:'MOD-HIGH  RISING (14–15)', color:'#f59e0b',
+      velWhy:'VIX rising = real fear entering the market. vel≥1.5% ensures signal is driven by genuine panic/directional flow.',
+      consWhy:'cons≥60% filters out momentary spikes that reverse quickly. Rising VIX still has noise.',
+      cautions:['Rising VIX can cause sudden reversals mid-trade — watch trail SL closely','Multiple hard SL hits in a row signal choppy conditions — enable CONS SL brake'],
+      positives:['Rising VIX creates strong one-directional momentum bursts','Premium expansion works in your favor on correct-side entries'],
+      ref:'Moderate-high rising VIX days: standard vel+cons filter captures the best 30–40% of signals with positive PnL.'};
+  }
+  if(vix >= 13){
+    if(chg < -3){
+      return {vel:2.5, cons:60, zone:'⚠ MOD  SHARP DROP (13–14, chg<-3%)', color:'#ef4444',
+        velWhy:'VIX dropping >3% in one day means gamma is being crushed and option premiums are collapsing. Only extreme velocity signals (≥2.5%) have real momentum behind them.',
+        consWhy:'cons≥60% ensures the move is directional, not just noise from decaying premiums.',
+        cautions:['🚨 DANGER ZONE — this is the Jun 16 pattern that caused -₹48,262','Majority of signals will be weak, low-velocity noise from premium decay','Expect only 2–5 tradeable signals all day — most should be skipped'],
+        positives:['With vel≥2.5% filter: Jun 16 would have been +₹2,808 instead of -₹48k','Very selective entries on this day type can still be profitable'],
+        ref:'Jun 16 (VIX=13.39, -6% drop): actual -₹48,262 (42 trades) → vel≥2.5%+cons≥60% → +₹2,808 (only 2 trades). Saved ₹51,070.'};
+    }
+    if(falling){
+      return {vel:1.5, cons:60, zone:'MOD  DRIFTING (13–14, slowly falling)', color:'#f59e0b',
+        velWhy:'VIX drifting down gently — market is slowly calming. vel≥1.5% filters out weak signals from decaying vol.',
+        consWhy:'cons≥60% separates directional momentum from premium-decay noise on low-conviction days.',
+        cautions:['Signals will look weaker than yesterday — average velocity will be lower','Be patient — wait for clean high-consistency signals, do not chase'],
+        positives:['Gentle decline is more stable than sharp drop — fewer whipsaws than -3% VIX days','Filtered signals should perform reasonably on this day type'],
+        ref:'Jun 17 (VIX=13.20, -1.4%): actual +₹3,383 (51 trades) → vel≥1.5%+cons≥60% → +₹12,119 (only 6 trades). Quality over quantity.'};
+    }
+    return {vel:1.8, cons:60, zone:'MOD  RISING (13–14)', color:'#facc15',
+      velWhy:'VIX moderately rising — some real momentum exists but market is not yet in strong trending mode. vel≥1.8% filters low-quality marginal signals.',
+      consWhy:'cons≥60% ensures the signal direction has real tick-level confirmation.',
+      cautions:['Rising from a moderate base can stall quickly — trail SL tightly','Watch for OI data to confirm direction before entry'],
+      positives:['Rising VIX creates real option premium expansion','Moderate level means less spread — execution quality is better'],
+      ref:'Moderate rising VIX: expect 5–8 quality signals. First 2–3 hours tend to have the best momentum.'};
+  }
+  if(vix >= 12){
+    if(falling){
+      return {vel:1.0, cons:55, zone:'LOW  FALLING (12–13)', color:'#4ade80',
+        velWhy:'VIX low and falling — market is calm and stable. vel≥1.0% allows more trades since stability means fewer false signals.',
+        consWhy:'cons≥55% is the standard floor. Low VIX days can still be profitable with relaxed filters (Jun 18 proof).',
+        cautions:['Premium ranges are small — profit per trade will be lower, do not over-expect','Very low VIX means option premiums move slowly — be patient on exits'],
+        positives:['Stable market = fewer whipsaws = higher trade completion rate','Jun 18 (VIX=12.73 falling): vel≥0.5%+cons≥50% → +₹17,726 from just 10 trades'],
+        ref:'Jun 18 (VIX=12.73, -3.6%): actual +₹3,861 (19 trades) → vel≥0.5%+cons≥50% → +₹17,726 (10 trades). Calm day, quality wins.'};
+    }
+    return {vel:1.8, cons:55, zone:'LOW  RISING (12–13)', color:'#60b8f0',
+      velWhy:'VIX rising from a very low base can produce sudden sharp moves ("snap moves") as fear re-enters. vel≥1.8% targets these sharp entries only.',
+      consWhy:'cons≥55% ensures the snap move has directional consistency across ticks — not just one noisy spike.',
+      cautions:['⚠ Jun 19 pattern — rising VIX from low base also coincided with infrastructure failure and -₹68k loss','Snap moves can reverse sharply — keep trail SL tight, enable CHOP and CONS SL brake','Connection reliability matters more on volatile snap-move days'],
+      positives:['Snap moves from low VIX base can be fast and profitable when caught correctly','vel≥1.8%+cons≥55% filter: Jun 19 would have been +₹8,658 instead of -₹68,854'],
+      ref:'Jun 19 (VIX=12.78, +0.4% rising): actual -₹68,854 → vel≥1.8%+cons≥55% → +₹8,658 (3 trades). Saved ₹77,512 with correct config.'};
+  }
+  return {vel:2.5, cons:65, zone:'VERY LOW  (<12)', color:'#94a3b8',
+    velWhy:'VIX below 12 means near-zero fear — option premiums are barely moving. Only extreme velocity signals (≥2.5%) indicate real momentum.',
+    consWhy:'cons≥65% is the highest consistency bar — on a dead market day, only the very cleanest signals should be traded.',
+    cautions:['🚨 Consider NOT trading today — very low VIX days have minimal premium movement','Risk-reward is poor: small moves, but SL hit = full loss','Most signals will not meet vel≥2.5% — expect 0–2 tradeable signals all session'],
+    positives:['If a signal does meet vel≥2.5%+cons≥65%, it is likely a genuine breakout move','Rare signals on low-VIX days tend to be cleaner since they need strong conviction'],
+    ref:'Very low VIX (<12): best strategy is to wait for a clear OI-confirmed direction and trade max 1–2 times with small size.'};
+}
+
+function mbVixTogglePanel(){
+  _mbVixPanelExpanded = !_mbVixPanelExpanded;
+  const body = $('mb-vix-panel-body');
+  const chev = $('mb-vix-chevron');
+  if(body) body.style.display = _mbVixPanelExpanded ? 'block' : 'none';
+  if(chev) chev.style.transform = _mbVixPanelExpanded ? '' : 'rotate(180deg)';
+}
+
+function mbVixAutoToggle(){
+  _mbVixAutoConfig = !_mbVixAutoConfig;
+  const btn   = $('mb-vix-auto-btn');
+  const rfBtn = $('mb-vix-refresh-btn');
+  const panel = $('mb-vix-status-panel');
+  if(btn){
+    btn.textContent = _mbVixAutoConfig ? 'ON' : 'OFF';
+    btn.className   = `toggle-btn ${_mbVixAutoConfig ? 'toggle-on' : 'toggle-off'}`;
+    btn.style.borderColor = _mbVixAutoConfig ? '#60b8f0' : '';
+    btn.style.background  = _mbVixAutoConfig ? 'rgba(96,184,240,.15)' : '';
+    btn.style.color       = _mbVixAutoConfig ? '#60b8f0' : '';
+  }
+  if(rfBtn) rfBtn.style.display = _mbVixAutoConfig ? '' : 'none';
+  if(panel) panel.style.display = _mbVixAutoConfig ? 'block' : 'none';
+  if(!_mbVixAutoConfig){
+    // Reset vel/cons badges to defaults when toggled OFF
+    const vd=$('mb-vel-display'), cd=$('mb-cons-display');
+    if(vd){ vd.textContent='0.5%'; vd.className='mb-vel-cons-val'; vd.title='velocity_pct threshold (default)'; }
+    if(cd){ cd.textContent='55%';  cd.className='mb-vel-cons-val'; cd.title='consistency_pct threshold (default)'; }
+  }
+  if(_mbVixAutoConfig) mbVixRefreshConfig();
+}
+
+async function mbVixRefreshConfig(){
+  const statusEl = $('mb-vix-status-text');
+  if(statusEl) statusEl.textContent = '⏳ fetching VIX…';
+  try{
+    const r = await fetch('/api/data');
+    const d = await r.json();
+    const lv = (d.pnl_analysis && d.pnl_analysis.live) ? d.pnl_analysis.live : {};
+    let vix    = lv.vix    != null ? lv.vix    : (d.vix_history && d.vix_history.length ? d.vix_history[d.vix_history.length-1].v : null);
+    let vixChg = lv.vix_chg_pct != null ? lv.vix_chg_pct :
+                 (d.vix_session_open && vix ? (vix - d.vix_session_open) / d.vix_session_open * 100 : null);
+    // Fallback: use cached globals set by renderVix
+    if(vix == null && window._mbVixCurrent != null){ vix = window._mbVixCurrent; vixChg = window._mbVixDayChg; }
+    if(vix == null){ if(statusEl) statusEl.textContent = '⚠ VIX data unavailable — open dashboard to fetch'; return; }
+    const cfg = mbVixComputeConfig(vix, vixChg);
+    if(!cfg){ if(statusEl) statusEl.textContent = '⚠ Could not compute config'; return; }
+    // Build note string logged by bot
+    const chgStr = vixChg != null ? (vixChg>=0?'+':'')+vixChg.toFixed(1)+'%' : 'N/A';
+    const note   = `VIX=${vix.toFixed(2)} (${chgStr}) Zone=${cfg.zone} → vel≥${cfg.vel}%  cons≥${cfg.cons}%  Reason: ${cfg.reason}`;
+    // Push to override file (picked up by running bot on next scan cycle)
+    await fetch('/api/momentum/config',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        velocity_pct:    cfg.vel,
+        consistency_pct: cfg.cons,
+        velocity_filter: true,
+        min_score_filter: true,
+        _vix_config_note: note
+      })
+    });
+    // Sync filter toggles to ON (VIX auto always enables them)
+    _mbVelFilter=true; _mbMinScoreFilter=true;
+    ['mb-vel-filter-btn','mb-min-score-btn'].forEach(id=>{
+      const b=$(id); if(!b) return;
+      b.textContent='ON'; b.className='toggle-btn toggle-on';
+      b.style.borderColor='#4ade80'; b.style.background='rgba(74,222,128,.15)'; b.style.color='#4ade80';
+    });
+    // Update vel% and cons% display badges
+    const velDisp = $('mb-vel-display');
+    const consDisp = $('mb-cons-display');
+    if(velDisp){  velDisp.textContent = cfg.vel+'%';  velDisp.className='mb-vel-cons-val vix-set'; velDisp.title=`velocity_pct set by VIX AUTO (${cfg.zone})`; }
+    if(consDisp){ consDisp.textContent = cfg.cons+'%'; consDisp.className='mb-vel-cons-val vix-set'; consDisp.title=`consistency_pct set by VIX AUTO (${cfg.zone})`; }
+    // Update header summary (always visible even when collapsed)
+    if(statusEl) statusEl.textContent = `VIX ${vix.toFixed(2)} (${chgStr}) · ${cfg.zone} · vel≥${cfg.vel}%  cons≥${cfg.cons}%`;
+    // Update collapsible body — rich card
+    const panelBody = $('mb-vix-panel-body');
+    if(panelBody){
+      const cautionRows = (cfg.cautions||[]).map(c=>`<div style="display:flex;gap:5px;margin:1px 0"><span style="color:#fbbf24">⚠</span><span>${c}</span></div>`).join('');
+      const posRows     = (cfg.positives||[]).map(p=>`<div style="display:flex;gap:5px;margin:1px 0"><span style="color:#4ade80">✓</span><span>${p}</span></div>`).join('');
+      panelBody.innerHTML = `
+<div style="display:grid;grid-template-columns:auto 1fr;gap:0 18px;width:100%">
+  <!-- Left column: VIX + config set -->
+  <div style="min-width:220px">
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+      <span style="color:${cfg.color};font-size:16px;font-weight:800">${vix.toFixed(2)}</span>
+      <span style="color:${(vixChg||0)>=0?'#f87171':'#4ade80'};font-size:11px;font-weight:700">${chgStr} day</span>
+      <span style="color:var(--dim);font-size:9px">India VIX</span>
+    </div>
+    <div style="color:${cfg.color};font-size:10px;font-weight:700;letter-spacing:.4px;margin-bottom:8px">Zone: ${cfg.zone}</div>
+    <div style="font-size:9px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">Config Applied to Bot</div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="color:var(--dim);width:96px">velocity_pct</span>
+        <span style="color:#4ade80;font-weight:800;font-size:13px">≥ ${cfg.vel}%</span>
+      </div>
+      <div style="font-size:9px;color:var(--dim);margin-left:104px;margin-top:-2px;margin-bottom:3px">${cfg.velWhy}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="color:var(--dim);width:96px">consistency_pct</span>
+        <span style="color:#4ade80;font-weight:800;font-size:13px">≥ ${cfg.cons}%</span>
+      </div>
+      <div style="font-size:9px;color:var(--dim);margin-left:104px;margin-top:-2px;margin-bottom:3px">${cfg.consWhy}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="color:var(--dim);width:96px">velocity_filter</span>
+        <span style="color:#4ade80;font-weight:700;font-size:11px">ON</span>
+        <span style="color:var(--dim);font-size:9px">gates entry on vel threshold</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:1px">
+        <span style="color:var(--dim);width:96px">min_score_filter</span>
+        <span style="color:#4ade80;font-weight:700;font-size:11px">ON</span>
+        <span style="color:var(--dim);font-size:9px">gates entry on score floor</span>
+      </div>
+    </div>
+  </div>
+  <!-- Right column: cautions + positives + ref -->
+  <div style="border-left:1px solid rgba(96,184,240,.2);padding-left:14px;font-size:9px;line-height:1.5;color:var(--dim)">
+    ${cautionRows ? `<div style="font-size:9px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">Cautions</div>${cautionRows}<div style="height:6px"></div>` : ''}
+    <div style="font-size:9px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">Positives</div>
+    ${posRows}
+    ${cfg.ref ? `<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.06);color:#60b8f0;font-size:9px;line-height:1.6">📊 ${cfg.ref}</div>` : ''}
+  </div>
+</div>`;
+      // Keep body expanded by default when refreshed
+      panelBody.style.display = 'block';
+      const chev = $('mb-vix-chevron');
+      if(chev) chev.style.transform = '';
+      _mbVixPanelExpanded = true;
+    }
+  }catch(e){
+    if(statusEl) statusEl.textContent = '⚠ Error: '+e.message;
+  }
 }
 
 function _mbPushConfig(){
@@ -9342,17 +11611,24 @@ async function scFetchChartData() {
     const badge = document.getElementById('sc-chart-demo-badge');
     if (badge) badge.style.display = 'none';
 
-    // Populate instrument selector
-    const sel  = document.getElementById('sc-chart-select');
-    const prev = sel ? sel.value : '';
+    // Update status panel
+    _scUpdateStatusPanel(data);
+
+    // Populate instrument selector — only show instruments within premium range
+    const sel     = document.getElementById('sc-chart-select');
+    const prev    = sel ? sel.value : '';
+    const pmMin   = _scChartData.premium_min || 0;
+    const pmMax   = _scChartData.premium_max || 99999;
     if (sel) {
       sel.innerHTML = '<option value="">&#9660; pick instrument below</option>';
-      (_scChartData.instruments || []).forEach(inst => {
-        const o = document.createElement('option');
-        o.value = inst.symbol;
-        o.text  = inst.symbol.slice(-12) + '  ₹' + (inst.ltp || 0).toFixed(0);
-        sel.appendChild(o);
-      });
+      (_scChartData.instruments || [])
+        .filter(inst => inst.ltp >= pmMin && inst.ltp <= pmMax)
+        .forEach(inst => {
+          const o = document.createElement('option');
+          o.value = inst.symbol;
+          o.text  = inst.symbol.slice(-12) + '  ₹' + (inst.ltp || 0).toFixed(0);
+          sel.appendChild(o);
+        });
       if (prev) sel.value = prev;
     }
 
@@ -9379,7 +11655,73 @@ async function scFetchChartData() {
   } catch(e) { _scLoadDemoFallback(); }
 }
 
+function _scUpdateStatusPanel(data) {
+  const s = data && data.status;
+
+  // Dot + label
+  const dot   = document.getElementById('sc-st-dot-circle');
+  const label = document.getElementById('sc-st-dot-label');
+  if (s) {
+    dot.style.background   = '#00c853';
+    dot.style.boxShadow    = '0 0 5px #00c853';
+    label.textContent      = 'LIVE';
+    label.style.color      = '#00c853';
+  } else {
+    dot.style.background   = '#555';
+    dot.style.boxShadow    = 'none';
+    label.textContent      = 'OFFLINE';
+    label.style.color      = '#666';
+  }
+
+  // Spot + bars + tl counts
+  const spotEl    = document.getElementById('sc-st-spot');
+  const barsEl    = document.getElementById('sc-st-bars');
+  const tlEl      = document.getElementById('sc-st-tl');
+  const inRangeEl = document.getElementById('sc-st-inrange');
+  if (s) {
+    spotEl.textContent    = s.spot_ltp ? '₹' + s.spot_ltp.toFixed(0) : '—';
+    barsEl.textContent    = s.spot_bars != null ? s.spot_bars : '—';
+    tlEl.textContent      = s.tl_active + '/' + s.total;
+    inRangeEl.textContent = s.in_range;
+  } else {
+    spotEl.textContent = barsEl.textContent = tlEl.textContent = inRangeEl.textContent = '—';
+  }
+
+  // Open trade row
+  const tradeRow  = document.getElementById('sc-st-trade-row');
+  const tradeInfo = document.getElementById('sc-st-trade-info');
+  if (s && s.open_trade) {
+    const t = s.open_trade;
+    const pnl = ((t.ltp - t.entry) * 75).toFixed(0);   // approx, 75 qty per lot
+    const trailMark = t.trail_active ? ' 🔄 trailing' : '';
+    tradeInfo.textContent = `${t.symbol}  [${t.type}]  entry=₹${t.entry}  SL=₹${t.sl}  LTP=₹${t.ltp}${trailMark}`;
+    tradeRow.style.display = '';
+  } else {
+    tradeRow.style.display = 'none';
+  }
+
+  // Watching list chips
+  const watchEl = document.getElementById('sc-st-watching');
+  if (s && s.near_signal && s.near_signal.length) {
+    watchEl.innerHTML = s.near_signal.map(w => {
+      const isClose  = Math.abs(w.dist) <= 6;
+      const chipClr  = w.type === 'ASC'
+        ? (isClose ? '#00c853' : '#1a5e33')
+        : (isClose ? '#ff5252' : '#5e1a1a');
+      const txtClr   = isClose ? '#fff' : '#999';
+      const distStr  = w.dist >= 0 ? `+${w.dist}` : `${w.dist}`;
+      const arrow    = w.dist >= 0 ? '↑' : '↓';
+      return `<span title="LTP ₹${w.ltp}  support ₹${w.support}" style="display:inline-flex;align-items:center;gap:3px;background:${chipClr}22;border:1px solid ${chipClr};border-radius:4px;padding:2px 6px;font-size:10px;color:${txtClr};cursor:default">
+        ${w.symbol} <span style="color:${chipClr}">${arrow}${distStr}</span>
+      </span>`;
+    }).join('');
+  } else {
+    watchEl.innerHTML = '<span style="color:#444;font-size:10px">no instruments near signal yet</span>';
+  }
+}
+
 function _scLoadDemoFallback() {
+  _scUpdateStatusPanel(null);
   const badge = document.getElementById('sc-chart-demo-badge');
   if (badge) badge.style.display = '';
   const tsEl = document.getElementById('sc-chart-ts');
@@ -9442,32 +11784,50 @@ function scRenderChart(data, canvasId, title) {
   cv.width  = cv.parentElement ? cv.parentElement.clientWidth - 2 : 400;
   const W = cv.width, H = cv.height;
 
-  // Background
   ctx.fillStyle = '#0d1117';
   ctx.fillRect(0, 0, W, H);
 
-  const candles = data.candles || [];
-  if (!candles.length) {
+  const allCandles = data.candles || [];
+  if (!allCandles.length) {
     ctx.fillStyle = '#444'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
     ctx.fillText('No candle data', W / 2, H / 2);
     return;
   }
 
-  const n  = candles.length;
-  const mL = 4, mR = 54, mT = 20, mB = 18;
+  const totalN  = allCandles.length;
+  const MAX_VIS = 35;
+  // Always show the latest MAX_VIS candles — right-aligned
+  const startIdx = Math.max(0, totalN - MAX_VIS);
+  const candles  = allCandles.slice(startIdx);
+  const nv       = candles.length;
+
+  const mL = 4, mR = 56, mT = 20, mB = 18;
   const cW = W - mL - mR, cH = H - mT - mB;
 
-  // Price range
+  // Price range from visible candles only
   let lo = Infinity, hi = -Infinity;
   candles.forEach(c => { lo = Math.min(lo, c.l); hi = Math.max(hi, c.h); });
+  // Also include trendline projected prices in range
+  (data.trendlines || []).forEach(tl => {
+    if (tl.type !== 'HORIZONTAL' && tl.p1 && tl.p2) {
+      const slope = (tl.p2.price - tl.p1.price) / (tl.p2.idx - tl.p1.idx);
+      const cur   = tl.p2.price + slope * (totalN - 1 - tl.p2.idx);
+      lo = Math.min(lo, cur); hi = Math.max(hi, cur);
+    }
+    if (tl.type === 'HORIZONTAL') { lo = Math.min(lo, tl.price); hi = Math.max(hi, tl.price); }
+  });
+  if (data.ltp > 0) { lo = Math.min(lo, data.ltp); hi = Math.max(hi, data.ltp); }
   const pad = (hi - lo) * 0.08 || 1;
   lo -= pad; hi += pad;
 
-  const toY = p => mT + (1 - (p - lo) / (hi - lo)) * cH;
-  const toX = i => mL + (i / (n > 1 ? n - 1 : 1)) * cW;
-  const bW  = Math.max(1.5, cW / n * 0.65);
+  const toY  = p  => mT + (1 - (p - lo) / (hi - lo)) * cH;
+  // Slot-based X: each candle gets an equal slot, centered in it
+  const slotW = cW / nv;
+  const toX  = vi => mL + (vi + 0.5) * slotW;          // vi = visible index (0..nv-1)
+  const toXa = ai => toX(ai - startIdx);                // ai = absolute candle index
+  const bW   = Math.max(2, slotW * 0.65);
 
-  // Grid
+  // Grid lines
   ctx.strokeStyle = '#1c2330'; ctx.lineWidth = 1;
   for (let g = 1; g <= 3; g++) {
     const y = mT + (g / 4) * cH;
@@ -9478,15 +11838,15 @@ function scRenderChart(data, canvasId, title) {
   }
 
   // Candles
-  candles.forEach((c, i) => {
-    const x   = toX(i);
+  candles.forEach((c, vi) => {
+    const x   = toX(vi);
     const isG = c.c >= c.o;
     const col = isG ? '#00c853' : '#ff5252';
     ctx.strokeStyle = col; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x, toY(c.h)); ctx.lineTo(x, toY(c.l)); ctx.stroke();
     const bT = toY(Math.max(c.o, c.c)), bB = toY(Math.min(c.o, c.c));
     ctx.fillStyle   = isG ? '#00c85355' : '#ff525255';
-    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.strokeStyle = col;
     ctx.fillRect(x - bW/2, bT, bW, Math.max(1, bB - bT));
     ctx.strokeRect(x - bW/2, bT, bW, Math.max(1, bB - bT));
   });
@@ -9503,24 +11863,33 @@ function scRenderChart(data, canvasId, title) {
       ctx.fillStyle = tl.color; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left';
       ctx.fillText('₹' + tl.price.toFixed(0), W - mR + 3, y + 3);
     } else if (tl.p1 && tl.p2 && tl.p2.idx > tl.p1.idx) {
-      const slope   = (tl.p2.price - tl.p1.price) / (tl.p2.idx - tl.p1.idx);
-      const curP    = tl.p2.price + slope * (n - 1 - tl.p2.idx);
-      // Draw from first anchor through current position
+      const slope = (tl.p2.price - tl.p1.price) / (tl.p2.idx - tl.p1.idx);
+      const curP  = tl.p2.price + slope * (totalN - 1 - tl.p2.idx);
+      // Start: p1 if visible, else extrapolate to left edge of visible window
+      let x0, y0;
+      if (tl.p1.idx >= startIdx) {
+        x0 = toXa(tl.p1.idx); y0 = toY(tl.p1.price);
+      } else {
+        const priceAtStart = tl.p2.price + slope * (startIdx - tl.p2.idx);
+        x0 = toX(0); y0 = toY(priceAtStart);
+      }
+      // End: always the right-most visible slot
       ctx.beginPath();
-      ctx.moveTo(toX(tl.p1.idx), toY(tl.p1.price));
-      ctx.lineTo(toX(n - 1), toY(curP));
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(toX(nv - 1), toY(curP));
       ctx.stroke();
-      // Pivot dots
+      // Pivot dots (only if inside visible window)
       ctx.fillStyle = tl.color;
       [tl.p1, tl.p2].forEach(p => {
-        if (p.idx < n) {
-          ctx.beginPath(); ctx.arc(toX(p.idx), toY(p.price), 3, 0, Math.PI * 2); ctx.fill();
+        if (p.idx >= startIdx && p.idx < totalN) {
+          ctx.beginPath(); ctx.arc(toXa(p.idx), toY(p.price), 3, 0, Math.PI * 2); ctx.fill();
         }
       });
       // Current level label
-      if (toY(curP) >= mT && toY(curP) <= mT + cH) {
+      const yLbl = toY(curP);
+      if (yLbl >= mT && yLbl <= mT + cH) {
         ctx.fillStyle = tl.color; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left';
-        ctx.fillText('₹' + curP.toFixed(0), W - mR + 3, toY(curP) + 3);
+        ctx.fillText('₹' + curP.toFixed(0), W - mR + 3, yLbl + 3);
       }
     }
     ctx.restore();
@@ -9535,6 +11904,10 @@ function scRenderChart(data, canvasId, title) {
     ctx.fillStyle = '#ccc'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left';
     ctx.fillText('₹' + data.ltp.toFixed(0), W - mR + 3, y + 3);
   }
+
+  // Candle count badge (top-right of chart area)
+  ctx.fillStyle = '#445'; ctx.font = '9px monospace'; ctx.textAlign = 'right';
+  ctx.fillText(totalN + ' bars', W - mR - 4, mT - 5);
 
   // Title
   ctx.fillStyle = '#667'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
@@ -10580,6 +12953,367 @@ function _paiShowResult(d){
   // Timestamp
   if(d.ts) document.getElementById('pai-ts').textContent='Last run: '+d.ts;
 }
+
+// ── AI Brain ──────────────────────────────────────────────
+let _mbAiEnabled = false;
+let _mbAiPollTimer = null;
+let _mbAiAutoTimer = null;
+let _qsRefreshTimer = null;
+let _qsPollTimer    = null;
+
+function _qsApplyToggleState(enabled){
+  const btn    = document.getElementById('qs-toggle-btn');
+  const rBtn   = document.getElementById('qs-refresh-btn');
+  const el     = document.getElementById('qs-text');
+  if(btn){
+    btn.textContent = enabled ? 'ON' : 'OFF';
+    btn.classList.toggle('toggle-on', enabled);
+    btn.classList.toggle('toggle-off', !enabled);
+  }
+  if(rBtn) rBtn.style.display = enabled ? '' : 'none';
+  if(!enabled && el){
+    el.innerHTML = '<span style="color:var(--dim)">Toggle ON to generate a live market summary.</span>';
+    const tsEl = document.getElementById('qs-ts');
+    if(tsEl) tsEl.textContent = '';
+    _qsSetDebug('', '');
+  }
+}
+
+function qsToggle(){
+  fetch('/api/toggle?f=qs_ai').then(r=>r.json()).then(feat=>{
+    const enabled = feat.qs_ai === true;
+    _qsApplyToggleState(enabled);
+    if(enabled){
+      // Auto-start a generation immediately after turning ON
+      qsRefresh();
+    } else {
+      // Stop any in-progress poll
+      if(_qsPollTimer){ clearInterval(_qsPollTimer); _qsPollTimer=null; }
+      if(_qsRefreshTimer){ clearInterval(_qsRefreshTimer); _qsRefreshTimer=null; }
+    }
+  }).catch(()=>{});
+}
+
+function _mbAiUpdateQuickSummary(d){
+  const el    = document.getElementById('qs-text');
+  const tsEl  = document.getElementById('qs-ts');
+  const btnEl = document.getElementById('qs-refresh-btn');
+  if(!el) return;
+
+  // If feature is disabled, show the OFF state and stop
+  if(d && d.qs_ai_enabled === false){
+    _qsApplyToggleState(false);
+    return;
+  }
+
+  const qs     = (d && d.qs) ? d.qs : {};
+  const status = qs.status || 'idle';
+  _qsSetDebug(status, qs.ts || '');
+
+  if(status === 'running'){
+    el.innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px;color:#c084fc">'
+      + '<span class="mb-ai-spinner" style="width:14px;height:14px;border-width:2px"></span>'
+      + 'Claude is analysing market data…</span>';
+    if(tsEl) tsEl.textContent = '';
+    if(btnEl){ btnEl.disabled=true; btnEl.textContent='⏳'; }
+    if(!_qsPollTimer) _qsPollTimer = setInterval(_qsPoll, 2500);
+    return;
+  }
+
+  // Not running — clear poll timer, re-enable button
+  if(_qsPollTimer){ clearInterval(_qsPollTimer); _qsPollTimer=null; }
+  if(btnEl){ btnEl.disabled=false; btnEl.textContent='↻'; }
+
+  if(status === 'no_cli'){
+    el.innerHTML = '<span style="color:var(--warn)">Claude CLI not found — run: <code>npm install -g @anthropic-ai/claude-code</code> then <code>claude login</code></span>';
+    return;
+  }
+  if(status === 'error'){
+    el.innerHTML = '<span style="color:var(--bear)">⚠ Error: ' + (qs.error||'unknown') + '</span>';
+    return;
+  }
+  if(status === 'no_data' || status === 'idle'){
+    el.innerHTML = '<span style="color:var(--dim)">Waiting for OI data — start <code>calculate_oi_pcr.py</code>, then click ↻ to generate.</span>';
+    return;
+  }
+  if(status === 'ok'){
+    const txt = (qs.text||'').trim();
+    if(!txt){
+      el.innerHTML = '<span style="color:var(--dim)">Claude returned an empty response — click ↻ to retry.</span>';
+      return;
+    }
+    const safe = txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const html = safe
+      .replace(/\\b(Bullish|bullish)\\b/g, '<b style="color:#4ade80">$1</b>')
+      .replace(/\\b(Bearish|bearish)\\b/g, '<b style="color:#f87171">$1</b>')
+      .replace(/\\b(Sideways|sideways)\\b/g, '<b style="color:#facc15">$1</b>')
+      .replace(/(₹[\\d,.]+(?:Cr)?)/g, '<b style="color:#38bdf8">$1</b>')
+      .replace(/\\b(\\d{5})\\b/g, '<b style="color:#c084fc">$1</b>')
+      .replace(/\\b(BUY CE|Buy CE)\\b/g, '<b style="color:#4ade80">$1</b>')
+      .replace(/\\b(BUY PE|Buy PE)\\b/g, '<b style="color:#f87171">$1</b>')
+      .replace(/\\b(STAY CASH|Stay Cash)\\b/g, '<b style="color:#facc15">$1</b>')
+      .replace(/(Action:)/g, '<b style="color:#f97316">$1</b>')
+      .replace(/\\n/g, '<br>');
+    el.innerHTML = html;
+    if(tsEl) tsEl.textContent = qs.ts ? '🤖 ' + qs.ts.replace('T',' ') : '';
+    return;
+  }
+  // Fallback — unrecognised status
+  el.innerHTML = '<span style="color:var(--dim)">Status: ' + status + ' — click ↻ to refresh.</span>';
+}
+
+function _qsSetDebug(status, ts){
+  const dbg = document.getElementById('qs-status-dbg');
+  if(dbg) dbg.textContent = 'status: ' + status + (ts ? '  |  ' + ts : '');
+}
+
+function _qsPoll(){
+  fetch('/api/mb_ai').then(r=>r.json()).then(d=>{
+    _mbAiUpdateQuickSummary(d);
+    if((d.qs||{}).status !== 'running'){
+      if(_qsPollTimer){ clearInterval(_qsPollTimer); _qsPollTimer=null; }
+    }
+  }).catch(()=>{});
+}
+
+function qsRefresh(){
+  const btnEl = document.getElementById('qs-refresh-btn');
+  if(btnEl){ btnEl.disabled=true; btnEl.textContent='⏳'; }
+  fetch('/api/qs_ai/refresh', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+    .then(r=>r.json())
+    .then(d=>{
+      if(!_qsPollTimer) _qsPollTimer = setInterval(_qsPoll, 2500);
+      const el = document.getElementById('qs-text');
+      if(el) el.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;color:#c084fc">
+        <span class="mb-ai-spinner" style="width:14px;height:14px;border-width:2px"></span>
+        Claude is analysing market data…
+      </span>`;
+    }).catch(()=>{ if(btnEl){ btnEl.disabled=false; btnEl.textContent='↻'; }});
+}
+
+function initAiBrainTab(){
+  // Immediately replace "Loading…" with a progress indicator
+  const el = document.getElementById('qs-text');
+  fetch('/api/mb_ai')
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(d){
+      const enabled = d.qs_ai_enabled === true;
+      _qsApplyToggleState(enabled);
+      if(enabled){
+        _mbAiUpdateQuickSummary(d);
+        // Auto-trigger if idle or stale (> 6 min old)
+        const qs = d.qs || {};
+        const isStale = !qs.ts || ((Date.now() - new Date(qs.ts).getTime()) > 360000);
+        if(qs.status === 'idle' || qs.status === 'no_data' || (qs.status === 'ok' && isStale)){
+          qsRefresh();
+        } else if(qs.status === 'running'){
+          if(!_qsPollTimer) _qsPollTimer = setInterval(_qsPoll, 2500);
+        }
+      }
+      _mbAiRender(d);
+    })
+    .catch(function(err){
+      const el2 = document.getElementById('qs-text');
+      if(el2) el2.innerHTML = '<span style="color:var(--warn)">⚠ Could not reach server: ' + err.message + '</span>';
+    });
+
+  // Poll quick summary every 30s while tab is open (only updates if enabled)
+  if(!_qsRefreshTimer) _qsRefreshTimer = setInterval(function(){
+    fetch('/api/mb_ai').then(function(r){ return r.json(); }).then(function(d){ _mbAiUpdateQuickSummary(d); }).catch(function(){});
+  }, 30000);
+}
+
+function mbAiToggle(){
+  fetch('/api/toggle?f=mb_ai').then(r=>r.json()).then(feat=>{
+    _mbAiEnabled = feat.mb_ai === true;
+    const btn = document.getElementById('mb-ai-toggle-btn');
+    if(_mbAiEnabled){
+      btn.textContent='ON'; btn.classList.add('toggle-on'); btn.classList.remove('toggle-off');
+      btn.classList.add('mb-ai-on');
+      document.getElementById('mb-ai-meta').style.display='flex';
+      // Trigger first generation immediately
+      mbAiRefresh();
+      // Start 5-min auto-refresh timer
+      if(_mbAiAutoTimer) clearInterval(_mbAiAutoTimer);
+      _mbAiAutoTimer = setInterval(mbAiRefresh, 300000);
+    } else {
+      btn.textContent='OFF'; btn.classList.remove('toggle-on'); btn.classList.add('toggle-off');
+      btn.classList.remove('mb-ai-on');
+      document.getElementById('mb-ai-meta').style.display='none';
+      if(_mbAiAutoTimer){ clearInterval(_mbAiAutoTimer); _mbAiAutoTimer=null; }
+      if(_mbAiPollTimer){ clearInterval(_mbAiPollTimer); _mbAiPollTimer=null; }
+      document.getElementById('mb-ai-content').innerHTML = `
+        <div class="mb-ai-idle">
+          <div class="idle-icon">🧠</div>
+          <div class="idle-msg">AI Brain is OFF</div>
+          <div class="idle-sub">Toggle ON to generate a live market summary.</div>
+        </div>`;
+    }
+  }).catch(()=>{});
+}
+
+async function mbAiRefresh(){
+  if(!_mbAiEnabled) return;
+  const btn = document.getElementById('mb-ai-refresh-btn');
+  if(btn) { btn.disabled=true; btn.textContent='⏳ Refreshing…'; }
+  // Show loading state
+  document.getElementById('mb-ai-content').innerHTML = `
+    <div class="mb-ai-loading">
+      <div class="mb-ai-spinner"></div>
+      <div>
+        <div class="mb-ai-loading-text">Collecting data from all bots…</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">OI · VIX · Fibonacci · Master Signal · Convergence · Trendline → GPT-4o</div>
+      </div>
+    </div>`;
+  try {
+    const r = await fetch('/api/mb_ai/refresh', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if(!d.ok){ _mbAiRenderError(d.error||'Failed to start'); return; }
+    // Poll until done
+    if(_mbAiPollTimer) clearInterval(_mbAiPollTimer);
+    _mbAiPollTimer = setInterval(async ()=>{
+      const r2 = await fetch('/api/mb_ai');
+      const d2 = await r2.json();
+      if(d2.status !== 'running'){
+        clearInterval(_mbAiPollTimer); _mbAiPollTimer=null;
+        _mbAiRender(d2);
+        if(btn){ btn.disabled=false; btn.textContent='↻ Refresh Now'; }
+      }
+    }, 2000);
+  } catch(e) {
+    _mbAiRenderError(String(e));
+    if(btn){ btn.disabled=false; btn.textContent='↻ Refresh Now'; }
+  }
+}
+
+function _mbAiRenderError(msg){
+  document.getElementById('mb-ai-content').innerHTML = `
+    <div class="mb-ai-card risks-card">
+      <div class="mb-ai-card-title">⚠️ Error</div>
+      <div class="mb-ai-body">${msg}</div>
+    </div>`;
+}
+
+function _mbAiRender(d){
+  const content = document.getElementById('mb-ai-content');
+  const meta    = document.getElementById('mb-ai-meta');
+  const btn     = document.getElementById('mb-ai-toggle-btn');
+
+  if(!content) return;
+  _mbAiUpdateQuickSummary(d);
+
+  // Sync enabled state
+  _mbAiEnabled = (d.status !== 'idle' && d.status !== undefined);
+
+  // Update meta
+  if(d.ts){
+    const tsEl = document.getElementById('mb-ai-ts');
+    if(tsEl) tsEl.textContent = '🕐 Last updated: ' + d.ts.replace('T',' ');
+    if(meta) meta.style.display='flex';
+  }
+  if(d.context_lines){
+    const ctxEl = document.getElementById('mb-ai-ctx');
+    if(ctxEl) ctxEl.textContent = d.context_lines + ' data points fed to AI';
+  }
+
+  if(d.status === 'idle'){
+    content.innerHTML = `
+      <div class="mb-ai-idle">
+        <div class="idle-icon">🧠</div>
+        <div class="idle-msg">AI Brain is OFF</div>
+        <div class="idle-sub">Toggle ON to generate a live market summary.</div>
+      </div>`;
+    return;
+  }
+  if(d.status === 'running'){
+    content.innerHTML = `
+      <div class="mb-ai-loading">
+        <div class="mb-ai-spinner"></div>
+        <div class="mb-ai-loading-text">Generating summary… please wait (up to 45s)</div>
+      </div>`;
+    return;
+  }
+  if(d.status === 'no_cli'){
+    content.innerHTML = `
+      <div class="mb-ai-card risks-card">
+        <div class="mb-ai-card-title">🤖 Claude CLI Required</div>
+        <div class="mb-ai-body">Claude Code CLI not found or not logged in.\n\nInstall: npm install -g @anthropic-ai/claude-code\nLogin:   claude login\n\nRequires Claude Pro or higher subscription.</div>
+      </div>`;
+    return;
+  }
+  if(d.status === 'no_data'){
+    content.innerHTML = `
+      <div class="mb-ai-card risks-card">
+        <div class="mb-ai-card-title">📡 No Bot Data Yet</div>
+        <div class="mb-ai-body">Start the bots first (MASTER_SIGNAL_BOT, FIBONACCI_TREND_ANALYZER, calculate_oi_pcr).\nThen click ↻ Refresh Now.</div>
+      </div>`;
+    return;
+  }
+  if(d.status === 'auth_error' || d.status === 'rate_limit' || d.status === 'error'){
+    const icons = {auth_error:'🔑', rate_limit:'⏱', error:'⚠️'};
+    content.innerHTML = `
+      <div class="mb-ai-card risks-card">
+        <div class="mb-ai-card-title">${icons[d.status]||'⚠️'} ${d.status}</div>
+        <div class="mb-ai-body">${d.error||'Unknown error'}</div>
+      </div>`;
+    return;
+  }
+
+  if(d.status === 'ok'){
+    // Build the full panel
+    const fmt = t => (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    let html = '';
+
+    // Bottom line — most prominent, at the top
+    if(d.bottom_line){
+      const bl = fmt(d.bottom_line);
+      const blColor = bl.toUpperCase().includes('BUY CE')?'var(--bull)':
+                      bl.toUpperCase().includes('BUY PE')?'var(--bear)':'#f97316';
+      html += `<div class="mb-ai-card bottom-card">
+        <div class="mb-ai-card-title" style="color:${blColor}">💡 BOTTOM LINE</div>
+        <div class="mb-ai-body" style="color:${blColor}">${bl}</div>
+      </div>`;
+    }
+
+    // Intraday + Long-term in 2 columns
+    html += `<div class="mb-ai-2col">`;
+    if(d.intraday){
+      html += `<div class="mb-ai-card intraday-card">
+        <div class="mb-ai-card-title">📊 INTRADAY VIEW — Next 1-2 Hours</div>
+        <div class="mb-ai-body">${fmt(d.intraday)}</div>
+      </div>`;
+    }
+    if(d.longterm){
+      html += `<div class="mb-ai-card longterm-card">
+        <div class="mb-ai-card-title">📈 LONG-TERM VIEW — 2-5 Days</div>
+        <div class="mb-ai-body">${fmt(d.longterm)}</div>
+      </div>`;
+    }
+    html += `</div>`;
+
+    // Key levels + Risks in 2 columns
+    html += `<div class="mb-ai-2col">`;
+    if(d.key_levels){
+      html += `<div class="mb-ai-card levels-card">
+        <div class="mb-ai-card-title">⚡ KEY LEVELS TO WATCH</div>
+        <div class="mb-ai-body">${fmt(d.key_levels)}</div>
+      </div>`;
+    }
+    if(d.risks){
+      html += `<div class="mb-ai-card risks-card">
+        <div class="mb-ai-card-title">⚠️ RISKS</div>
+        <div class="mb-ai-body">${fmt(d.risks)}</div>
+      </div>`;
+    }
+    html += `</div>`;
+
+    content.innerHTML = html || '<div class="mb-ai-idle"><div class="idle-msg">No summary content received</div></div>';
+  }
+}
 </script>
 
 </body>
@@ -11063,6 +13797,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ltp": result,
                             "ts": datetime.now().isoformat(timespec="seconds")})
 
+        elif parsed.path == '/api/mb_ai':
+            with _mb_ai_lock:
+                result = dict(_mb_ai_cache)
+            with _qs_lock:
+                result["qs"] = dict(_qs_cache)
+            result["qs_ai_enabled"] = _features.get("qs_ai", False)
+            self._json(result)
+
         elif parsed.path == '/api/personal_ai':
             with _pai_lock:
                 self._json(dict(_pai_cache))
@@ -11084,6 +13826,16 @@ class Handler(BaseHTTPRequestHandler):
             bid = qs.get("id", [""])[0]
             n   = int(qs.get("n", ["60"])[0])
             self._json({"lines": _bot_get_logs(bid, n)})
+
+        elif parsed.path == '/api/engine/expiries':
+            idx = qs.get("index", ["NIFTY"])[0].upper()
+            self._json({"index": idx, "expiries": _engine_expiries(idx)})
+
+        elif parsed.path == '/api/engine/console':
+            n = int(qs.get("n", ["40"])[0])
+            with _bot_lock:
+                lines = list(_bot_logs.get("decision_engine", [])[-n:])
+            self._json({"lines": lines, **_engine_running()})
 
         elif parsed.path == '/api/trendline_config':
             cfg_path = os.path.join(BASE, "trendline_config.json")
@@ -11195,6 +13947,7 @@ class Handler(BaseHTTPRequestHandler):
             quick_pts      = float(body.get("quick_pts", 1.5))
             partial        = bool(body.get("partial", False))
             partial_pct    = int(body.get("partial_pct", 50))
+            ltp_hint       = float(body.get("ltp", 0) or 0)   # chain LTP — bot skips redundant LTP fetch
             validate_orders = body.get("validate_orders", None)   # None = keep bot's CONFIG default
             if validate_orders is not None:
                 validate_orders = bool(validate_orders)
@@ -11207,7 +13960,7 @@ class Handler(BaseHTTPRequestHandler):
                 prod10_sym = f"{index}{expiry_token}{strike}{opt_type}"
                 command    = f"{lots} {prod10_sym}"
                 import json as _json
-                bridge = {"command":command,"mode":mode,"paper":paper,"atr":atr,"atr_source":atr_source,"mock":mock,"quick_pts":quick_pts,"partial":partial,"partial_pct":partial_pct}
+                bridge = {"command":command,"mode":mode,"paper":paper,"atr":atr,"atr_source":atr_source,"mock":mock,"quick_pts":quick_pts,"partial":partial,"partial_pct":partial_pct,"ltp":ltp_hint}
                 if validate_orders is not None:
                     bridge["validate_orders"] = validate_orders
                 with open(PROD10_BRIDGE_FILE,"w") as _f:
@@ -11333,6 +14086,12 @@ class Handler(BaseHTTPRequestHandler):
             bot_id = body.get("id", "")
             self._json(_bot_stop(bot_id))
 
+        elif path == '/api/engine/start':
+            self._json(_engine_start(body))
+
+        elif path == '/api/engine/stop':
+            self._json(_engine_stop())
+
         elif path == '/api/momentum/config':
             # Live config update — merges into existing override file so running bot
             # picks it up on next scan (bot calls _reload_override() each cycle)
@@ -11345,6 +14104,8 @@ class Handler(BaseHTTPRequestHandler):
                 "min_premium": float, "max_premium": float,
                 "lots": int, "atm_range": int,
                 "scan_seconds": int, "poll_seconds": int,
+                "velocity_pct": float, "consistency_pct": float,
+                "_vix_config_note": str,
             }
             ov_path = os.path.join(BASE, "momentum_config_override.json")
             existing = {}
@@ -11378,12 +14139,57 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=_run_pai_bg, daemon=True).start()
                 self._json({"status": "started"})
 
+        elif path == '/api/qs_ai/refresh':
+            if not _features.get("qs_ai"):
+                self._json({"ok": False, "status": "disabled"})
+            else:
+                with _qs_lock:
+                    already = _qs_cache.get("status") == "running"
+                if already:
+                    self._json({"ok": False, "status": "already_running"})
+                else:
+                    with _lock: snap_copy = dict(_snapshot)
+                    threading.Thread(target=generate_qs_ai, args=(snap_copy,), daemon=True).start()
+                    self._json({"ok": True, "status": "started"})
+
+        elif path == '/api/mb_ai/refresh':
+            if not _features.get("mb_ai"):
+                self._json({"ok": False, "error": "AI Brain is OFF — toggle it on first"})
+            else:
+                with _mb_ai_lock:
+                    already = _mb_ai_cache.get("status") == "running"
+                if already:
+                    self._json({"ok": False, "status": "already_running"})
+                else:
+                    with _lock: snap_copy = dict(_snapshot)
+                    threading.Thread(target=generate_mb_ai, args=(snap_copy,), daemon=True).start()
+                    self._json({"ok": True, "status": "started"})
+
         else:
             self._json({"error":"not found"},404)
 
 # ─────────────────────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────────────────────
+def _ensure_control_panel():
+    """Auto-start TRADE_CONTROL_PANEL.py (port 8790) if it isn't running,
+    so the 🛡 Control tab always has something to embed."""
+    import socket, subprocess
+    try:
+        s = socket.create_connection(("127.0.0.1", 8790), timeout=0.5)
+        s.close()
+        return  # already running
+    except Exception:
+        pass
+    try:
+        log = open(os.path.join(BASE, "logs", "control_panel.log"), "a")
+        subprocess.Popen([sys.executable, os.path.join(BASE, "TRADE_CONTROL_PANEL.py")],
+                         stdout=log, stderr=subprocess.STDOUT, cwd=BASE)
+        print(f"  🛡  Trade Control Panel auto-started → http://127.0.0.1:8790")
+    except Exception as e:
+        print(f"  ⚠️ Could not auto-start Trade Control Panel: {e}")
+
+
 def main():
     print(f"\n{'═'*60}")
     print(f"  📊 LIVE TRADING DASHBOARD")
@@ -11400,7 +14206,9 @@ def main():
     threading.Thread(target=_ltp_fetcher_loop, daemon=True).start()
     threading.Thread(target=_run_ptai_analysis, daemon=True).start()
     threading.Thread(target=_idx_refresh_loop, daemon=True).start()
+    _load_vix_cache()
     threading.Thread(target=_vix_fetch_loop, daemon=True).start()
+    _ensure_control_panel()
     class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
         allow_reuse_address = True   # avoids "Address already in use" on quick restart

@@ -1,0 +1,2669 @@
+{
+  "updated": "2026-06-25 11:36:40",
+  "total": 41,
+  "signals": [
+    {
+      "time": "2026-06-25 10:37:21",
+      "ts_ms": 1782364041227,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 3,
+      "accel_count": 3,
+      "avg_vel_pct": 1.201,
+      "top_strike": 24150.0,
+      "spot": 24178.15,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.474,
+          "ltp_start": 91.6,
+          "ltp_end": 92.95,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.177,
+          "ltp_start": 114.65,
+          "ltp_end": 116.0,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.952,
+          "ltp_start": 57.8,
+          "ltp_end": 58.35,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:38:58",
+      "ts_ms": 1782364138985,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 2,
+      "avg_vel_pct": 1.073,
+      "top_strike": 24300.0,
+      "spot": 24173.55,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.222,
+          "ltp_start": 175.95,
+          "ltp_end": 178.1,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.192,
+          "ltp_start": 37.75,
+          "ltp_end": 38.2,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.094,
+          "ltp_start": 59.4,
+          "ltp_end": 60.05,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400PE",
+          "strike": 24400.0,
+          "opt_type": "PE",
+          "vel_pct": 1.002,
+          "ltp_start": 249.5,
+          "ltp_end": 252.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23900PE",
+          "strike": 23900.0,
+          "opt_type": "PE",
+          "vel_pct": 0.974,
+          "ltp_start": 30.8,
+          "ltp_end": 31.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.953,
+          "ltp_start": 94.4,
+          "ltp_end": 95.3,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:39:59",
+      "ts_ms": 1782364199044,
+      "side": "PE",
+      "strength": "MODERATE",
+      "conv_count": 3,
+      "accel_count": 0,
+      "avg_vel_pct": 0.935,
+      "top_strike": 24050.0,
+      "spot": 24171.25,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.078,
+          "ltp_start": 60.3,
+          "ltp_end": 60.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400PE",
+          "strike": 24400.0,
+          "opt_type": "PE",
+          "vel_pct": 0.892,
+          "ltp_start": 252.3,
+          "ltp_end": 254.55,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.835,
+          "ltp_start": 95.85,
+          "ltp_end": 96.65,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:41:36",
+      "ts_ms": 1782364296966,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 3,
+      "accel_count": 2,
+      "avg_vel_pct": 1.055,
+      "top_strike": 24200.0,
+      "spot": 24170.4,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.179,
+          "ltp_start": 118.75,
+          "ltp_end": 120.15,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.049,
+          "ltp_start": 95.35,
+          "ltp_end": 96.35,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 0.938,
+          "ltp_start": 213.2,
+          "ltp_end": 215.2,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:42:12",
+      "ts_ms": 1782364332952,
+      "side": "CE",
+      "strength": "MODERATE",
+      "conv_count": 3,
+      "accel_count": 1,
+      "avg_vel_pct": 1.157,
+      "top_strike": 24350.0,
+      "spot": 24174.6,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.501,
+          "ltp_start": 43.3,
+          "ltp_end": 43.95,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.11,
+          "ltp_start": 76.6,
+          "ltp_end": 77.45,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 0.861,
+          "ltp_start": 58.1,
+          "ltp_end": 58.6,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:44:29",
+      "ts_ms": 1782364469837,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 3,
+      "avg_vel_pct": 0.953,
+      "top_strike": 24150.0,
+      "spot": 24179.65,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.213,
+          "ltp_start": 90.7,
+          "ltp_end": 91.8,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.903,
+          "ltp_start": 72.0,
+          "ltp_end": 72.65,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 0.872,
+          "ltp_start": 206.5,
+          "ltp_end": 208.3,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 0.822,
+          "ltp_start": 36.5,
+          "ltp_end": 36.8,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:45:21",
+      "ts_ms": 1782364521169,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 3,
+      "avg_vel_pct": 1.223,
+      "top_strike": 24350.0,
+      "spot": 24185.75,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.559,
+          "ltp_start": 44.9,
+          "ltp_end": 45.6,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.37,
+          "ltp_start": 131.35,
+          "ltp_end": 133.15,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.159,
+          "ltp_start": 60.4,
+          "ltp_end": 61.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.124,
+          "ltp_start": 80.1,
+          "ltp_end": 81.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.074,
+          "ltp_start": 162.9,
+          "ltp_end": 164.65,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.051,
+          "ltp_start": 33.3,
+          "ltp_end": 33.65,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:46:12",
+      "ts_ms": 1782364572575,
+      "side": "PE",
+      "strength": "MODERATE",
+      "conv_count": 3,
+      "accel_count": 0,
+      "avg_vel_pct": 0.868,
+      "top_strike": 24100.0,
+      "spot": 24188.6,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.948,
+          "ltp_start": 68.55,
+          "ltp_end": 69.2,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24450PE",
+          "strike": 24450.0,
+          "opt_type": "PE",
+          "vel_pct": 0.829,
+          "ltp_start": 277.6,
+          "ltp_end": 279.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 0.828,
+          "ltp_start": 199.25,
+          "ltp_end": 200.9,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:47:50",
+      "ts_ms": 1782364670506,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 2,
+      "avg_vel_pct": 1.175,
+      "top_strike": 24350.0,
+      "spot": 24194.05,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.489,
+          "ltp_start": 47.0,
+          "ltp_end": 47.7,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.207,
+          "ltp_start": 107.7,
+          "ltp_end": 109.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.149,
+          "ltp_start": 34.8,
+          "ltp_end": 35.2,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050CE",
+          "strike": 24050.0,
+          "opt_type": "CE",
+          "vel_pct": 0.854,
+          "ltp_start": 204.8,
+          "ltp_end": 206.55,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:49:29",
+      "ts_ms": 1782364769306,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 2,
+      "accel_count": 2,
+      "avg_vel_pct": 0.988,
+      "top_strike": 24050.0,
+      "spot": 24192.2,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.128,
+          "ltp_start": 53.2,
+          "ltp_end": 53.8,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 0.849,
+          "ltp_start": 106.05,
+          "ltp_end": 106.95,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:51:01",
+      "ts_ms": 1782364861140,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 8,
+      "accel_count": 0,
+      "avg_vel_pct": 0.979,
+      "top_strike": 24300.0,
+      "spot": 24192.8,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.209,
+          "ltp_start": 161.35,
+          "ltp_end": 163.3,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.049,
+          "ltp_start": 42.9,
+          "ltp_end": 43.35,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.038,
+          "ltp_start": 106.0,
+          "ltp_end": 107.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.969,
+          "ltp_start": 67.1,
+          "ltp_end": 67.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.936,
+          "ltp_start": 53.4,
+          "ltp_end": 53.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 0.911,
+          "ltp_start": 131.75,
+          "ltp_end": 132.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.884,
+          "ltp_start": 84.85,
+          "ltp_end": 85.6,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400PE",
+          "strike": 24400.0,
+          "opt_type": "PE",
+          "vel_pct": 0.837,
+          "ltp_start": 233.0,
+          "ltp_end": 234.95,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:52:46",
+      "ts_ms": 1782364966898,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 8,
+      "accel_count": 1,
+      "avg_vel_pct": 0.927,
+      "top_strike": 24200.0,
+      "spot": 24187.25,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.237,
+          "ltp_start": 109.1,
+          "ltp_end": 110.45,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 0.979,
+          "ltp_start": 35.75,
+          "ltp_end": 36.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.916,
+          "ltp_start": 87.3,
+          "ltp_end": 88.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 0.9,
+          "ltp_start": 44.45,
+          "ltp_end": 44.85,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.865,
+          "ltp_start": 69.35,
+          "ltp_end": 69.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24450PE",
+          "strike": 24450.0,
+          "opt_type": "PE",
+          "vel_pct": 0.859,
+          "ltp_start": 279.35,
+          "ltp_end": 281.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 0.849,
+          "ltp_start": 135.4,
+          "ltp_end": 136.55,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.814,
+          "ltp_start": 55.3,
+          "ltp_end": 55.75,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:54:25",
+      "ts_ms": 1782365065751,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 12,
+      "accel_count": 0,
+      "avg_vel_pct": 1.377,
+      "top_strike": 24100.0,
+      "spot": 24183.5,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.695,
+          "ltp_start": 70.8,
+          "ltp_end": 72.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400PE",
+          "strike": 24400.0,
+          "opt_type": "PE",
+          "vel_pct": 1.653,
+          "ltp_start": 242.0,
+          "ltp_end": 246.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.509,
+          "ltp_start": 89.45,
+          "ltp_end": 90.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.504,
+          "ltp_start": 56.5,
+          "ltp_end": 57.35,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.43,
+          "ltp_start": 45.45,
+          "ltp_end": 46.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 1.423,
+          "ltp_start": 203.85,
+          "ltp_end": 206.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.391,
+          "ltp_start": 168.9,
+          "ltp_end": 171.25,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.37,
+          "ltp_start": 36.5,
+          "ltp_end": 37.0,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:55:49",
+      "ts_ms": 1782365149108,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 11,
+      "accel_count": 0,
+      "avg_vel_pct": 1.907,
+      "top_strike": 24400.0,
+      "spot": 24182.35,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 3.125,
+          "ltp_start": 32.0,
+          "ltp_end": 33.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 2.641,
+          "ltp_start": 43.55,
+          "ltp_end": 44.7,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 2.395,
+          "ltp_start": 77.25,
+          "ltp_end": 79.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 2.308,
+          "ltp_start": 58.5,
+          "ltp_end": 59.85,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.989,
+          "ltp_start": 100.55,
+          "ltp_end": 102.55,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.924,
+          "ltp_start": 158.55,
+          "ltp_end": 161.6,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.797,
+          "ltp_start": 128.0,
+          "ltp_end": 130.3,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050CE",
+          "strike": 24050.0,
+          "opt_type": "CE",
+          "vel_pct": 1.599,
+          "ltp_start": 193.9,
+          "ltp_end": 197.0,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:57:12",
+      "ts_ms": 1782365232368,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 5,
+      "accel_count": 0,
+      "avg_vel_pct": 1.098,
+      "top_strike": 24100.0,
+      "spot": 24188.65,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.281,
+          "ltp_start": 70.25,
+          "ltp_end": 71.15,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.111,
+          "ltp_start": 45.0,
+          "ltp_end": 45.5,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.103,
+          "ltp_start": 36.25,
+          "ltp_end": 36.65,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 1.095,
+          "ltp_start": 137.0,
+          "ltp_end": 138.5,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.9,
+          "ltp_start": 88.85,
+          "ltp_end": 89.65,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 10:59:30",
+      "ts_ms": 1782365370471,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 3,
+      "avg_vel_pct": 0.987,
+      "top_strike": 24150.0,
+      "spot": 24191.9,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.278,
+          "ltp_start": 133.0,
+          "ltp_end": 134.7,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.04,
+          "ltp_start": 33.65,
+          "ltp_end": 34.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 0.969,
+          "ltp_start": 165.1,
+          "ltp_end": 166.7,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 0.928,
+          "ltp_start": 80.85,
+          "ltp_end": 81.6,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950CE",
+          "strike": 23950.0,
+          "opt_type": "CE",
+          "vel_pct": 0.891,
+          "ltp_start": 280.65,
+          "ltp_end": 283.15,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 0.818,
+          "ltp_start": 61.1,
+          "ltp_end": 61.6,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:00:14",
+      "ts_ms": 1782365414409,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 1,
+      "avg_vel_pct": 1.055,
+      "top_strike": 24300.0,
+      "spot": 24196.8,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.465,
+          "ltp_start": 160.45,
+          "ltp_end": 162.8,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 0.958,
+          "ltp_start": 130.45,
+          "ltp_end": 131.7,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 0.931,
+          "ltp_start": 42.95,
+          "ltp_end": 43.35,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 0.865,
+          "ltp_start": 34.7,
+          "ltp_end": 35.0,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:02:36",
+      "ts_ms": 1782365556847,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 10,
+      "accel_count": 5,
+      "avg_vel_pct": 1.286,
+      "top_strike": 23950.0,
+      "spot": 24183.95,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.657,
+          "ltp_start": 36.2,
+          "ltp_end": 36.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.586,
+          "ltp_start": 69.35,
+          "ltp_end": 70.45,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.441,
+          "ltp_start": 55.5,
+          "ltp_end": 56.3,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.372,
+          "ltp_start": 87.45,
+          "ltp_end": 88.65,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.339,
+          "ltp_start": 44.8,
+          "ltp_end": 45.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 1.15,
+          "ltp_start": 200.0,
+          "ltp_end": 202.3,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.144,
+          "ltp_start": 166.1,
+          "ltp_end": 168.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.094,
+          "ltp_start": 109.65,
+          "ltp_end": 110.85,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:04:49",
+      "ts_ms": 1782365689833,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 0,
+      "avg_vel_pct": 1.024,
+      "top_strike": 24100.0,
+      "spot": 24182.2,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.284,
+          "ltp_start": 70.1,
+          "ltp_end": 71.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.158,
+          "ltp_start": 56.15,
+          "ltp_end": 56.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.076,
+          "ltp_start": 88.3,
+          "ltp_end": 89.25,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 0.991,
+          "ltp_start": 45.4,
+          "ltp_end": 45.85,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23900PE",
+          "strike": 23900.0,
+          "opt_type": "PE",
+          "vel_pct": 0.822,
+          "ltp_start": 30.4,
+          "ltp_end": 30.65,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 0.815,
+          "ltp_start": 36.8,
+          "ltp_end": 37.1,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:05:57",
+      "ts_ms": 1782365757440,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 2,
+      "avg_vel_pct": 0.949,
+      "top_strike": 24350.0,
+      "spot": 24176.75,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.037,
+          "ltp_start": 43.4,
+          "ltp_end": 43.85,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 0.996,
+          "ltp_start": 100.4,
+          "ltp_end": 101.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 0.947,
+          "ltp_start": 58.1,
+          "ltp_end": 58.65,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 0.817,
+          "ltp_start": 159.15,
+          "ltp_end": 160.45,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:08:07",
+      "ts_ms": 1782365887370,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 11,
+      "accel_count": 2,
+      "avg_vel_pct": 1.728,
+      "top_strike": 24300.0,
+      "spot": 24182.3,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 2.453,
+          "ltp_start": 59.1,
+          "ltp_end": 60.55,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 2.161,
+          "ltp_start": 78.65,
+          "ltp_end": 80.35,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 2.055,
+          "ltp_start": 102.2,
+          "ltp_end": 104.3,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 2.045,
+          "ltp_start": 44.0,
+          "ltp_end": 44.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.923,
+          "ltp_start": 130.0,
+          "ltp_end": 132.5,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.825,
+          "ltp_start": 161.65,
+          "ltp_end": 164.6,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050CE",
+          "strike": 24050.0,
+          "opt_type": "CE",
+          "vel_pct": 1.754,
+          "ltp_start": 196.7,
+          "ltp_end": 200.15,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.698,
+          "ltp_start": 32.4,
+          "ltp_end": 32.95,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:09:30",
+      "ts_ms": 1782365970283,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 9,
+      "accel_count": 0,
+      "avg_vel_pct": 1.033,
+      "top_strike": 24050.0,
+      "spot": 24187.2,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.267,
+          "ltp_start": 55.25,
+          "ltp_end": 55.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.102,
+          "ltp_start": 36.3,
+          "ltp_end": 36.7,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.093,
+          "ltp_start": 86.95,
+          "ltp_end": 87.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24500PE",
+          "strike": 24500.0,
+          "opt_type": "PE",
+          "vel_pct": 1.089,
+          "ltp_start": 321.35,
+          "ltp_end": 324.85,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.087,
+          "ltp_start": 69.0,
+          "ltp_end": 69.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.059,
+          "ltp_start": 165.2,
+          "ltp_end": 166.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 0.966,
+          "ltp_start": 134.6,
+          "ltp_end": 135.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23900PE",
+          "strike": 23900.0,
+          "opt_type": "PE",
+          "vel_pct": 0.833,
+          "ltp_start": 30.0,
+          "ltp_end": 30.25,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:10:37",
+      "ts_ms": 1782366037549,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 9,
+      "accel_count": 6,
+      "avg_vel_pct": 1.645,
+      "top_strike": 24250.0,
+      "spot": 24187.2,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 2.064,
+          "ltp_start": 79.95,
+          "ltp_end": 81.6,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.902,
+          "ltp_start": 60.45,
+          "ltp_end": 61.6,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.887,
+          "ltp_start": 45.05,
+          "ltp_end": 45.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.802,
+          "ltp_start": 33.3,
+          "ltp_end": 33.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.736,
+          "ltp_start": 103.7,
+          "ltp_end": 105.5,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.515,
+          "ltp_start": 132.0,
+          "ltp_end": 134.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.405,
+          "ltp_start": 163.7,
+          "ltp_end": 166.0,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050CE",
+          "strike": 24050.0,
+          "opt_type": "CE",
+          "vel_pct": 1.379,
+          "ltp_start": 199.45,
+          "ltp_end": 202.2,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:12:31",
+      "ts_ms": 1782366151439,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 0,
+      "avg_vel_pct": 1.024,
+      "top_strike": 24300.0,
+      "spot": 24193.1,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.351,
+          "ltp_start": 62.9,
+          "ltp_end": 63.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.067,
+          "ltp_start": 46.85,
+          "ltp_end": 47.35,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 0.99,
+          "ltp_start": 136.35,
+          "ltp_end": 137.7,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 0.964,
+          "ltp_start": 83.0,
+          "ltp_end": 83.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 0.949,
+          "ltp_start": 168.6,
+          "ltp_end": 170.2,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000CE",
+          "strike": 24000.0,
+          "opt_type": "CE",
+          "vel_pct": 0.82,
+          "ltp_start": 244.0,
+          "ltp_end": 246.0,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:15:13",
+      "ts_ms": 1782366313912,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 4,
+      "avg_vel_pct": 1.479,
+      "top_strike": 24400.0,
+      "spot": 24198.45,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.727,
+          "ltp_start": 34.75,
+          "ltp_end": 35.35,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.581,
+          "ltp_start": 107.5,
+          "ltp_end": 109.2,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.478,
+          "ltp_start": 169.2,
+          "ltp_end": 171.7,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23900CE",
+          "strike": 23900.0,
+          "opt_type": "CE",
+          "vel_pct": 1.132,
+          "ltp_start": 331.25,
+          "ltp_end": 335.0,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:16:29",
+      "ts_ms": 1782366389217,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 0,
+      "avg_vel_pct": 1.355,
+      "top_strike": 24400.0,
+      "spot": 24201.3,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 2.162,
+          "ltp_start": 37.0,
+          "ltp_end": 37.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.297,
+          "ltp_start": 50.1,
+          "ltp_end": 50.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.081,
+          "ltp_start": 87.85,
+          "ltp_end": 88.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 0.881,
+          "ltp_start": 113.55,
+          "ltp_end": 114.55,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:17:36",
+      "ts_ms": 1782366456634,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 3,
+      "avg_vel_pct": 0.992,
+      "top_strike": 24150.0,
+      "spot": 24196.9,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.212,
+          "ltp_start": 82.5,
+          "ltp_end": 83.5,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24450PE",
+          "strike": 24450.0,
+          "opt_type": "PE",
+          "vel_pct": 0.953,
+          "ltp_start": 267.45,
+          "ltp_end": 270.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 0.932,
+          "ltp_start": 42.9,
+          "ltp_end": 43.3,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 0.871,
+          "ltp_start": 103.35,
+          "ltp_end": 104.25,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:18:38",
+      "ts_ms": 1782366518451,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 3,
+      "accel_count": 2,
+      "avg_vel_pct": 1.102,
+      "top_strike": 24000.0,
+      "spot": 24197.9,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.264,
+          "ltp_start": 43.5,
+          "ltp_end": 44.05,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 1.229,
+          "ltp_start": 130.2,
+          "ltp_end": 131.8,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 0.813,
+          "ltp_start": 159.9,
+          "ltp_end": 161.2,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:21:12",
+      "ts_ms": 1782366672176,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 3,
+      "avg_vel_pct": 0.852,
+      "top_strike": 24200.0,
+      "spot": 24196.2,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 0.949,
+          "ltp_start": 105.4,
+          "ltp_end": 106.4,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.834,
+          "ltp_start": 53.95,
+          "ltp_end": 54.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.818,
+          "ltp_start": 67.2,
+          "ltp_end": 67.75,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 0.805,
+          "ltp_start": 192.45,
+          "ltp_end": 194.0,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:22:04",
+      "ts_ms": 1782366724218,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 7,
+      "accel_count": 0,
+      "avg_vel_pct": 1.591,
+      "top_strike": 24350.0,
+      "spot": 24198.65,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 2.379,
+          "ltp_start": 50.45,
+          "ltp_end": 51.65,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.786,
+          "ltp_start": 67.2,
+          "ltp_end": 68.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.736,
+          "ltp_start": 37.45,
+          "ltp_end": 38.1,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.514,
+          "ltp_start": 175.05,
+          "ltp_end": 177.7,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.437,
+          "ltp_start": 142.7,
+          "ltp_end": 144.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.323,
+          "ltp_start": 113.4,
+          "ltp_end": 114.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 0.96,
+          "ltp_start": 88.5,
+          "ltp_end": 89.35,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:23:35",
+      "ts_ms": 1782366815063,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 8,
+      "accel_count": 0,
+      "avg_vel_pct": 1.047,
+      "top_strike": 24300.0,
+      "spot": 24192.85,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24300PE",
+          "strike": 24300.0,
+          "opt_type": "PE",
+          "vel_pct": 1.318,
+          "ltp_start": 159.3,
+          "ltp_end": 161.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 1.306,
+          "ltp_start": 130.2,
+          "ltp_end": 131.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.13,
+          "ltp_start": 35.4,
+          "ltp_end": 35.8,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.093,
+          "ltp_start": 105.25,
+          "ltp_end": 106.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.068,
+          "ltp_start": 84.3,
+          "ltp_end": 85.2,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.836,
+          "ltp_start": 53.85,
+          "ltp_end": 54.3,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.82,
+          "ltp_start": 67.1,
+          "ltp_end": 67.65,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 0.803,
+          "ltp_start": 43.6,
+          "ltp_end": 43.95,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:25:45",
+      "ts_ms": 1782366945537,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 9,
+      "accel_count": 6,
+      "avg_vel_pct": 1.403,
+      "top_strike": 24350.0,
+      "spot": 24189.8,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.885,
+          "ltp_start": 47.75,
+          "ltp_end": 48.65,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.839,
+          "ltp_start": 35.35,
+          "ltp_end": 36.0,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.642,
+          "ltp_start": 63.95,
+          "ltp_end": 65.0,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.541,
+          "ltp_start": 84.35,
+          "ltp_end": 85.65,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.299,
+          "ltp_start": 169.3,
+          "ltp_end": 171.5,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.194,
+          "ltp_start": 108.9,
+          "ltp_end": 110.2,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000CE",
+          "strike": 24000.0,
+          "opt_type": "CE",
+          "vel_pct": 1.147,
+          "ltp_start": 244.15,
+          "ltp_end": 246.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050CE",
+          "strike": 24050.0,
+          "opt_type": "CE",
+          "vel_pct": 1.068,
+          "ltp_start": 205.9,
+          "ltp_end": 208.1,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:27:32",
+      "ts_ms": 1782367052641,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 4,
+      "avg_vel_pct": 0.986,
+      "top_strike": 24050.0,
+      "spot": 24191.5,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 1.203,
+          "ltp_start": 54.05,
+          "ltp_end": 54.7,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.086,
+          "ltp_start": 105.9,
+          "ltp_end": 107.05,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.027,
+          "ltp_start": 43.8,
+          "ltp_end": 44.25,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400PE",
+          "strike": 24400.0,
+          "opt_type": "PE",
+          "vel_pct": 0.928,
+          "ltp_start": 231.6,
+          "ltp_end": 233.75,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 0.849,
+          "ltp_start": 194.25,
+          "ltp_end": 195.9,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.824,
+          "ltp_start": 85.0,
+          "ltp_end": 85.7,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:29:58",
+      "ts_ms": 1782367198651,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 5,
+      "accel_count": 0,
+      "avg_vel_pct": 1.084,
+      "top_strike": 24400.0,
+      "spot": 24189.65,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.288,
+          "ltp_start": 34.95,
+          "ltp_end": 35.4,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.185,
+          "ltp_start": 63.3,
+          "ltp_end": 64.05,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.075,
+          "ltp_start": 83.7,
+          "ltp_end": 84.6,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 0.951,
+          "ltp_start": 47.3,
+          "ltp_end": 47.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 0.92,
+          "ltp_start": 108.65,
+          "ltp_end": 109.65,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:30:42",
+      "ts_ms": 1782367242573,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 8,
+      "accel_count": 7,
+      "avg_vel_pct": 1.15,
+      "top_strike": 24200.0,
+      "spot": 24185.9,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.402,
+          "ltp_start": 107.0,
+          "ltp_end": 108.5,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24000PE",
+          "strike": 24000.0,
+          "opt_type": "PE",
+          "vel_pct": 1.361,
+          "ltp_start": 44.1,
+          "ltp_end": 44.7,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.249,
+          "ltp_start": 68.05,
+          "ltp_end": 68.9,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 1.142,
+          "ltp_start": 197.0,
+          "ltp_end": 199.25,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN23950PE",
+          "strike": 23950.0,
+          "opt_type": "PE",
+          "vel_pct": 1.114,
+          "ltp_start": 35.9,
+          "ltp_end": 36.3,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 1.053,
+          "ltp_start": 133.0,
+          "ltp_end": 134.4,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.047,
+          "ltp_start": 85.95,
+          "ltp_end": 86.85,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24450PE",
+          "strike": 24450.0,
+          "opt_type": "PE",
+          "vel_pct": 0.833,
+          "ltp_start": 275.95,
+          "ltp_end": 278.25,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:31:18",
+      "ts_ms": 1782367278506,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 7,
+      "accel_count": 0,
+      "avg_vel_pct": 1.248,
+      "top_strike": 24250.0,
+      "spot": 24185.95,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.427,
+          "ltp_start": 80.6,
+          "ltp_end": 81.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 1.4,
+          "ltp_start": 60.7,
+          "ltp_end": 61.55,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.343,
+          "ltp_start": 33.5,
+          "ltp_end": 33.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.337,
+          "ltp_start": 164.5,
+          "ltp_end": 166.7,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.211,
+          "ltp_start": 45.4,
+          "ltp_end": 45.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.014,
+          "ltp_start": 133.15,
+          "ltp_end": 134.5,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.005,
+          "ltp_start": 104.5,
+          "ltp_end": 105.55,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:31:54",
+      "ts_ms": 1782367314417,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 0,
+      "avg_vel_pct": 0.832,
+      "top_strike": 24150.0,
+      "spot": 24184.1,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.862,
+          "ltp_start": 87.0,
+          "ltp_end": 87.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24450PE",
+          "strike": 24450.0,
+          "opt_type": "PE",
+          "vel_pct": 0.847,
+          "ltp_start": 277.55,
+          "ltp_end": 279.9,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.814,
+          "ltp_start": 55.3,
+          "ltp_end": 55.75,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24350PE",
+          "strike": 24350.0,
+          "opt_type": "PE",
+          "vel_pct": 0.805,
+          "ltp_start": 198.75,
+          "ltp_end": 200.35,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:32:53",
+      "ts_ms": 1782367373878,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 5,
+      "accel_count": 4,
+      "avg_vel_pct": 1.408,
+      "top_strike": 24250.0,
+      "spot": 24183.8,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.806,
+          "ltp_start": 80.3,
+          "ltp_end": 81.75,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150CE",
+          "strike": 24150.0,
+          "opt_type": "CE",
+          "vel_pct": 1.664,
+          "ltp_start": 132.2,
+          "ltp_end": 134.4,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100CE",
+          "strike": 24100.0,
+          "opt_type": "CE",
+          "vel_pct": 1.4,
+          "ltp_start": 164.25,
+          "ltp_end": 166.55,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.338,
+          "ltp_start": 104.6,
+          "ltp_end": 106.0,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 0.831,
+          "ltp_start": 60.2,
+          "ltp_end": 60.7,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:34:01",
+      "ts_ms": 1782367441232,
+      "side": "CE",
+      "strength": "STRONG",
+      "conv_count": 6,
+      "accel_count": 5,
+      "avg_vel_pct": 1.117,
+      "top_strike": 24350.0,
+      "spot": 24187.65,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24350CE",
+          "strike": 24350.0,
+          "opt_type": "CE",
+          "vel_pct": 1.429,
+          "ltp_start": 45.5,
+          "ltp_end": 46.15,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24400CE",
+          "strike": 24400.0,
+          "opt_type": "CE",
+          "vel_pct": 1.192,
+          "ltp_start": 33.55,
+          "ltp_end": 33.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200CE",
+          "strike": 24200.0,
+          "opt_type": "CE",
+          "vel_pct": 1.14,
+          "ltp_start": 105.3,
+          "ltp_end": 106.5,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250CE",
+          "strike": 24250.0,
+          "opt_type": "CE",
+          "vel_pct": 1.046,
+          "ltp_start": 81.3,
+          "ltp_end": 82.15,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24300CE",
+          "strike": 24300.0,
+          "opt_type": "CE",
+          "vel_pct": 0.98,
+          "ltp_start": 61.25,
+          "ltp_end": 61.85,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050CE",
+          "strike": 24050.0,
+          "opt_type": "CE",
+          "vel_pct": 0.916,
+          "ltp_start": 201.9,
+          "ltp_end": 203.75,
+          "accelerating": true
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:35:16",
+      "ts_ms": 1782367516703,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 3,
+      "avg_vel_pct": 1.002,
+      "top_strike": 24200.0,
+      "spot": 24188.25,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 1.164,
+          "ltp_start": 107.35,
+          "ltp_end": 108.6,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 1.098,
+          "ltp_start": 68.3,
+          "ltp_end": 69.05,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 0.93,
+          "ltp_start": 86.0,
+          "ltp_end": 86.8,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24050PE",
+          "strike": 24050.0,
+          "opt_type": "PE",
+          "vel_pct": 0.817,
+          "ltp_start": 55.05,
+          "ltp_end": 55.5,
+          "accelerating": false
+        }
+      ]
+    },
+    {
+      "time": "2026-06-25 11:36:40",
+      "ts_ms": 1782367600057,
+      "side": "PE",
+      "strength": "STRONG",
+      "conv_count": 4,
+      "accel_count": 2,
+      "avg_vel_pct": 0.954,
+      "top_strike": 24150.0,
+      "spot": 24189.0,
+      "oi_bias": "NEUTRAL",
+      "vel_thresh": 0.8,
+      "scan_secs": 5,
+      "hits": [
+        {
+          "sym": "NSE_NIFTY26JUN24150PE",
+          "strike": 24150.0,
+          "opt_type": "PE",
+          "vel_pct": 1.1,
+          "ltp_start": 86.35,
+          "ltp_end": 87.3,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24250PE",
+          "strike": 24250.0,
+          "opt_type": "PE",
+          "vel_pct": 1.01,
+          "ltp_start": 133.6,
+          "ltp_end": 134.95,
+          "accelerating": false
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24100PE",
+          "strike": 24100.0,
+          "opt_type": "PE",
+          "vel_pct": 0.873,
+          "ltp_start": 68.7,
+          "ltp_end": 69.3,
+          "accelerating": true
+        },
+        {
+          "sym": "NSE_NIFTY26JUN24200PE",
+          "strike": 24200.0,
+          "opt_type": "PE",
+          "vel_pct": 0.834,
+          "ltp_start": 107.95,
+          "ltp_end": 108.85,
+          "accelerating": true
+        }
+      ]
+    }
+  ]
+}

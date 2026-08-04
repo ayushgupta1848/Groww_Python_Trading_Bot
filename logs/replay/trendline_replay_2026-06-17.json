@@ -1,0 +1,2434 @@
+[
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323850CE",
+    "strike": 23850,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 286.4,
+    "exit_time": "11:45",
+    "exit_price": 290.7,
+    "exit_reason": "TRAIL_SL",
+    "pts": 4.3,
+    "pnl_1lot": 322.5,
+    "pnl_18lots": 5805.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323850CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 286.2,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 272.15
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 281.2
+      },
+      "trendline_support": 284.68,
+      "how_to_verify": "1. Open NIFTY2662323850CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9286.2\n3. Draw trendline through lows: [10:05]\u20b9272.1 \u2192 [11:10]\u20b9281.2\n4. At 11:35 the projected trendline = \u20b9284.7\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900CE",
+    "strike": 23900,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 252.55,
+    "exit_time": "11:45",
+    "exit_price": 255.9,
+    "exit_reason": "TRAIL_SL",
+    "pts": 3.35,
+    "pnl_1lot": 251.25,
+    "pnl_18lots": 4522.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 252.0,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 239.25
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 247.3
+      },
+      "trendline_support": 250.4,
+      "how_to_verify": "1. Open NIFTY2662323900CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9252.0\n3. Draw trendline through lows: [10:05]\u20b9239.2 \u2192 [11:10]\u20b9247.3\n4. At 11:35 the projected trendline = \u20b9250.4\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950CE",
+    "strike": 23950,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 221.15,
+    "exit_time": "11:45",
+    "exit_price": 223.75,
+    "exit_reason": "TRAIL_SL",
+    "pts": 2.6,
+    "pnl_1lot": 195.0,
+    "pnl_18lots": 3510.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 220.6,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 208.8
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 216.2
+      },
+      "trendline_support": 219.05,
+      "how_to_verify": "1. Open NIFTY2662323950CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9220.6\n3. Draw trendline through lows: [10:05]\u20b9208.8 \u2192 [11:10]\u20b9216.2\n4. At 11:35 the projected trendline = \u20b9219.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000CE",
+    "strike": 24000,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 191.85,
+    "exit_time": "11:45",
+    "exit_price": 193.75,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.9,
+    "pnl_1lot": 142.5,
+    "pnl_18lots": 2565.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 191.65,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 180.75
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 187.3
+      },
+      "trendline_support": 189.82,
+      "how_to_verify": "1. Open NIFTY2662324000CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9191.7\n3. Draw trendline through lows: [10:05]\u20b9180.8 \u2192 [11:10]\u20b9187.3\n4. At 11:35 the projected trendline = \u20b9189.8\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050CE",
+    "strike": 24050,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 166.0,
+    "exit_time": "11:50",
+    "exit_price": 160.58,
+    "exit_reason": "SL",
+    "pts": -5.42,
+    "pnl_1lot": -406.5,
+    "pnl_18lots": -7317.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 164.65,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 155.2
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 161.25
+      },
+      "trendline_support": 163.58,
+      "how_to_verify": "1. Open NIFTY2662324050CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9164.7\n3. Draw trendline through lows: [10:05]\u20b9155.2 \u2192 [11:10]\u20b9161.2\n4. At 11:35 the projected trendline = \u20b9163.6\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324100CE",
+    "strike": 24100,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 141.5,
+    "exit_time": "11:55",
+    "exit_price": 136.84,
+    "exit_reason": "SL",
+    "pts": -4.66,
+    "pnl_1lot": -349.5,
+    "pnl_18lots": -6291.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324100CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 140.5,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 131.6
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 137.55
+      },
+      "trendline_support": 139.84,
+      "how_to_verify": "1. Open NIFTY2662324100CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9140.5\n3. Draw trendline through lows: [10:05]\u20b9131.6 \u2192 [11:10]\u20b9137.6\n4. At 11:35 the projected trendline = \u20b9139.8\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150CE",
+    "strike": 24150,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:40",
+    "entry_price": 118.75,
+    "exit_time": "11:55",
+    "exit_price": 114.94,
+    "exit_reason": "SL",
+    "pts": -3.81,
+    "pnl_1lot": -285.75,
+    "pnl_18lots": -5143.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150CE",
+      "signal_candle": "11:35",
+      "signal_candle_close": 118.35,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 110.95
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 116.0
+      },
+      "trendline_support": 117.94,
+      "how_to_verify": "1. Open NIFTY2662324150CE on Groww chart (5-min candles)\n2. Find candle at 11:35 \u2192 close should be \u20b9118.3\n3. Draw trendline through lows: [10:05]\u20b9111.0 \u2192 [11:10]\u20b9116.0\n4. At 11:35 the projected trendline = \u20b9117.9\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324200CE",
+    "strike": 24200,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:30",
+    "entry_price": 103.85,
+    "exit_time": "11:55",
+    "exit_price": 95.07,
+    "exit_reason": "SL",
+    "pts": -8.78,
+    "pnl_1lot": -658.5,
+    "pnl_18lots": -11853.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324200CE",
+      "signal_candle": "11:25",
+      "signal_candle_close": 103.2,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 92.35
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 97.0
+      },
+      "trendline_support": 98.07,
+      "how_to_verify": "1. Open NIFTY2662324200CE on Groww chart (5-min candles)\n2. Find candle at 11:25 \u2192 close should be \u20b9103.2\n3. Draw trendline through lows: [10:05]\u20b992.3 \u2192 [11:10]\u20b997.0\n4. At 11:25 the projected trendline = \u20b998.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324250CE",
+    "strike": 24250,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:30",
+    "entry_price": 86.5,
+    "exit_time": "11:55",
+    "exit_price": 78.6,
+    "exit_reason": "SL",
+    "pts": -7.9,
+    "pnl_1lot": -592.5,
+    "pnl_18lots": -10665.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324250CE",
+      "signal_candle": "11:25",
+      "signal_candle_close": 85.8,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 76.25
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 80.6
+      },
+      "trendline_support": 81.6,
+      "how_to_verify": "1. Open NIFTY2662324250CE on Groww chart (5-min candles)\n2. Find candle at 11:25 \u2192 close should be \u20b985.8\n3. Draw trendline through lows: [10:05]\u20b976.2 \u2192 [11:10]\u20b980.6\n4. At 11:25 the projected trendline = \u20b981.6\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324300CE",
+    "strike": 24300,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:30",
+    "entry_price": 71.45,
+    "exit_time": "11:55",
+    "exit_price": 64.36,
+    "exit_reason": "SL",
+    "pts": -7.09,
+    "pnl_1lot": -531.75,
+    "pnl_18lots": -9571.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324300CE",
+      "signal_candle": "11:25",
+      "signal_candle_close": 70.75,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 63.05
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 66.55
+      },
+      "trendline_support": 67.36,
+      "how_to_verify": "1. Open NIFTY2662324300CE on Groww chart (5-min candles)\n2. Find candle at 11:25 \u2192 close should be \u20b970.8\n3. Draw trendline through lows: [10:05]\u20b963.0 \u2192 [11:10]\u20b966.5\n4. At 11:25 the projected trendline = \u20b967.4\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324350CE",
+    "strike": 24350,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "11:30",
+    "entry_price": 58.45,
+    "exit_time": "11:55",
+    "exit_price": 52.15,
+    "exit_reason": "SL",
+    "pts": -6.3,
+    "pnl_1lot": -472.5,
+    "pnl_18lots": -8505.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324350CE",
+      "signal_candle": "11:25",
+      "signal_candle_close": 58.0,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 51.4
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 54.45
+      },
+      "trendline_support": 55.15,
+      "how_to_verify": "1. Open NIFTY2662324350CE on Groww chart (5-min candles)\n2. Find candle at 11:25 \u2192 close should be \u20b958.0\n3. Draw trendline through lows: [10:05]\u20b951.4 \u2192 [11:10]\u20b954.5\n4. At 11:25 the projected trendline = \u20b955.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900PE",
+    "strike": 23900,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "11:55",
+    "entry_price": 100.4,
+    "exit_time": "12:00",
+    "exit_price": 101.95,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.55,
+    "pnl_1lot": 116.25,
+    "pnl_18lots": 2092.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900PE",
+      "signal_candle": "11:50",
+      "signal_candle_close": 247.3,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 239.25
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 247.3
+      },
+      "trendline_support": 252.25,
+      "how_to_verify": "1. Open NIFTY2662323900PE on Groww chart (5-min candles)\n2. Find candle at 11:50 \u2192 close should be \u20b9247.3\n3. Draw trendline through lows: [10:05]\u20b9239.2 \u2192 [11:10]\u20b9247.3\n4. At 11:50 the projected trendline = \u20b9252.2\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950PE",
+    "strike": 23950,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "11:55",
+    "entry_price": 119.45,
+    "exit_time": "12:00",
+    "exit_price": 121.75,
+    "exit_reason": "TRAIL_SL",
+    "pts": 2.3,
+    "pnl_1lot": 172.5,
+    "pnl_18lots": 3105.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950PE",
+      "signal_candle": "11:50",
+      "signal_candle_close": 215.65,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 208.8
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 216.2
+      },
+      "trendline_support": 220.75,
+      "how_to_verify": "1. Open NIFTY2662323950PE on Groww chart (5-min candles)\n2. Find candle at 11:50 \u2192 close should be \u20b9215.7\n3. Draw trendline through lows: [10:05]\u20b9208.8 \u2192 [11:10]\u20b9216.2\n4. At 11:50 the projected trendline = \u20b9220.8\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "11:55",
+    "entry_price": 139.95,
+    "exit_time": "12:00",
+    "exit_price": 143.85,
+    "exit_reason": "TRAIL_SL",
+    "pts": 3.9,
+    "pnl_1lot": 292.5,
+    "pnl_18lots": 5265.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "11:50",
+      "signal_candle_close": 186.85,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 180.75
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 187.3
+      },
+      "trendline_support": 191.33,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 11:50 \u2192 close should be \u20b9186.8\n3. Draw trendline through lows: [10:05]\u20b9180.8 \u2192 [11:10]\u20b9187.3\n4. At 11:50 the projected trendline = \u20b9191.3\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050PE",
+    "strike": 24050,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "11:55",
+    "entry_price": 163.55,
+    "exit_time": "12:00",
+    "exit_price": 168.25,
+    "exit_reason": "TRAIL_SL",
+    "pts": 4.7,
+    "pnl_1lot": 352.5,
+    "pnl_18lots": 6345.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050PE",
+      "signal_candle": "11:50",
+      "signal_candle_close": 160.8,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 155.2
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 161.25
+      },
+      "trendline_support": 164.97,
+      "how_to_verify": "1. Open NIFTY2662324050PE on Groww chart (5-min candles)\n2. Find candle at 11:50 \u2192 close should be \u20b9160.8\n3. Draw trendline through lows: [10:05]\u20b9155.2 \u2192 [11:10]\u20b9161.2\n4. At 11:50 the projected trendline = \u20b9165.0\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324100PE",
+    "strike": 24100,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:00",
+    "entry_price": 195.8,
+    "exit_time": "12:05",
+    "exit_price": 190.8,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324100PE",
+      "signal_candle": "11:55",
+      "signal_candle_close": 131.5,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 131.6
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 137.55
+      },
+      "trendline_support": 141.67,
+      "how_to_verify": "1. Open NIFTY2662324100PE on Groww chart (5-min candles)\n2. Find candle at 11:55 \u2192 close should be \u20b9131.5\n3. Draw trendline through lows: [10:05]\u20b9131.6 \u2192 [11:10]\u20b9137.6\n4. At 11:55 the projected trendline = \u20b9141.7\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150PE",
+    "strike": 24150,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:00",
+    "entry_price": 225.05,
+    "exit_time": "12:05",
+    "exit_price": 220.05,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150PE",
+      "signal_candle": "11:55",
+      "signal_candle_close": 110.75,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 110.95
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 116.0
+      },
+      "trendline_support": 119.5,
+      "how_to_verify": "1. Open NIFTY2662324150PE on Groww chart (5-min candles)\n2. Find candle at 11:55 \u2192 close should be \u20b9110.8\n3. Draw trendline through lows: [10:05]\u20b9111.0 \u2192 [11:10]\u20b9116.0\n4. At 11:55 the projected trendline = \u20b9119.5\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324200PE",
+    "strike": 24200,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:00",
+    "entry_price": 256.9,
+    "exit_time": "12:05",
+    "exit_price": 251.9,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324200PE",
+      "signal_candle": "11:55",
+      "signal_candle_close": 92.45,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 92.35
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 97.0
+      },
+      "trendline_support": 100.22,
+      "how_to_verify": "1. Open NIFTY2662324200PE on Groww chart (5-min candles)\n2. Find candle at 11:55 \u2192 close should be \u20b992.5\n3. Draw trendline through lows: [10:05]\u20b992.3 \u2192 [11:10]\u20b997.0\n4. At 11:55 the projected trendline = \u20b9100.2\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324250PE",
+    "strike": 24250,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:00",
+    "entry_price": 290.75,
+    "exit_time": "12:05",
+    "exit_price": 285.75,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324250PE",
+      "signal_candle": "11:55",
+      "signal_candle_close": 76.85,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 76.25
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 80.6
+      },
+      "trendline_support": 83.61,
+      "how_to_verify": "1. Open NIFTY2662324250PE on Groww chart (5-min candles)\n2. Find candle at 11:55 \u2192 close should be \u20b976.8\n3. Draw trendline through lows: [10:05]\u20b976.2 \u2192 [11:10]\u20b980.6\n4. At 11:55 the projected trendline = \u20b983.6\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324300PE",
+    "strike": 24300,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:00",
+    "entry_price": 327.8,
+    "exit_time": "12:05",
+    "exit_price": 322.8,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324300PE",
+      "signal_candle": "11:55",
+      "signal_candle_close": 63.35,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 63.05
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 66.55
+      },
+      "trendline_support": 68.97,
+      "how_to_verify": "1. Open NIFTY2662324300PE on Groww chart (5-min candles)\n2. Find candle at 11:55 \u2192 close should be \u20b963.4\n3. Draw trendline through lows: [10:05]\u20b963.0 \u2192 [11:10]\u20b966.5\n4. At 11:55 the projected trendline = \u20b969.0\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324350PE",
+    "strike": 24350,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:00",
+    "entry_price": 365.5,
+    "exit_time": "12:05",
+    "exit_price": 360.5,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324350PE",
+      "signal_candle": "11:55",
+      "signal_candle_close": 51.75,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 51.4
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 54.45
+      },
+      "trendline_support": 56.56,
+      "how_to_verify": "1. Open NIFTY2662324350PE on Groww chart (5-min candles)\n2. Find candle at 11:55 \u2192 close should be \u20b951.8\n3. Draw trendline through lows: [10:05]\u20b951.4 \u2192 [11:10]\u20b954.5\n4. At 11:55 the projected trendline = \u20b956.6\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050PE",
+    "strike": 24050,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:05",
+    "entry_price": 164.2,
+    "exit_time": "12:10",
+    "exit_price": 165.65,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.45,
+    "pnl_1lot": 108.75,
+    "pnl_18lots": 1957.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050PE",
+      "signal_candle": "12:00",
+      "signal_candle_close": 159.6,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 155.2
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 161.25
+      },
+      "trendline_support": 165.9,
+      "how_to_verify": "1. Open NIFTY2662324050PE on Groww chart (5-min candles)\n2. Find candle at 12:00 \u2192 close should be \u20b9159.6\n3. Draw trendline through lows: [10:05]\u20b9155.2 \u2192 [11:10]\u20b9161.2\n4. At 12:00 the projected trendline = \u20b9165.9\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900PE",
+    "strike": 23900,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:05",
+    "entry_price": 100.2,
+    "exit_time": "12:15",
+    "exit_price": 101.4,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.2,
+    "pnl_1lot": 90.0,
+    "pnl_18lots": 1620.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900PE",
+      "signal_candle": "12:00",
+      "signal_candle_close": 244.75,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 239.25
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 247.3
+      },
+      "trendline_support": 253.49,
+      "how_to_verify": "1. Open NIFTY2662323900PE on Groww chart (5-min candles)\n2. Find candle at 12:00 \u2192 close should be \u20b9244.8\n3. Draw trendline through lows: [10:05]\u20b9239.2 \u2192 [11:10]\u20b9247.3\n4. At 12:00 the projected trendline = \u20b9253.5\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950PE",
+    "strike": 23950,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:05",
+    "entry_price": 119.4,
+    "exit_time": "12:15",
+    "exit_price": 121.35,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.95,
+    "pnl_1lot": 146.25,
+    "pnl_18lots": 2632.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950PE",
+      "signal_candle": "12:00",
+      "signal_candle_close": 213.85,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 208.8
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 216.2
+      },
+      "trendline_support": 221.89,
+      "how_to_verify": "1. Open NIFTY2662323950PE on Groww chart (5-min candles)\n2. Find candle at 12:00 \u2192 close should be \u20b9213.8\n3. Draw trendline through lows: [10:05]\u20b9208.8 \u2192 [11:10]\u20b9216.2\n4. At 12:00 the projected trendline = \u20b9221.9\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:05",
+    "entry_price": 140.8,
+    "exit_time": "12:15",
+    "exit_price": 143.25,
+    "exit_reason": "TRAIL_SL",
+    "pts": 2.45,
+    "pnl_1lot": 183.75,
+    "pnl_18lots": 3307.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "12:00",
+      "signal_candle_close": 185.5,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 180.75
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 187.3
+      },
+      "trendline_support": 192.34,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 12:00 \u2192 close should be \u20b9185.5\n3. Draw trendline through lows: [10:05]\u20b9180.8 \u2192 [11:10]\u20b9187.3\n4. At 12:00 the projected trendline = \u20b9192.3\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324100PE",
+    "strike": 24100,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:10",
+    "entry_price": 192.1,
+    "exit_time": "12:15",
+    "exit_price": 195.45,
+    "exit_reason": "TRAIL_SL",
+    "pts": 3.35,
+    "pnl_1lot": 251.25,
+    "pnl_18lots": 4522.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324100PE",
+      "signal_candle": "12:05",
+      "signal_candle_close": 135.0,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 131.6
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 137.55
+      },
+      "trendline_support": 142.58,
+      "how_to_verify": "1. Open NIFTY2662324100PE on Groww chart (5-min candles)\n2. Find candle at 12:05 \u2192 close should be \u20b9135.0\n3. Draw trendline through lows: [10:05]\u20b9131.6 \u2192 [11:10]\u20b9137.6\n4. At 12:05 the projected trendline = \u20b9142.6\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150PE",
+    "strike": 24150,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:10",
+    "entry_price": 221.15,
+    "exit_time": "12:15",
+    "exit_price": 224.85,
+    "exit_reason": "TRAIL_SL",
+    "pts": 3.7,
+    "pnl_1lot": 277.5,
+    "pnl_18lots": 4995.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150PE",
+      "signal_candle": "12:05",
+      "signal_candle_close": 113.75,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 110.95
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 116.0
+      },
+      "trendline_support": 120.27,
+      "how_to_verify": "1. Open NIFTY2662324150PE on Groww chart (5-min candles)\n2. Find candle at 12:05 \u2192 close should be \u20b9113.8\n3. Draw trendline through lows: [10:05]\u20b9111.0 \u2192 [11:10]\u20b9116.0\n4. At 12:05 the projected trendline = \u20b9120.3\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324200PE",
+    "strike": 24200,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:10",
+    "entry_price": 252.35,
+    "exit_time": "12:15",
+    "exit_price": 256.7,
+    "exit_reason": "TRAIL_SL",
+    "pts": 4.35,
+    "pnl_1lot": 326.25,
+    "pnl_18lots": 5872.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324200PE",
+      "signal_candle": "12:05",
+      "signal_candle_close": 95.35,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 92.35
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 97.0
+      },
+      "trendline_support": 100.93,
+      "how_to_verify": "1. Open NIFTY2662324200PE on Groww chart (5-min candles)\n2. Find candle at 12:05 \u2192 close should be \u20b995.3\n3. Draw trendline through lows: [10:05]\u20b992.3 \u2192 [11:10]\u20b997.0\n4. At 12:05 the projected trendline = \u20b9100.9\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324250PE",
+    "strike": 24250,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:10",
+    "entry_price": 286.3,
+    "exit_time": "12:15",
+    "exit_price": 291.0,
+    "exit_reason": "TRAIL_SL",
+    "pts": 4.7,
+    "pnl_1lot": 352.5,
+    "pnl_18lots": 6345.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324250PE",
+      "signal_candle": "12:05",
+      "signal_candle_close": 79.15,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 76.25
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 80.6
+      },
+      "trendline_support": 84.28,
+      "how_to_verify": "1. Open NIFTY2662324250PE on Groww chart (5-min candles)\n2. Find candle at 12:05 \u2192 close should be \u20b979.2\n3. Draw trendline through lows: [10:05]\u20b976.2 \u2192 [11:10]\u20b980.6\n4. At 12:05 the projected trendline = \u20b984.3\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324300PE",
+    "strike": 24300,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:10",
+    "entry_price": 322.65,
+    "exit_time": "12:15",
+    "exit_price": 327.05,
+    "exit_reason": "TRAIL_SL",
+    "pts": 4.4,
+    "pnl_1lot": 330.0,
+    "pnl_18lots": 5940.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324300PE",
+      "signal_candle": "12:05",
+      "signal_candle_close": 65.3,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 63.05
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 66.55
+      },
+      "trendline_support": 69.51,
+      "how_to_verify": "1. Open NIFTY2662324300PE on Groww chart (5-min candles)\n2. Find candle at 12:05 \u2192 close should be \u20b965.3\n3. Draw trendline through lows: [10:05]\u20b963.0 \u2192 [11:10]\u20b966.5\n4. At 12:05 the projected trendline = \u20b969.5\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324350PE",
+    "strike": 24350,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:10",
+    "entry_price": 358.05,
+    "exit_time": "12:15",
+    "exit_price": 366.2,
+    "exit_reason": "TRAIL_SL",
+    "pts": 8.15,
+    "pnl_1lot": 611.25,
+    "pnl_18lots": 11002.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324350PE",
+      "signal_candle": "12:05",
+      "signal_candle_close": 53.5,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 51.4
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 54.45
+      },
+      "trendline_support": 57.03,
+      "how_to_verify": "1. Open NIFTY2662324350PE on Groww chart (5-min candles)\n2. Find candle at 12:05 \u2192 close should be \u20b953.5\n3. Draw trendline through lows: [10:05]\u20b951.4 \u2192 [11:10]\u20b954.5\n4. At 12:05 the projected trendline = \u20b957.0\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050PE",
+    "strike": 24050,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "12:15",
+    "entry_price": 167.85,
+    "exit_time": "12:20",
+    "exit_price": 168.85,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.0,
+    "pnl_1lot": 75.0,
+    "pnl_18lots": 1350.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050PE",
+      "signal_candle": "12:10",
+      "signal_candle_close": 155.3,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 155.2
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 161.25
+      },
+      "trendline_support": 166.83,
+      "how_to_verify": "1. Open NIFTY2662324050PE on Groww chart (5-min candles)\n2. Find candle at 12:10 \u2192 close should be \u20b9155.3\n3. Draw trendline through lows: [10:05]\u20b9155.2 \u2192 [11:10]\u20b9161.2\n4. At 12:10 the projected trendline = \u20b9166.8\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323850PE",
+    "strike": 23850,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "11:55",
+    "entry_price": 84.2,
+    "exit_time": "12:25",
+    "exit_price": 86.0,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.8,
+    "pnl_1lot": 135.0,
+    "pnl_18lots": 2430.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323850PE",
+      "signal_candle": "11:50",
+      "signal_candle_close": 281.05,
+      "trendline_pivot1": {
+        "time": "10:05",
+        "price": 272.15
+      },
+      "trendline_pivot2": {
+        "time": "11:10",
+        "price": 281.2
+      },
+      "trendline_support": 286.77,
+      "how_to_verify": "1. Open NIFTY2662323850PE on Groww chart (5-min candles)\n2. Find candle at 11:50 \u2192 close should be \u20b9281.1\n3. Draw trendline through lows: [10:05]\u20b9272.1 \u2192 [11:10]\u20b9281.2\n4. At 11:50 the projected trendline = \u20b9286.8\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900PE",
+    "strike": 23900,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 104.05,
+    "exit_time": "12:40",
+    "exit_price": 105.5,
+    "exit_reason": "TARGET",
+    "pts": 1.45,
+    "pnl_1lot": 108.75,
+    "pnl_18lots": 1957.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 103.5,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 88.85
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 98.0
+      },
+      "trendline_support": 101.05,
+      "how_to_verify": "1. Open NIFTY2662323900PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9103.5\n3. Draw trendline through lows: [11:30]\u20b988.8 \u2192 [12:15]\u20b998.0\n4. At 12:30 the projected trendline = \u20b9101.0\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950PE",
+    "strike": 23950,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 123.75,
+    "exit_time": "12:40",
+    "exit_price": 124.85,
+    "exit_reason": "TARGET",
+    "pts": 1.1,
+    "pnl_1lot": 82.5,
+    "pnl_18lots": 1485.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 123.1,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 105.7
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 116.55
+      },
+      "trendline_support": 120.17,
+      "how_to_verify": "1. Open NIFTY2662323950PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9123.1\n3. Draw trendline through lows: [11:30]\u20b9105.7 \u2192 [12:15]\u20b9116.5\n4. At 12:30 the projected trendline = \u20b9120.2\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 145.95,
+    "exit_time": "12:40",
+    "exit_price": 146.5,
+    "exit_reason": "TARGET",
+    "pts": 0.55,
+    "pnl_1lot": 41.25,
+    "pnl_18lots": 742.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 145.4,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 124.75
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 137.45
+      },
+      "trendline_support": 141.68,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9145.4\n3. Draw trendline through lows: [11:30]\u20b9124.8 \u2192 [12:15]\u20b9137.4\n4. At 12:30 the projected trendline = \u20b9141.7\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324300PE",
+    "strike": 24300,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 330.5,
+    "exit_time": "12:40",
+    "exit_price": 321.82,
+    "exit_reason": "SL",
+    "pts": -8.68,
+    "pnl_1lot": -651.0,
+    "pnl_18lots": -11718.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324300PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 329.7,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 290.75
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 316.3
+      },
+      "trendline_support": 324.82,
+      "how_to_verify": "1. Open NIFTY2662324300PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9329.7\n3. Draw trendline through lows: [11:30]\u20b9290.8 \u2192 [12:15]\u20b9316.3\n4. At 12:30 the projected trendline = \u20b9324.8\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323850PE",
+    "strike": 23850,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 86.9,
+    "exit_time": "12:45",
+    "exit_price": 81.15,
+    "exit_reason": "SL",
+    "pts": -5.75,
+    "pnl_1lot": -431.25,
+    "pnl_18lots": -7762.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323850PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 86.2,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 74.55
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 81.75
+      },
+      "trendline_support": 84.15,
+      "how_to_verify": "1. Open NIFTY2662323850PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b986.2\n3. Draw trendline through lows: [11:30]\u20b974.5 \u2192 [12:15]\u20b981.8\n4. At 12:30 the projected trendline = \u20b984.2\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050PE",
+    "strike": 24050,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 170.6,
+    "exit_time": "12:45",
+    "exit_price": 162.77,
+    "exit_reason": "SL",
+    "pts": -7.83,
+    "pnl_1lot": -587.25,
+    "pnl_18lots": -10570.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 169.8,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 145.9
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 160.8
+      },
+      "trendline_support": 165.77,
+      "how_to_verify": "1. Open NIFTY2662324050PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9169.8\n3. Draw trendline through lows: [11:30]\u20b9145.9 \u2192 [12:15]\u20b9160.8\n4. At 12:30 the projected trendline = \u20b9165.8\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324100PE",
+    "strike": 24100,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 197.5,
+    "exit_time": "12:45",
+    "exit_price": 190.18,
+    "exit_reason": "SL",
+    "pts": -7.32,
+    "pnl_1lot": -549.0,
+    "pnl_18lots": -9882.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324100PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 197.2,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 170.05
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 187.4
+      },
+      "trendline_support": 193.18,
+      "how_to_verify": "1. Open NIFTY2662324100PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9197.2\n3. Draw trendline through lows: [11:30]\u20b9170.1 \u2192 [12:15]\u20b9187.4\n4. At 12:30 the projected trendline = \u20b9193.2\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150PE",
+    "strike": 24150,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 227.55,
+    "exit_time": "12:45",
+    "exit_price": 219.17,
+    "exit_reason": "SL",
+    "pts": -8.38,
+    "pnl_1lot": -628.5,
+    "pnl_18lots": -11313.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 226.4,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 196.5
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 215.75
+      },
+      "trendline_support": 222.17,
+      "how_to_verify": "1. Open NIFTY2662324150PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9226.4\n3. Draw trendline through lows: [11:30]\u20b9196.5 \u2192 [12:15]\u20b9215.8\n4. At 12:30 the projected trendline = \u20b9222.2\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324200PE",
+    "strike": 24200,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:35",
+    "entry_price": 258.8,
+    "exit_time": "12:45",
+    "exit_price": 251.17,
+    "exit_reason": "SL",
+    "pts": -7.63,
+    "pnl_1lot": -572.25,
+    "pnl_18lots": -10300.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324200PE",
+      "signal_candle": "12:30",
+      "signal_candle_close": 258.85,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 225.7
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 247.05
+      },
+      "trendline_support": 254.17,
+      "how_to_verify": "1. Open NIFTY2662324200PE on Groww chart (5-min candles)\n2. Find candle at 12:30 \u2192 close should be \u20b9258.9\n3. Draw trendline through lows: [11:30]\u20b9225.7 \u2192 [12:15]\u20b9247.1\n4. At 12:30 the projected trendline = \u20b9254.2\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900CE",
+    "strike": 23900,
+    "opt_type": "CE",
+    "signal": "BREAK",
+    "entry_time": "12:50",
+    "entry_price": 237.6,
+    "exit_time": "12:55",
+    "exit_price": 232.6,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900CE",
+      "signal_candle": "12:45",
+      "signal_candle_close": 100.4,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 88.85
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 98.0
+      },
+      "trendline_support": 104.1,
+      "how_to_verify": "1. Open NIFTY2662323900CE on Groww chart (5-min candles)\n2. Find candle at 12:45 \u2192 close should be \u20b9100.4\n3. Draw trendline through lows: [11:30]\u20b988.8 \u2192 [12:15]\u20b998.0\n4. At 12:45 the projected trendline = \u20b9104.1\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950CE",
+    "strike": 23950,
+    "opt_type": "CE",
+    "signal": "BREAK",
+    "entry_time": "12:50",
+    "entry_price": 207.35,
+    "exit_time": "12:55",
+    "exit_price": 202.35,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950CE",
+      "signal_candle": "12:45",
+      "signal_candle_close": 120.15,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 105.7
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 116.55
+      },
+      "trendline_support": 123.78,
+      "how_to_verify": "1. Open NIFTY2662323950CE on Groww chart (5-min candles)\n2. Find candle at 12:45 \u2192 close should be \u20b9120.2\n3. Draw trendline through lows: [11:30]\u20b9105.7 \u2192 [12:15]\u20b9116.5\n4. At 12:45 the projected trendline = \u20b9123.8\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000CE",
+    "strike": 24000,
+    "opt_type": "CE",
+    "signal": "BREAK",
+    "entry_time": "12:50",
+    "entry_price": 179.2,
+    "exit_time": "12:55",
+    "exit_price": 174.2,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000CE",
+      "signal_candle": "12:45",
+      "signal_candle_close": 141.9,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 124.75
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 137.45
+      },
+      "trendline_support": 145.92,
+      "how_to_verify": "1. Open NIFTY2662324000CE on Groww chart (5-min candles)\n2. Find candle at 12:45 \u2192 close should be \u20b9141.9\n3. Draw trendline through lows: [11:30]\u20b9124.8 \u2192 [12:15]\u20b9137.4\n4. At 12:45 the projected trendline = \u20b9145.9\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050CE",
+    "strike": 24050,
+    "opt_type": "CE",
+    "signal": "BREAK",
+    "entry_time": "12:50",
+    "entry_price": 153.7,
+    "exit_time": "12:55",
+    "exit_price": 148.7,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050CE",
+      "signal_candle": "12:45",
+      "signal_candle_close": 165.95,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 145.9
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 160.8
+      },
+      "trendline_support": 170.73,
+      "how_to_verify": "1. Open NIFTY2662324050CE on Groww chart (5-min candles)\n2. Find candle at 12:45 \u2192 close should be \u20b9165.9\n3. Draw trendline through lows: [11:30]\u20b9145.9 \u2192 [12:15]\u20b9160.8\n4. At 12:45 the projected trendline = \u20b9170.7\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324250CE",
+    "strike": 24250,
+    "opt_type": "CE",
+    "signal": "BREAK",
+    "entry_time": "12:45",
+    "entry_price": 77.3,
+    "exit_time": "12:55",
+    "exit_price": 72.3,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324250CE",
+      "signal_candle": "12:40",
+      "signal_candle_close": 289.25,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 256.95
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 280.2
+      },
+      "trendline_support": 293.12,
+      "how_to_verify": "1. Open NIFTY2662324250CE on Groww chart (5-min candles)\n2. Find candle at 12:40 \u2192 close should be \u20b9289.2\n3. Draw trendline through lows: [11:30]\u20b9256.9 \u2192 [12:15]\u20b9280.2\n4. At 12:40 the projected trendline = \u20b9293.1\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324300CE",
+    "strike": 24300,
+    "opt_type": "CE",
+    "signal": "BREAK",
+    "entry_time": "12:45",
+    "entry_price": 63.85,
+    "exit_time": "12:55",
+    "exit_price": 58.85,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324300CE",
+      "signal_candle": "12:40",
+      "signal_candle_close": 325.55,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 290.75
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 316.3
+      },
+      "trendline_support": 330.49,
+      "how_to_verify": "1. Open NIFTY2662324300CE on Groww chart (5-min candles)\n2. Find candle at 12:40 \u2192 close should be \u20b9325.6\n3. Draw trendline through lows: [11:30]\u20b9290.8 \u2192 [12:15]\u20b9316.3\n4. At 12:40 the projected trendline = \u20b9330.5\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323850PE",
+    "strike": 23850,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 88.35,
+    "exit_time": "13:00",
+    "exit_price": 88.5,
+    "exit_reason": "TARGET",
+    "pts": 0.15,
+    "pnl_1lot": 11.25,
+    "pnl_18lots": 202.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323850PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 87.8,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 74.55
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 81.75
+      },
+      "trendline_support": 87.35,
+      "how_to_verify": "1. Open NIFTY2662323850PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b987.8\n3. Draw trendline through lows: [11:30]\u20b974.5 \u2192 [12:15]\u20b981.8\n4. At 12:50 the projected trendline = \u20b987.3\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900PE",
+    "strike": 23900,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 105.55,
+    "exit_time": "13:00",
+    "exit_price": 102.12,
+    "exit_reason": "SL",
+    "pts": -3.43,
+    "pnl_1lot": -257.25,
+    "pnl_18lots": -4630.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 105.4,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 88.85
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 98.0
+      },
+      "trendline_support": 105.12,
+      "how_to_verify": "1. Open NIFTY2662323900PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9105.4\n3. Draw trendline through lows: [11:30]\u20b988.8 \u2192 [12:15]\u20b998.0\n4. At 12:50 the projected trendline = \u20b9105.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950PE",
+    "strike": 23950,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 126.25,
+    "exit_time": "13:00",
+    "exit_price": 121.99,
+    "exit_reason": "SL",
+    "pts": -4.26,
+    "pnl_1lot": -319.5,
+    "pnl_18lots": -5751.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 125.85,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 105.7
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 116.55
+      },
+      "trendline_support": 124.99,
+      "how_to_verify": "1. Open NIFTY2662323950PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9125.8\n3. Draw trendline through lows: [11:30]\u20b9105.7 \u2192 [12:15]\u20b9116.5\n4. At 12:50 the projected trendline = \u20b9125.0\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 148.85,
+    "exit_time": "13:00",
+    "exit_price": 144.33,
+    "exit_reason": "SL",
+    "pts": -4.52,
+    "pnl_1lot": -339.0,
+    "pnl_18lots": -6102.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 148.05,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 124.75
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 137.45
+      },
+      "trendline_support": 147.33,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9148.1\n3. Draw trendline through lows: [11:30]\u20b9124.8 \u2192 [12:15]\u20b9137.4\n4. At 12:50 the projected trendline = \u20b9147.3\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050PE",
+    "strike": 24050,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 173.9,
+    "exit_time": "13:00",
+    "exit_price": 169.39,
+    "exit_reason": "SL",
+    "pts": -4.51,
+    "pnl_1lot": -338.25,
+    "pnl_18lots": -6088.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 172.75,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 145.9
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 160.8
+      },
+      "trendline_support": 172.39,
+      "how_to_verify": "1. Open NIFTY2662324050PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9172.8\n3. Draw trendline through lows: [11:30]\u20b9145.9 \u2192 [12:15]\u20b9160.8\n4. At 12:50 the projected trendline = \u20b9172.4\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324100PE",
+    "strike": 24100,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 201.55,
+    "exit_time": "13:00",
+    "exit_price": 197.89,
+    "exit_reason": "SL",
+    "pts": -3.66,
+    "pnl_1lot": -274.5,
+    "pnl_18lots": -4941.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324100PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 201.4,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 170.05
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 187.4
+      },
+      "trendline_support": 200.89,
+      "how_to_verify": "1. Open NIFTY2662324100PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9201.4\n3. Draw trendline through lows: [11:30]\u20b9170.1 \u2192 [12:15]\u20b9187.4\n4. At 12:50 the projected trendline = \u20b9200.9\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150PE",
+    "strike": 24150,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 231.2,
+    "exit_time": "13:00",
+    "exit_price": 227.72,
+    "exit_reason": "SL",
+    "pts": -3.48,
+    "pnl_1lot": -261.0,
+    "pnl_18lots": -4698.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 231.45,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 196.5
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 215.75
+      },
+      "trendline_support": 230.72,
+      "how_to_verify": "1. Open NIFTY2662324150PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9231.4\n3. Draw trendline through lows: [11:30]\u20b9196.5 \u2192 [12:15]\u20b9215.8\n4. At 12:50 the projected trendline = \u20b9230.7\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324250PE",
+    "strike": 24250,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "12:55",
+    "entry_price": 298.4,
+    "exit_time": "13:00",
+    "exit_price": 299.6,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.2,
+    "pnl_1lot": 90.0,
+    "pnl_18lots": 1620.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324250PE",
+      "signal_candle": "12:50",
+      "signal_candle_close": 298.35,
+      "trendline_pivot1": {
+        "time": "11:30",
+        "price": 256.95
+      },
+      "trendline_pivot2": {
+        "time": "12:15",
+        "price": 280.2
+      },
+      "trendline_support": 298.28,
+      "how_to_verify": "1. Open NIFTY2662324250PE on Groww chart (5-min candles)\n2. Find candle at 12:50 \u2192 close should be \u20b9298.4\n3. Draw trendline through lows: [11:30]\u20b9256.9 \u2192 [12:15]\u20b9280.2\n4. At 12:50 the projected trendline = \u20b9298.3\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "13:05",
+    "entry_price": 144.45,
+    "exit_time": "13:10",
+    "exit_price": 147.25,
+    "exit_reason": "TARGET",
+    "pts": 2.8,
+    "pnl_1lot": 210.0,
+    "pnl_18lots": 3780.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "13:00",
+      "signal_candle_close": 143.55,
+      "trendline_pivot1": {
+        "time": "12:15",
+        "price": 137.45
+      },
+      "trendline_pivot2": {
+        "time": "12:45",
+        "price": 137.7
+      },
+      "trendline_support": 137.82,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 13:00 \u2192 close should be \u20b9143.6\n3. Draw trendline through lows: [12:15]\u20b9137.4 \u2192 [12:45]\u20b9137.7\n4. At 13:00 the projected trendline = \u20b9137.8\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324050PE",
+    "strike": 24050,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "13:05",
+    "entry_price": 168.95,
+    "exit_time": "13:10",
+    "exit_price": 172.35,
+    "exit_reason": "TARGET",
+    "pts": 3.4,
+    "pnl_1lot": 255.0,
+    "pnl_18lots": 4590.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324050PE",
+      "signal_candle": "13:00",
+      "signal_candle_close": 167.7,
+      "trendline_pivot1": {
+        "time": "12:15",
+        "price": 160.8
+      },
+      "trendline_pivot2": {
+        "time": "12:45",
+        "price": 161.55
+      },
+      "trendline_support": 161.93,
+      "how_to_verify": "1. Open NIFTY2662324050PE on Groww chart (5-min candles)\n2. Find candle at 13:00 \u2192 close should be \u20b9167.7\n3. Draw trendline through lows: [12:15]\u20b9160.8 \u2192 [12:45]\u20b9161.6\n4. At 13:00 the projected trendline = \u20b9161.9\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BOUNCE",
+    "entry_time": "13:35",
+    "entry_price": 138.4,
+    "exit_time": "13:40",
+    "exit_price": 135.07,
+    "exit_reason": "SL",
+    "pts": -3.33,
+    "pnl_1lot": -249.75,
+    "pnl_18lots": -4495.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "13:30",
+      "signal_candle_close": 138.25,
+      "trendline_pivot1": {
+        "time": "12:15",
+        "price": 137.45
+      },
+      "trendline_pivot2": {
+        "time": "12:45",
+        "price": 137.7
+      },
+      "trendline_support": 138.07,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 13:30 \u2192 close should be \u20b9138.2\n3. Draw trendline through lows: [12:15]\u20b9137.4 \u2192 [12:45]\u20b9137.7\n4. At 13:30 the projected trendline = \u20b9138.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323850CE",
+    "strike": 23850,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:15",
+    "entry_price": 264.95,
+    "exit_time": "14:20",
+    "exit_price": 260.16,
+    "exit_reason": "SL",
+    "pts": -4.79,
+    "pnl_1lot": -359.25,
+    "pnl_18lots": -6466.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323850CE",
+      "signal_candle": "14:10",
+      "signal_candle_close": 264.7,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 247.05
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 257.3
+      },
+      "trendline_support": 263.16,
+      "how_to_verify": "1. Open NIFTY2662323850CE on Groww chart (5-min candles)\n2. Find candle at 14:10 \u2192 close should be \u20b9264.7\n3. Draw trendline through lows: [13:15]\u20b9247.1 \u2192 [13:50]\u20b9257.3\n4. At 14:10 the projected trendline = \u20b9263.2\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900CE",
+    "strike": 23900,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:15",
+    "entry_price": 231.65,
+    "exit_time": "14:20",
+    "exit_price": 227.14,
+    "exit_reason": "SL",
+    "pts": -4.51,
+    "pnl_1lot": -338.25,
+    "pnl_18lots": -6088.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900CE",
+      "signal_candle": "14:10",
+      "signal_candle_close": 231.7,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 216.0
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 225.0
+      },
+      "trendline_support": 230.14,
+      "how_to_verify": "1. Open NIFTY2662323900CE on Groww chart (5-min candles)\n2. Find candle at 14:10 \u2192 close should be \u20b9231.7\n3. Draw trendline through lows: [13:15]\u20b9216.0 \u2192 [13:50]\u20b9225.0\n4. At 14:10 the projected trendline = \u20b9230.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950CE",
+    "strike": 23950,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:15",
+    "entry_price": 201.55,
+    "exit_time": "14:20",
+    "exit_price": 196.69,
+    "exit_reason": "SL",
+    "pts": -4.86,
+    "pnl_1lot": -364.5,
+    "pnl_18lots": -6561.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950CE",
+      "signal_candle": "14:10",
+      "signal_candle_close": 201.0,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 186.8
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 195.0
+      },
+      "trendline_support": 199.69,
+      "how_to_verify": "1. Open NIFTY2662323950CE on Groww chart (5-min candles)\n2. Find candle at 14:10 \u2192 close should be \u20b9201.0\n3. Draw trendline through lows: [13:15]\u20b9186.8 \u2192 [13:50]\u20b9195.0\n4. At 14:10 the projected trendline = \u20b9199.7\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000CE",
+    "strike": 24000,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:15",
+    "entry_price": 173.3,
+    "exit_time": "14:25",
+    "exit_price": 168.14,
+    "exit_reason": "SL",
+    "pts": -5.16,
+    "pnl_1lot": -387.0,
+    "pnl_18lots": -6966.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000CE",
+      "signal_candle": "14:10",
+      "signal_candle_close": 172.85,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 160.85
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 167.4
+      },
+      "trendline_support": 171.14,
+      "how_to_verify": "1. Open NIFTY2662324000CE on Groww chart (5-min candles)\n2. Find candle at 14:10 \u2192 close should be \u20b9172.8\n3. Draw trendline through lows: [13:15]\u20b9160.8 \u2192 [13:50]\u20b9167.4\n4. At 14:10 the projected trendline = \u20b9171.1\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150CE",
+    "strike": 24150,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:10",
+    "entry_price": 102.9,
+    "exit_time": "14:25",
+    "exit_price": 99.48,
+    "exit_reason": "SL",
+    "pts": -3.42,
+    "pnl_1lot": -256.5,
+    "pnl_18lots": -4617.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150CE",
+      "signal_candle": "14:05",
+      "signal_candle_close": 102.6,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 97.05
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 100.85
+      },
+      "trendline_support": 102.48,
+      "how_to_verify": "1. Open NIFTY2662324150CE on Groww chart (5-min candles)\n2. Find candle at 14:05 \u2192 close should be \u20b9102.6\n3. Draw trendline through lows: [13:15]\u20b997.0 \u2192 [13:50]\u20b9100.8\n4. At 14:05 the projected trendline = \u20b9102.5\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324200CE",
+    "strike": 24200,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:10",
+    "entry_price": 85.6,
+    "exit_time": "14:25",
+    "exit_price": 81.92,
+    "exit_reason": "SL",
+    "pts": -3.68,
+    "pnl_1lot": -276.0,
+    "pnl_18lots": -4968.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324200CE",
+      "signal_candle": "14:05",
+      "signal_candle_close": 85.0,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 80.85
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 83.7
+      },
+      "trendline_support": 84.92,
+      "how_to_verify": "1. Open NIFTY2662324200CE on Groww chart (5-min candles)\n2. Find candle at 14:05 \u2192 close should be \u20b985.0\n3. Draw trendline through lows: [13:15]\u20b980.8 \u2192 [13:50]\u20b983.7\n4. At 14:05 the projected trendline = \u20b984.9\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900PE",
+    "strike": 23900,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:25",
+    "entry_price": 99.6,
+    "exit_time": "14:30",
+    "exit_price": 105.95,
+    "exit_reason": "TRAIL_SL",
+    "pts": 6.35,
+    "pnl_1lot": 476.25,
+    "pnl_18lots": 8572.5,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900PE",
+      "signal_candle": "14:20",
+      "signal_candle_close": 229.05,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 216.0
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 225.0
+      },
+      "trendline_support": 232.71,
+      "how_to_verify": "1. Open NIFTY2662323900PE on Groww chart (5-min candles)\n2. Find candle at 14:20 \u2192 close should be \u20b9229.1\n3. Draw trendline through lows: [13:15]\u20b9216.0 \u2192 [13:50]\u20b9225.0\n4. At 14:20 the projected trendline = \u20b9232.7\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323850PE",
+    "strike": 23850,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 89.25,
+    "exit_time": "14:35",
+    "exit_price": 84.25,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323850PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 253.9,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 247.05
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 257.3
+      },
+      "trendline_support": 267.55,
+      "how_to_verify": "1. Open NIFTY2662323850PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b9253.9\n3. Draw trendline through lows: [13:15]\u20b9247.1 \u2192 [13:50]\u20b9257.3\n4. At 14:25 the projected trendline = \u20b9267.6\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323950PE",
+    "strike": 23950,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 127.25,
+    "exit_time": "14:35",
+    "exit_price": 122.25,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323950PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 191.2,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 186.8
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 195.0
+      },
+      "trendline_support": 203.2,
+      "how_to_verify": "1. Open NIFTY2662323950PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b9191.2\n3. Draw trendline through lows: [13:15]\u20b9186.8 \u2192 [13:50]\u20b9195.0\n4. At 14:25 the projected trendline = \u20b9203.2\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324000PE",
+    "strike": 24000,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 149.85,
+    "exit_time": "14:35",
+    "exit_price": 144.85,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324000PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 164.3,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 160.85
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 167.4
+      },
+      "trendline_support": 173.95,
+      "how_to_verify": "1. Open NIFTY2662324000PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b9164.3\n3. Draw trendline through lows: [13:15]\u20b9160.8 \u2192 [13:50]\u20b9167.4\n4. At 14:25 the projected trendline = \u20b9173.9\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324100PE",
+    "strike": 24100,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 203.8,
+    "exit_time": "14:35",
+    "exit_price": 198.8,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324100PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 117.75,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 116.05
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 120.6
+      },
+      "trendline_support": 125.15,
+      "how_to_verify": "1. Open NIFTY2662324100PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b9117.8\n3. Draw trendline through lows: [13:15]\u20b9116.0 \u2192 [13:50]\u20b9120.6\n4. At 14:25 the projected trendline = \u20b9125.2\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324150PE",
+    "strike": 24150,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 233.95,
+    "exit_time": "14:35",
+    "exit_price": 228.95,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324150PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 97.7,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 97.05
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 100.85
+      },
+      "trendline_support": 104.65,
+      "how_to_verify": "1. Open NIFTY2662324150PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b997.7\n3. Draw trendline through lows: [13:15]\u20b997.0 \u2192 [13:50]\u20b9100.8\n4. At 14:25 the projected trendline = \u20b9104.7\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324200PE",
+    "strike": 24200,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 266.9,
+    "exit_time": "14:35",
+    "exit_price": 261.9,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324200PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 81.4,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 80.85
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 83.7
+      },
+      "trendline_support": 86.55,
+      "how_to_verify": "1. Open NIFTY2662324200PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b981.4\n3. Draw trendline through lows: [13:15]\u20b980.8 \u2192 [13:50]\u20b983.7\n4. At 14:25 the projected trendline = \u20b986.5\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324250PE",
+    "strike": 24250,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 302.65,
+    "exit_time": "14:35",
+    "exit_price": 297.65,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324250PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 66.9,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 66.85
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 69.0
+      },
+      "trendline_support": 71.15,
+      "how_to_verify": "1. Open NIFTY2662324250PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b966.9\n3. Draw trendline through lows: [13:15]\u20b966.8 \u2192 [13:50]\u20b969.0\n4. At 14:25 the projected trendline = \u20b971.2\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324300PE",
+    "strike": 24300,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:30",
+    "entry_price": 340.15,
+    "exit_time": "14:35",
+    "exit_price": 335.15,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324300PE",
+      "signal_candle": "14:25",
+      "signal_candle_close": 54.75,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 55.0
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 56.65
+      },
+      "trendline_support": 58.3,
+      "how_to_verify": "1. Open NIFTY2662324300PE on Groww chart (5-min candles)\n2. Find candle at 14:25 \u2192 close should be \u20b954.8\n3. Draw trendline through lows: [13:15]\u20b955.0 \u2192 [13:50]\u20b956.6\n4. At 14:25 the projected trendline = \u20b958.3\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662323900PE",
+    "strike": 23900,
+    "opt_type": "PE",
+    "signal": "BREAK",
+    "entry_time": "14:35",
+    "entry_price": 103.9,
+    "exit_time": "14:40",
+    "exit_price": 98.9,
+    "exit_reason": "SL",
+    "pts": -5.0,
+    "pnl_1lot": -375.0,
+    "pnl_18lots": -6750.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662323900PE",
+      "signal_candle": "14:30",
+      "signal_candle_close": 224.35,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 216.0
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 225.0
+      },
+      "trendline_support": 235.29,
+      "how_to_verify": "1. Open NIFTY2662323900PE on Groww chart (5-min candles)\n2. Find candle at 14:30 \u2192 close should be \u20b9224.3\n3. Draw trendline through lows: [13:15]\u20b9216.0 \u2192 [13:50]\u20b9225.0\n4. At 14:30 the projected trendline = \u20b9235.3\n5. Price broke 3 pts below support (BREAK)"
+    }
+  },
+  {
+    "date": "2026-06-17",
+    "symbol": "NIFTY2662324350CE",
+    "strike": 24350,
+    "opt_type": "CE",
+    "signal": "BOUNCE",
+    "entry_time": "14:45",
+    "entry_price": 48.5,
+    "exit_time": "14:55",
+    "exit_price": 49.6,
+    "exit_reason": "TRAIL_SL",
+    "pts": 1.1,
+    "pnl_1lot": 82.5,
+    "pnl_18lots": 1485.0,
+    "qty_1lot": 75,
+    "qty_18lots": 1350,
+    "chart_verify": {
+      "symbol": "NIFTY2662324350CE",
+      "signal_candle": "14:40",
+      "signal_candle_close": 47.9,
+      "trendline_pivot1": {
+        "time": "13:15",
+        "price": 45.05
+      },
+      "trendline_pivot2": {
+        "time": "13:50",
+        "price": 46.2
+      },
+      "trendline_support": 47.84,
+      "how_to_verify": "1. Open NIFTY2662324350CE on Groww chart (5-min candles)\n2. Find candle at 14:40 \u2192 close should be \u20b947.9\n3. Draw trendline through lows: [13:15]\u20b945.0 \u2192 [13:50]\u20b946.2\n4. At 14:40 the projected trendline = \u20b947.8\n5. Price was within 6 pts of support (BOUNCE)"
+    }
+  }
+]
