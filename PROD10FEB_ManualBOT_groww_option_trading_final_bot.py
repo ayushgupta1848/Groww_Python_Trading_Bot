@@ -1333,9 +1333,11 @@ def cancel_order_groww(order_id, access_token):
         resp.raise_for_status()
         data = resp.json()
         print(f"🔄 Cancel order response: {data}")
-        
-        # Check if cancellation was successful
-        if data.get("success") or data.get("payload", {}).get("order_status") == "CANCELLED":
+
+        # Cancel accepted: Groww replies status=SUCCESS with order_status
+        # CANCELLATION_REQUESTED (exchange ack) or CANCELLED (final)
+        _ost = data.get("payload", {}).get("order_status")
+        if data.get("success") or data.get("status") == "SUCCESS" or _ost in ("CANCELLED", "CANCELLATION_REQUESTED"):
             return True
         return False
     except Exception as e:
@@ -1674,9 +1676,12 @@ def wait_for_order_status(order_id, access_token, order_type="BUY"):
 
 import requests
 
-def get_order_executed_price(order_id, access_token, segment="FNO"):
+def get_order_executed_price(order_id, access_token, segment="FNO", expected_qty=None):
     """
     Fetch executed trades for a given Groww order_id and return average price & total quantity.
+    expected_qty: the fill quantity the caller already knows (ordered qty of an
+    EXECUTED order). Pass it whenever available — retries continue until the
+    trade list sums to it; when None it is learned from order-status filled_quantity.
     """
     if CONFIG.get("PAPER_TRADING", False):
         info = _paper_orders.get(str(order_id), {})
@@ -1686,6 +1691,7 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
         return float(price), int(qty)
 
     url = f"https://api.groww.in/v1/order/trades/{order_id}?segment={segment}&page=0&page_size=50"
+    status_url = f"https://api.groww.in/v1/order/status/{order_id}?segment={segment}"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {access_token}",
@@ -1694,9 +1700,21 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
 
     print(f"\n📦 Fetching trade details for order: {order_id}")
 
+    # Large orders fill as multiple exchange trades; the lagging trades endpoint
+    # can expose only the first fills, so a non-empty trade_list is NOT proof of
+    # completeness. Learn the authoritative fill qty when the caller didn't pass it.
+    if expected_qty is None:
+        try:
+            _sp = requests.get(status_url, headers=headers, timeout=5).json().get("payload", {}) or {}
+            expected_qty = int(_sp.get("filled_quantity") or 0) or None
+        except Exception:
+            expected_qty = None
+
     # The trades endpoint lags order status by a few hundred ms (eventually consistent).
-    # First attempt fires immediately — retries/sleeps happen only when no trades came back.
-    _backoff = (0, 0.25, 0.5, 1.0, 1.25)
+    # First attempt fires immediately — retries/sleeps happen only when the trade
+    # list came back empty or short of expected_qty.
+    _backoff = (0, 0.25, 0.5, 1.0, 1.25, 1.5, 2.0)
+    _partial = None   # best (avg_price, qty_seen) from an incomplete trade_list
     for _attempt, _delay in enumerate(_backoff, start=1):
         if _delay:
             time.sleep(_delay)
@@ -1724,12 +1742,23 @@ def get_order_executed_price(order_id, access_token, segment="FNO"):
         symbol = trades[0]["trading_symbol"]
         side = trades[0]["transaction_type"]
 
+        if expected_qty and total_qty < expected_qty:
+            _partial = (avg_price, total_qty)
+            print(f"⚠️ Trade list incomplete: {total_qty}/{expected_qty} qty visible (attempt {_attempt}/{len(_backoff)}) — retrying...")
+            continue
+
         print(f"✅ {side} {symbol} | Total Qty={total_qty} | Avg Price=₹{avg_price}")
         return avg_price, total_qty
 
+    # Trades endpoint never showed every fill — the position size is authoritative
+    # (expected_qty), the partial avg price is the best estimate available.
+    if _partial and expected_qty:
+        avg_price, _seen = _partial
+        print(f"⚠️ Trades endpoint showed only {_seen}/{expected_qty} qty after {len(_backoff)} attempts — using avg ₹{avg_price} from visible fills for FULL qty {expected_qty}.")
+        return avg_price, expected_qty
+
     # Fallback: the order-status payload carries average_price for executed orders
     try:
-        status_url = f"https://api.groww.in/v1/order/status/{order_id}?segment={segment}"
         s_payload = requests.get(status_url, headers=headers, timeout=5).json().get("payload", {}) or {}
         avg_price = s_payload.get("average_price") or s_payload.get("avg_price") or 0
         qty = s_payload.get("filled_quantity") or s_payload.get("quantity") or 0
@@ -1848,7 +1877,7 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
             print(f"⚠️ BUY failed: {buy_status}")
             send_telegram(f"⚠️ BUY failed: {buy_status}")
             return
-        avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+        avg_price, executed_qty = get_order_executed_price(order_id, access_token, expected_qty=quantity)
         if not avg_price or not executed_qty:
             # BUY is confirmed EXECUTED — never abandon the position. Estimate entry from LTP.
             _est = _ref_ltp or get_ltp_for_instrument(instrument, access_token, verbose=True, delay=0)
@@ -2054,7 +2083,7 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                             if CONFIG.get("VALIDATE_ORDERS", True) and _psell_id:
                                 _pst = wait_for_order_status(_psell_id, access_token, "SELL")
                                 if _pst in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                                    _pp, _pq = get_order_executed_price(_psell_id, access_token)
+                                    _pp, _pq = get_order_executed_price(_psell_id, access_token, expected_qty=partial_qty)
                                     if _pp: _partial_sell_price = _pp
                             _partial_pnl = (_partial_sell_price - avg_price) * partial_qty
                             print(f"💰 PARTIAL PROFIT: ₹{_partial_pnl:.2f} | {partial_qty} qty @ ₹{_partial_sell_price:.2f}")
@@ -2125,7 +2154,7 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                     if CONFIG.get("VALIDATE_ORDERS", True) and market_sell_id:
                         final_status = wait_for_order_status(market_sell_id, access_token, "SELL")
                         if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                            sell_price, sold_qty = get_order_executed_price(market_sell_id, access_token)
+                            sell_price, sold_qty = get_order_executed_price(market_sell_id, access_token, expected_qty=quantity)
                             if sell_price and sold_qty:
                                 loss = (sell_price - avg_price) * sold_qty
                                 print(f"💸 LOSS: ₹{loss:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
@@ -2147,7 +2176,7 @@ def place_quick_order(command, atr_based=True, quick_pts=1.5, atr_source="candle
                 if CONFIG.get("VALIDATE_ORDERS", True) and sell_order_id:
                     final_status = wait_for_order_status(sell_order_id, access_token, "SELL")
                     if final_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                        sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                        sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token, expected_qty=quantity)
                         if sell_price and sold_qty:
                             profit = (sell_price - avg_price) * sold_qty
                             print(f"💰 PROFIT: ₹{profit:.2f} (Buy @ ₹{avg_price}, Sell @ ₹{sell_price})")
@@ -2305,7 +2334,7 @@ def place_cp_order(command, is_auto=False):
                 return
             
             # Fetch actual executed price and quantity
-            avg_price, executed_qty = get_order_executed_price(order_id, access_token)
+            avg_price, executed_qty = get_order_executed_price(order_id, access_token, expected_qty=quantity)
             if not avg_price or not executed_qty:
                 # BUY is confirmed EXECUTED — never abandon the position. Use the
                 # pre-order LTP as the entry estimate so target/SL management still runs.
@@ -2479,7 +2508,7 @@ def place_cp_order(command, is_auto=False):
                         sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
                         if sell_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
                             # Fetch actual executed price
-                            sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                            sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token, expected_qty=quantity)
                             _exec_ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
                             if sell_price and sold_qty:
                                 profit = (sell_price - avg_price) * sold_qty
@@ -2733,7 +2762,7 @@ def directional_mode():
                         continue
                     
                     # Get executed price
-                    avg_price, bought_qty = get_order_executed_price(buy_order_id, access_token)
+                    avg_price, bought_qty = get_order_executed_price(buy_order_id, access_token, expected_qty=quantity)
                     if not avg_price:
                         avg_price = ltp
                         bought_qty = quantity
@@ -2841,7 +2870,7 @@ def directional_mode():
                                 sell_validation_start = datetime.now()
                                 sell_status = wait_for_order_status(sell_order_id, access_token, "SELL")
                                 if sell_status in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                                    sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token)
+                                    sell_price, sold_qty = get_order_executed_price(sell_order_id, access_token, expected_qty=bought_qty)
                                     if sell_price and sold_qty:
                                         sell_executed = datetime.now()
                                         sell_validation_duration = (sell_executed - sell_validation_start).total_seconds()
@@ -3472,7 +3501,7 @@ def auto_mode_runner():
             if b_status not in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
                 print(f"⚠️  BUY not executed ({b_status}). Skipping trade.")
                 continue
-            avg_price, bought_qty = get_order_executed_price(buy_order_id, access_token)
+            avg_price, bought_qty = get_order_executed_price(buy_order_id, access_token, expected_qty=quantity)
             if not avg_price:
                 avg_price, bought_qty = ltp, quantity
         else:
@@ -3602,7 +3631,7 @@ def auto_mode_runner():
                     if cfg.get("VALIDATE_ORDERS", True) and sell_order_id:
                         s_stat = wait_for_order_status(sell_order_id, access_token, "SELL")
                         if s_stat in ["EXECUTED", "COMPLETED", "DELIVERY_AWAITED"]:
-                            sp, sq = get_order_executed_price(sell_order_id, access_token)
+                            sp, sq = get_order_executed_price(sell_order_id, access_token, expected_qty=bought_qty)
                             if sp and sq:
                                 sell_price, bought_qty = sp, sq
                 except Exception as ex:

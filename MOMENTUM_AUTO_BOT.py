@@ -30,12 +30,27 @@ scan_poll_sec       — poll interval during observation window (1s)
 poll_seconds        — poll interval during trail SL loop (3s)
 velocity_pct        — min total % premium move over scan window (0.5%)
 consistency_pct     — min % of ticks moving in signal direction (70%)
-HARD_SL_POINTS      — premium points hard SL below entry (8 pts)
-TRAIL_START_PROFIT  — start trailing after this profit in points (1)
+HARD_SL_POINTS      — premium points hard SL below entry (8 pts).  Doubles as the
+                      floor when HARD_SL_ATR_BASED is on (PROD10 rule).  Live-tunable
+                      from the dashboard (SL FLOOR) — applies from the next entry.
+HARD_SL_ATR_MULTIPLIER — ATR × this = raw ATR SL (1.5).  Live-tunable (SL MULT).
+HARD_SL_FIXED       — dashboard "HARD SL" toggle.  When ON the hard SL is exactly
+                      HARD_SL_FIXED_POINTS for every trade and all ATR logic is
+                      skipped — this overrides HARD_SL_ATR_BASED.
+TRAIL_START_PROFIT  — quick mode: exit target in points; manual mode: profit at
+                      which the trail starts (1).  Live-tunable from the dashboard
+                      (TARGET PTS) — applies even to an already-open trade.
 TRAIL_STEP          — trail gap behind peak, fixed mode (0.75 pts)
 TRAIL_SL_ATR_BASED  — if True, trail step = ATR × TRAIL_SL_ATR_MULTIPLIER
 max_hold_min        — force exit after N minutes (30)
-cooldown_sec        — wait after trade before next scan (90s)
+cooldown_sec        — wait after trade before next scan (120s).  Live-tunable
+                      from the dashboard (COOLDOWN S) — re-times a countdown
+                      that is already running.
+no_signal_wait_sec  — wait after a no-signal scan (60s).  Live-tunable from the
+                      dashboard (NO-SIG S), same mid-wait behaviour.
+place_target_order  — True: park a LIMIT SELL at entry+target right after the BUY
+                      (exchange-side target, PROD10 quick-mode style); False: poll
+                      the LTP and MARKET sell at target (default)
 use_oi_filter       — use oi_snapshot.json as bias (True)
 validate_orders     — wait for EXECUTED status (True for live)
 """
@@ -129,15 +144,22 @@ CONFIG = {
 
     # --- trade management ---
     "HARD_SL_POINTS":         8.0,   # hard SL below entry (premium pts)
-    "TRAIL_START_PROFIT":     1.0,   # start trailing after this profit (pts)
+    "TRAIL_START_PROFIT":     1.0,   # quick mode = exit target; manual mode = trail start (pts) [UI-tunable live]
     "TRAIL_STEP":             0.75,  # trail gap behind peak when not ATR-based (pts)
     "TRAIL_SL_ATR_BASED":     False, # True → trail step = ATR × multiplier
     "TRAIL_SL_ATR_MULTIPLIER":1.0,   # ATR multiplier (only when ATR-based)
     "QUICK_TRAIL_BUFFER":     1.0,   # pts above target before switching to tight trail
     "QUICK_TRAIL_GAP":        1.5,   # pts below peak for tight trail stop
     "max_hold_min":           30,    # force-exit after N minutes
-    "cooldown_sec":          120,    # wait after a trade before scanning again (2 min)
-    "no_signal_wait_sec":     60,    # wait after no-signal scan before restarting (1 min)
+    "cooldown_sec":          120,    # wait after a trade before scanning again (2 min) [UI-tunable live]
+    "no_signal_wait_sec":     60,    # wait after no-signal scan before restarting (1 min) [UI-tunable live]
+
+    # --- fixed hard SL (UI toggle "HARD SL") ---
+    # True  → hard SL is exactly HARD_SL_FIXED_POINTS for every trade; the ATR
+    #         machinery is skipped entirely (no candle fetch, no floor logic)
+    # False → HARD_SL_ATR_BASED / HARD_SL_POINTS decide, as before
+    "HARD_SL_FIXED":         False,
+    "HARD_SL_FIXED_POINTS":    8.0,
 
     # --- safety ---
     "max_trades_day":     5,
@@ -150,6 +172,13 @@ CONFIG = {
     # "mock":  no real orders, Telegram IS sent (full simulation with notifications)
     # "live":  real orders via Groww API (default for production)
     "trade_mode": "paper",
+
+    # --- resting target order ---
+    # True  → the moment the BUY is done, a LIMIT SELL is parked at entry +
+    #         TRAIL_START_PROFIT, so the target fills at the exchange even if this
+    #         process dies or the poll misses the touch (PROD10 quick-mode style)
+    # False → current behaviour: poll the LTP and MARKET sell when target is hit
+    "place_target_order": False,
 
     # --- exit mode ---
     # "manual": full trailing SL (default)
@@ -189,10 +218,17 @@ _OVERRIDE_CAST = {
     "velocity_pct":    float, "consistency_pct":float,
     "validate_orders": bool,
     "scan_seconds":    int,   "poll_seconds":   int,
+    "TRAIL_START_PROFIT":     float,   # quick-mode target / trail activation (pts)
+    "cooldown_sec":           int,     # post-trade wait before next scan
+    "no_signal_wait_sec":     int,     # wait after a no-signal scan
+    "place_target_order":     bool,
     "consec_sl_brake":        bool,
     "consec_sl_pause_min":    int,
     "HARD_SL_ATR_BASED":      bool,
     "HARD_SL_ATR_MULTIPLIER": float,
+    "HARD_SL_POINTS":         float,   # fixed SL, and the floor when ATR-based
+    "HARD_SL_FIXED":          bool,    # UI "HARD SL" toggle — exact points, ATR ignored
+    "HARD_SL_FIXED_POINTS":   float,
     "atr_source":             str,
     "min_score_filter":           bool,
     "velocity_filter":            bool,
@@ -237,6 +273,23 @@ def _reload_override(verbose=True):
 
 
 _reload_override(verbose=True)
+
+
+def _reload_live_target():
+    """Re-read ONLY the target/trail-start key from the override file.
+
+    Used inside an open trade so the dashboard can retune the quick-mode target
+    (and the trail activation point) mid-trade without any other config key —
+    lots, index, exit_mode — changing underneath a live position.
+    Returns the current TRAIL_START_PROFIT."""
+    try:
+        with open(_override_path) as _f:
+            _ov = json.load(_f)
+        if "TRAIL_START_PROFIT" in _ov:
+            CONFIG["TRAIL_START_PROFIT"] = float(_ov["TRAIL_START_PROFIT"])
+    except Exception:
+        pass
+    return CONFIG["TRAIL_START_PROFIT"]
 
 # ── Choppiness Tracker ────────────────────────────────────────────────────────
 # Detects sideways / choppy market using rolling scan history.
@@ -506,6 +559,17 @@ def _get_spot() -> float:
 # ============================================================
 # 8. ORDER HELPERS  (mirrors master bot pattern)
 # ============================================================
+def _round_5p(price) -> float:
+    """Round to the nearest 5 paise — exchange tick size for option limits."""
+    return round(round(float(price) * 20) / 20, 2)
+
+
+def _exchange_const(instrument):
+    """NSE / BSE constant for this instrument (SENSEX & co. trade on BSE)."""
+    exch = (instrument.get("exchange", "NSE") or "NSE").upper()
+    return groww.EXCHANGE_BSE if exch == "BSE" else groww.EXCHANGE_NSE
+
+
 def _place_market_order(instrument, qty, side="BUY"):
     trading_symbol = (instrument.get("internal_trading_symbol")
                       or instrument.get("trading_symbol"))
@@ -513,13 +577,56 @@ def _place_market_order(instrument, qty, side="BUY"):
         trading_symbol=trading_symbol,
         quantity=qty,
         validity=groww.VALIDITY_DAY,
-        exchange=groww.EXCHANGE_NSE,
+        exchange=_exchange_const(instrument),
         segment=groww.SEGMENT_FNO,
         product=groww.PRODUCT_MIS,
         order_type=groww.ORDER_TYPE_MARKET,
         transaction_type=getattr(groww, f"TRANSACTION_TYPE_{side}"),
         price=0,
     )
+
+
+def _place_limit_order(instrument, qty, price, side="SELL"):
+    """Resting LIMIT order — used for the instant target sell (PROD10 quick mode)."""
+    trading_symbol = (instrument.get("internal_trading_symbol")
+                      or instrument.get("trading_symbol"))
+    return groww.place_order(
+        trading_symbol=trading_symbol,
+        quantity=qty,
+        validity=groww.VALIDITY_DAY,
+        exchange=_exchange_const(instrument),
+        segment=groww.SEGMENT_FNO,
+        product=groww.PRODUCT_MIS,
+        order_type=groww.ORDER_TYPE_LIMIT,
+        transaction_type=getattr(groww, f"TRANSACTION_TYPE_{side}"),
+        price=_round_5p(price),
+    )
+
+
+def _cancel_order(order_id) -> bool:
+    """Cancel a resting order. True when Groww accepts the cancellation."""
+    url = "https://api.groww.in/v1/order/cancel"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "X-API-VERSION": "1.0",
+    }
+    try:
+        data = _session.post(url, headers=headers,
+                             json={"segment": "FNO", "groww_order_id": order_id},
+                             timeout=8).json()
+        _ost = data.get("payload", {}).get("order_status")
+        return bool(data.get("success")
+                    or data.get("status") == "SUCCESS"
+                    or _ost in ("CANCELLED", "CANCELLATION_REQUESTED"))
+    except Exception as e:
+        print(f"  ⚠️ Cancel order {order_id} failed: {e}")
+        return False
+
+
+_FILLED_STATES = ("EXECUTED", "COMPLETED", "DELIVERY_AWAITED")
+_DEAD_STATES   = ("CANCELLED", "FAILED", "REJECTED")
 
 def _get_order_status(order_id) -> str | None:
     url = f"https://api.groww.in/v1/order/status/{order_id}?segment=FNO"
@@ -897,46 +1004,90 @@ def _real_atr_from_candles(highs: list, lows: list, closes: list, period: int = 
     return _ema_of(trs, period)
 
 
-def _fetch_real_atr(instrument, timeout: int = 6) -> float | None:
-    """Fetch last 60 min of 1-min candles and return 14-period EMA ATR.
+def _hist_atr_symbol(instrument) -> str | None:
+    """Symbol accepted by the historical-candles API.
+
+    It only takes the `Exchange-TradingSymbol` form (e.g. NSE-NIFTY-15Sep26-23300-CE)
+    — the `internal_trading_symbol` (NIFTY2691523300CE) is rejected outright with
+    "groww_symbol must follow the pattern 'Exchange-TradingSymbol'".  PROD10 passes
+    instrument["groww_symbol"]; do the same here."""
+    sym = (instrument.get("groww_symbol") or "").strip()
+    if sym:
+        return sym
+    # Fallback: synthesise the prefix if the CSV row somehow lacks groww_symbol
+    ts = (instrument.get("trading_symbol")
+          or instrument.get("internal_trading_symbol") or "").strip()
+    if not ts:
+        return None
+    exch = (instrument.get("exchange", "NSE") or "NSE").upper()
+    return ts if "-" in ts else f"{exch}-{ts}"
+
+
+def _fetch_candle_atr(instrument, interval: str, lookback_minutes: int,
+                      min_candles: int = 20):
+    """14-period EMA ATR from historical candles.  Returns (atr, reason).
+
+    atr is None when unavailable, in which case reason says why — no silent
+    fallbacks, since a wrong hard SL is expensive."""
+    try:
+        sym = _hist_atr_symbol(instrument)
+        if not sym:
+            return None, "no groww_symbol on instrument"
+        exchange   = (instrument.get("exchange", "NSE") or "NSE").upper()
+        exch_const = (groww.EXCHANGE_BSE if exchange == "BSE"
+                      else groww.EXCHANGE_NSE)
+        end_dt   = datetime.now()
+        start_dt = end_dt - timedelta(minutes=lookback_minutes)
+        hist = groww.get_historical_candles(
+            groww_symbol=sym,
+            exchange=exch_const,
+            segment=groww.SEGMENT_FNO,
+            start_time=start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            end_time=end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            candle_interval=interval,
+        )
+        candles = (hist or {}).get("candles", [])
+        if len(candles) < min_candles:
+            return None, f"only {len(candles)} {interval} candles (need {min_candles})"
+        highs  = [c[2] for c in candles]
+        lows   = [c[3] for c in candles]
+        closes = [c[4] for c in candles]
+        atr = _real_atr_from_candles(highs, lows, closes, period=14)
+        if not atr or atr <= 0:
+            return None, f"ATR computed as {atr} from {len(candles)} {interval} candles"
+        return round(atr, 2), f"{len(candles)} × {interval}"
+    except Exception as e:
+        return None, f"{type(e).__name__}: {str(e)[:110]}"
+
+
+def _fetch_real_atr(instrument, timeout: int = 8):
+    """PROD10 hist-ATR mechanism: 14-period EMA ATR from 5-min candles over a
+    150-min lookback (≈30 candles).  Falls back to 1-min/60-min candles when the
+    5-min window is too short (first ~100 min of the session, illiquid strikes).
+
     Non-blocking — designed to run in a background thread.
-    Returns None on failure/timeout."""
+    Returns (atr, label) with atr None on failure; label describes the source or
+    the failure reason."""
     import queue as _queue
     q = _queue.Queue()
 
     def _worker():
-        try:
-            trading_symbol = (instrument.get("internal_trading_symbol")
-                              or instrument.get("trading_symbol"))
-            exchange  = instrument.get("exchange", "NSE").upper()
-            exch_const = (groww.EXCHANGE_BSE if exchange == "BSE"
-                          else groww.EXCHANGE_NSE)
-            end_dt   = datetime.now()
-            start_dt = end_dt - timedelta(minutes=60)
-            hist = groww.get_historical_candles(
-                groww_symbol=trading_symbol,
-                exchange=exch_const,
-                segment=groww.SEGMENT_FNO,
-                start_time=start_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                end_time=end_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                candle_interval="1minute",
-            )
-            candles = (hist or {}).get("candles", [])
-            if len(candles) < 20:
-                q.put(None)
-                return
-            highs  = [c[2] for c in candles]
-            lows   = [c[3] for c in candles]
-            closes = [c[4] for c in candles]
-            atr = _real_atr_from_candles(highs, lows, closes, period=14)
-            q.put(round(atr, 2) if atr else None)
-        except Exception:
-            q.put(None)
+        atr, why5 = _fetch_candle_atr(instrument, "5minute", 150, min_candles=20)
+        if atr:
+            q.put((atr, f"5-min EMA ATR, {why5}"))
+            return
+        atr, why1 = _fetch_candle_atr(instrument, "1minute", 60, min_candles=20)
+        if atr:
+            q.put((atr, f"1-min EMA ATR, {why1} — 5-min unavailable: {why5}"))
+            return
+        q.put((None, f"5-min: {why5} | 1-min: {why1}"))
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
     t.join(timeout=timeout)
-    return q.get() if not q.empty() else None
+    if not q.empty():
+        return q.get()
+    return None, f"fetch timed out after {timeout}s"
 
 # ============================================================
 # 13. TRADE MANAGER — entry + trail SL loop
@@ -1049,6 +1200,19 @@ def execute_trade(instrument, signal: dict) -> bool:
     avg_price  = entry_ltp
     _atr_queue = None   # will hold real ATR result queue when HARD_SL_ATR_BASED=True
 
+    # Start the hist-ATR fetch before the order goes out so it overlaps with
+    # order placement + BUY validation.  Runs in paper/mock too, so a simulated
+    # trade carries the same hard SL a live one would have got.
+    if (cfg.get("HARD_SL_ATR_BASED") and not cfg.get("HARD_SL_FIXED")
+            and cfg.get("atr_source", "candle") == "candle"):
+        import queue as _q
+        _atr_queue = _q.Queue()
+        threading.Thread(
+            target=lambda: _atr_queue.put(_fetch_real_atr(instrument, timeout=8)),
+            daemon=True,
+        ).start()
+        print(f"  🔄 Fetching hist ATR (5-min candles, PROD10 method) in background…")
+
     if is_sim:
         print(f"  📋 {mode_tag}BUY simulated @ ₹{avg_price:.2f}  Qty={qty}  [{_ts()}]")
     else:
@@ -1062,17 +1226,6 @@ def execute_trade(instrument, signal: dict) -> bool:
             print(f"  ❌ BUY failed: {e}  [{_ts()}]")
             send_telegram(f"❌ BUY failed: {e}")
             return False
-
-        # Start real ATR fetch in background — overlaps with BUY validation wait
-        # Only needed when atr_source == "candle"; scan ATR comes from signal dict
-        if cfg.get("HARD_SL_ATR_BASED") and cfg.get("atr_source", "candle") == "candle":
-            import queue as _q
-            _atr_queue = _q.Queue()
-            threading.Thread(
-                target=lambda: _atr_queue.put(_fetch_real_atr(instrument, timeout=6)),
-                daemon=True,
-            ).start()
-            print(f"  🔄 Fetching real ATR (1-min candles) in background…")
 
         if validate and order_id:
             ok = _wait_executed(order_id, "BUY")
@@ -1094,37 +1247,46 @@ def execute_trade(instrument, signal: dict) -> bool:
     trail_start = cfg["TRAIL_START_PROFIT"]
     max_time_sec = cfg["max_hold_min"] * 60
 
-    # Hard SL: two sources selectable via atr_source config key
-    if cfg.get("HARD_SL_ATR_BASED") and not is_sim:
+    # Hard SL: fixed (UI toggle) wins; otherwise ATR-based with atr_source, else fixed pts
+    fixed_sl_pts = cfg["HARD_SL_POINTS"]   # also the floor when ATR-based (PROD10 rule)
+    if cfg.get("HARD_SL_FIXED"):
+        hard_sl_pts = float(cfg.get("HARD_SL_FIXED_POINTS", 8.0))
+        print(f"  🛡️ FIXED Hard SL: {hard_sl_pts:.2f} pts  (HARD SL toggle ON — ATR ignored)")
+    elif cfg.get("HARD_SL_ATR_BASED"):
         mult = cfg.get("HARD_SL_ATR_MULTIPLIER", 1.5)
         atr_src = cfg.get("atr_source", "candle")
         if atr_src == "candle":
-            # 14-period EMA ATR from 1-min historical candles (PROD10-style, no floor)
-            _real_atr = None
+            # PROD10 mechanism: 14-period EMA ATR from 5-min candles,
+            # SL = ATR × multiplier, floored at HARD_SL_POINTS
+            _real_atr, _atr_note = None, "not fetched"
             if _atr_queue is not None:
                 try:
-                    _real_atr = _atr_queue.get(timeout=4)
-                except Exception:
-                    pass
+                    _real_atr, _atr_note = _atr_queue.get(timeout=10)
+                except Exception as _qe:
+                    _atr_note = f"queue wait failed: {_qe}"
             if _real_atr:
-                hard_sl_pts = round(_real_atr * mult, 2)
-                print(f"  📐 Hist ATR Hard SL: {hard_sl_pts:.2f} pts  "
-                      f"(1-min EMA ATR=₹{_real_atr:.2f} × {mult:.1f})")
+                raw_sl      = round(_real_atr * mult, 2)
+                hard_sl_pts = max(fixed_sl_pts, raw_sl)
+                _floored    = " → floored" if hard_sl_pts > raw_sl else ""
+                print(f"  🛡️ HIST ATR Hard SL: {hard_sl_pts:.2f} pts  "
+                      f"({mult:.1f} × ATR {_real_atr:.2f} = {raw_sl:.2f}, "
+                      f"floor={fixed_sl_pts}{_floored})")
+                print(f"     ATR source: {_atr_note}")
             else:
-                hard_sl_pts = cfg["HARD_SL_POINTS"]
-                print(f"  ⚠️ Hist ATR unavailable — fixed {hard_sl_pts:.1f} pts Hard SL")
+                hard_sl_pts = fixed_sl_pts
+                print(f"  ⚠️ Hist ATR unavailable — fixed {hard_sl_pts:.1f} pts Hard SL  ({_atr_note})")
         else:
             # Tick Range ATR: high-low range from 15–25 sec live tick scan window
             if scan_atr:
                 raw = round(scan_atr * mult, 2)
                 hard_sl_pts = max(3.0, raw)
-                print(f"  📐 Tick Range Hard SL: {hard_sl_pts:.2f} pts  "
+                print(f"  🛡️ TICK RNG Hard SL: {hard_sl_pts:.2f} pts  "
                       f"(tick range={scan_atr:.2f} × {mult:.1f}, floor=3)")
             else:
-                hard_sl_pts = cfg["HARD_SL_POINTS"]
-                print(f"  ⚠️ Tick Range ATR unavailable — fixed {hard_sl_pts:.1f} pts Hard SL")
+                hard_sl_pts = fixed_sl_pts
+                print(f"  ⚠️ Tick range unavailable — fixed {hard_sl_pts:.1f} pts Hard SL")
     else:
-        hard_sl_pts = cfg["HARD_SL_POINTS"]
+        hard_sl_pts = fixed_sl_pts
 
     hard_sl = round(avg_price - hard_sl_pts, 2)
 
@@ -1132,6 +1294,40 @@ def execute_trade(instrument, signal: dict) -> bool:
           f"Trail start=+{trail_start} pts  Trail step={trail_step} pts")
     if notify:
         send_telegram(f"📈 Trailing started | Entry=₹{avg_price:.2f} | Hard SL=₹{hard_sl:.2f}")
+
+    # ---- RESTING TARGET ORDER (place_target_order toggle) ----
+    # A LIMIT SELL parked at entry + target the instant the BUY is done, so the
+    # target is held at the exchange instead of depending on this loop seeing the
+    # touch.  Cancelled before any other exit (hard SL / trail / max hold).
+    tgt_order_id = None
+    tgt_price    = None
+    tgt_alive    = False
+    tgt_filled   = False
+    if cfg.get("place_target_order"):
+        tgt_price = _round_5p(avg_price + trail_start)
+        if is_sim:
+            tgt_alive = True
+            print(f"  🎯 {mode_tag}LIMIT SELL simulated @ ₹{tgt_price:.2f}  "
+                  f"(+{trail_start} pts, qty={qty})")
+        else:
+            try:
+                _tr = _place_limit_order(instrument, qty, tgt_price, "SELL")
+                tgt_order_id = (_tr.get("payload", {}).get("groww_order_id")
+                                or _tr.get("groww_order_id"))
+                tgt_alive = bool(tgt_order_id)
+                print(f"  🎯 LIMIT SELL placed @ ₹{tgt_price:.2f}  "
+                      f"(+{trail_start} pts)  order_id={tgt_order_id}  [{_ts()}]")
+                _tst = _get_order_status(tgt_order_id) if tgt_order_id else None
+                if _tst in _DEAD_STATES:
+                    tgt_alive = False
+                    print(f"  ❌ Target order {_tst} — falling back to market exit at target")
+                    send_telegram(f"❌ Target order {_tst} — bot will market-sell at target instead")
+                elif notify:
+                    send_telegram(f"🎯 Target LIMIT SELL @ ₹{tgt_price:.2f} (+{trail_start} pts)")
+            except Exception as _te:
+                tgt_alive = False
+                print(f"  ❌ Target LIMIT SELL failed: {_te} — falling back to market exit at target")
+                send_telegram(f"❌ Target LIMIT SELL failed: {_te}")
 
     # ---- TRAIL LOOP ----
     highest_price    = avg_price
@@ -1157,11 +1353,50 @@ def execute_trade(instrument, signal: dict) -> bool:
         time.sleep(cfg["poll_seconds"])
         return v
 
+    last_target_check = time.time()
+    last_tgt_poll     = time.time()
+    last_tgt_warn     = 0.0
+
     while True:
         # Heartbeat every 30s
         if time.time() - last_heartbeat >= 30:
             print(f"\n  💓 Monitoring... LTP last seen: ₹{ltp:.2f}")
             last_heartbeat = time.time()
+
+        # Pick up a target change made in the dashboard while the trade is open
+        if time.time() - last_target_check >= 3:
+            last_target_check = time.time()
+            _new_target = _reload_live_target()
+            if _new_target != trail_start:
+                print(f"\n  ⚙️  Target/trail-start changed {trail_start} → {_new_target} pts (from UI)")
+                trail_start     = _new_target
+                last_trail_exit = None   # force trail line to be re-printed
+                # Move the resting limit sell to the new target
+                if tgt_alive:
+                    _new_px = _round_5p(avg_price + trail_start)
+                    if _new_px != tgt_price:
+                        if is_sim:
+                            tgt_price = _new_px
+                            print(f"  🎯 {mode_tag}Target order moved to ₹{tgt_price:.2f}")
+                        else:
+                            _st = _get_order_status(tgt_order_id)
+                            if _st in _FILLED_STATES:
+                                print(f"  ℹ️  Target order already filled at ₹{tgt_price:.2f} — keeping it")
+                            elif _cancel_order(tgt_order_id):
+                                try:
+                                    _tr = _place_limit_order(instrument, qty, _new_px, "SELL")
+                                    tgt_order_id = (_tr.get("payload", {}).get("groww_order_id")
+                                                    or _tr.get("groww_order_id"))
+                                    tgt_price    = _new_px
+                                    print(f"  🎯 Target order moved to ₹{tgt_price:.2f}  "
+                                          f"order_id={tgt_order_id}")
+                                    if notify:
+                                        send_telegram(f"🎯 Target moved → ₹{tgt_price:.2f} (+{trail_start} pts)")
+                                except Exception as _re:
+                                    tgt_alive = False
+                                    print(f"  ❌ Could not re-place target order: {_re} — market exit at target")
+                            else:
+                                print(f"  ⚠️ Could not cancel target order to move it — leaving it at ₹{tgt_price:.2f}")
 
         if mode == "mock":
             fetched = _next_mock_trail_ltp()
@@ -1186,12 +1421,42 @@ def execute_trade(instrument, signal: dict) -> bool:
         ltp = float(fetched)
         sell_reason = None
 
+        # ── Resting target order: has it filled? ──
+        if tgt_alive:
+            if is_sim:
+                # Simulated resting limit — fills the moment price touches it
+                tgt_filled = ltp >= tgt_price
+            elif ltp >= tgt_price or time.time() - last_tgt_poll >= 3:
+                last_tgt_poll = time.time()
+                _st = _get_order_status(tgt_order_id)
+                if _st in _FILLED_STATES:
+                    tgt_filled = True
+                elif _st in _DEAD_STATES:
+                    tgt_alive = False
+                    print(f"\n  ⚠️ Target order {_st} — reverting to market exit at target")
+                elif ltp >= tgt_price:
+                    # Price is at/through the target but the order has not filled.
+                    # Keep waiting (hard SL and max hold still apply) but say so once
+                    # every 20 s — a resting order that never fills is worth seeing.
+                    if time.time() - last_tgt_warn >= 20:
+                        last_tgt_warn = time.time()
+                        print(f"\n  ⚠️ LTP ₹{ltp:.2f} ≥ target ₹{tgt_price:.2f} but order "
+                              f"{tgt_order_id} still {_st} — waiting for the fill")
+            if tgt_filled:
+                tgt_alive   = False
+                sell_reason = (f"🎯 Target order FILLED @ ₹{tgt_price:.2f}  "
+                               f"(+{trail_start} pts, P&L=₹{(tgt_price-avg_price)*qty:+.2f})"
+                               f"  [detected {_ts()}]")
+
         # Check exit conditions
-        if ltp <= hard_sl:
+        if sell_reason:
+            pass          # resting target already filled — nothing else to check
+        elif ltp <= hard_sl:
             sell_reason = f"🛑 HARD SL hit @ ₹{ltp:.2f}  [detected {_ts()}]"
         elif time.time() - start_time >= max_time_sec:
             sell_reason = f"⏰ Max hold time ({cfg['max_hold_min']}m) reached  [detected {_ts()}]"
-        elif cfg.get("exit_mode") == "quick" and ltp >= avg_price + cfg["TRAIL_START_PROFIT"]:
+        elif (cfg.get("exit_mode") == "quick" and not tgt_alive
+              and ltp >= avg_price + cfg["TRAIL_START_PROFIT"]):
             sell_reason = (f"🎯 Quick target hit @ ₹{ltp:.2f}  "
                            f"(+{cfg['TRAIL_START_PROFIT']} pts, P&L=₹{(ltp-avg_price)*qty:+.2f})"
                            f"  [detected {_ts()}]")
@@ -1242,7 +1507,45 @@ def execute_trade(instrument, signal: dict) -> bool:
 
     # ---- SELL ----
     sell_price = ltp
-    if is_sim:
+
+    # A resting target order must never coexist with a market exit — cancel it
+    # first, and if it filled while we were deciding, take that fill as the exit.
+    if tgt_alive and not is_sim:
+        _st = _get_order_status(tgt_order_id)
+        if _st in _FILLED_STATES:
+            tgt_filled, tgt_alive = True, False
+            print(f"  ℹ️  Target order filled during exit — using it instead of market SELL")
+        else:
+            _cancelled = _cancel_order(tgt_order_id)
+            if not _cancelled:
+                _st2 = _get_order_status(tgt_order_id)
+                if _st2 in _FILLED_STATES:
+                    tgt_filled, tgt_alive = True, False
+                    print(f"  ℹ️  Target order filled just before cancel — using it as the exit")
+                else:
+                    _cancelled = _cancel_order(tgt_order_id)   # one retry
+            if not tgt_filled:
+                tgt_alive = False
+                if _cancelled:
+                    print(f"  🔄 Target order cancelled  [{_ts()}]")
+                else:
+                    # PROD10 behaviour: proceed with the market exit anyway — an
+                    # unprotected long past its SL is worse than a possible oversell
+                    print(f"  ⚠️ Could not cancel target order {tgt_order_id} — "
+                          f"market SELL going out anyway, CHECK POSITIONS")
+                    send_telegram(f"⚠️ Target order {tgt_order_id} would not cancel on exit — "
+                                  f"check {symbol} positions for a stray SELL")
+    elif tgt_alive:
+        tgt_alive = False   # sim: nothing resting at the exchange
+
+    if tgt_filled:
+        sell_price = tgt_price
+        if not is_sim:
+            _sp, _ = _get_executed_price(tgt_order_id)
+            if _sp:
+                sell_price = _sp
+        print(f"  ✅ {mode_tag}Target order filled @ ₹{sell_price:.2f}  [{_ts()}]")
+    elif is_sim:
         print(f"  📋 {mode_tag}SELL simulated @ ₹{sell_price:.2f}  [{_ts()}]")
     else:
         try:
@@ -1330,7 +1633,9 @@ def main():
 
     trades_today = 0
     last_atm     = atm
-    next_scan_at = 0.0
+    next_scan_at   = 0.0
+    last_trade_end = None   # ts of last trade close — cooldown deadline is recomputed
+                            # from this so a UI cooldown change applies mid-wait
 
     trail_mode = (f"ATR×{CONFIG['TRAIL_SL_ATR_MULTIPLIER']}" if CONFIG['TRAIL_SL_ATR_BASED']
                   else f"{CONFIG['TRAIL_STEP']} pts fixed")
@@ -1341,8 +1646,11 @@ def main():
           f"Trail poll={CONFIG['poll_seconds']}s")
     print(f"  Velocity>={CONFIG['velocity_pct']}%  "
           f"Consistency>={CONFIG['consistency_pct']}%")
-    print(f"  Hard SL={CONFIG['HARD_SL_POINTS']} pts  "
-          f"Trail start=+{CONFIG['TRAIL_START_PROFIT']} pts  "
+    _tgt_label = ("Quick target" if CONFIG.get("exit_mode") == "quick" else "Trail start")
+    _sl_label  = (f"{CONFIG['HARD_SL_FIXED_POINTS']} pts FIXED" if CONFIG.get("HARD_SL_FIXED")
+                  else f"{CONFIG['HARD_SL_POINTS']} pts")
+    print(f"  Hard SL={_sl_label}  "
+          f"{_tgt_label}=+{CONFIG['TRAIL_START_PROFIT']} pts  "
           f"Trail step={trail_mode}")
     print(f"  Max hold={CONFIG['max_hold_min']} min  "
           f"Post-trade wait={CONFIG['cooldown_sec']}s  "
@@ -1356,12 +1664,23 @@ def main():
     while True:
         now = time.time()
 
-        # Respect cooldown after a trade
+        # Respect cooldown after a trade — re-read the override each tick so a
+        # cooldown change from the dashboard shortens/extends the current wait
         if now < next_scan_at:
-            remain = int(next_scan_at - now)
-            print(f"  💤 Cooldown — next scan in {remain}s", end="\r")
+            if last_trade_end is not None:
+                _prev_cd = CONFIG["cooldown_sec"]
+                _reload_override(verbose=False)
+                if CONFIG["cooldown_sec"] != _prev_cd:
+                    next_scan_at = last_trade_end + CONFIG["cooldown_sec"]
+                    print(f"\n  ⚙️  Cooldown changed {_prev_cd}s → {CONFIG['cooldown_sec']}s (from UI)")
+                    if time.time() >= next_scan_at:
+                        last_trade_end = None
+                        continue
+            remain = int(next_scan_at - time.time())
+            print(f"  💤 Cooldown — next scan in {remain}s   ", end="\r")
             time.sleep(2)
             continue
+        last_trade_end = None
 
         # ── Consecutive Hard SL circuit breaker (always active) ──────────────────
         if CONFIG.get("consec_sl_brake", True):
@@ -1466,13 +1785,25 @@ def main():
             ok = execute_trade(signal["inst"], signal)
             if ok:
                 trades_today += 1
-                next_scan_at = time.time() + CONFIG["cooldown_sec"]
+                last_trade_end = time.time()
+                next_scan_at   = last_trade_end + CONFIG["cooldown_sec"]
                 print(f"  Trades today: {trades_today}")
         else:
-            wait = CONFIG["no_signal_wait_sec"]
+            wait     = CONFIG["no_signal_wait_sec"]
+            wait_end = time.time() + wait
             print(f"  No momentum signal — waiting {wait}s before next scan …")
-            for remaining in range(wait, 0, -1):
-                print(f"  ⏳ Next scan in {remaining}s …", end="\r")
+            while True:
+                # Re-read override so a no-signal-wait change from the UI applies now
+                _prev_w = CONFIG["no_signal_wait_sec"]
+                _reload_override(verbose=False)
+                if CONFIG["no_signal_wait_sec"] != _prev_w:
+                    wait_end = wait_end - _prev_w + CONFIG["no_signal_wait_sec"]
+                    print(f"\n  ⚙️  No-signal wait changed {_prev_w}s → "
+                          f"{CONFIG['no_signal_wait_sec']}s (from UI)")
+                remaining = int(round(wait_end - time.time()))
+                if remaining <= 0:
+                    break
+                print(f"  ⏳ Next scan in {remaining}s …   ", end="\r")
                 time.sleep(1)
             print()
 

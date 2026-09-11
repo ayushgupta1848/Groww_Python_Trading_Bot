@@ -170,10 +170,13 @@ referenced spec section for the full field list.
 | `.convergence_signals.json` | CONVERGENCE_SIGNAL_BOT | dashboard AI brain | 03 §7 |
 | `.trendline_signals.json`, `.trendline_chart_data.json` | TRENDLINE_SCANNER_BOT | dashboard | 03 §6 |
 | `.vix_cache.json` | LIVE_DASHBOARD | itself (restart survival) | 02 §9 |
+| `.premium_pulse_verdicts.json` | LIVE_DASHBOARD (Premium Pulse 5-min verdicts) | itself (same-date restart survival) | 02 §1/§4 |
 | `.trading_ai_cache.json` | PERSONAL_TRADING_AI | itself (12 h TTL) | 03 (PTAI) |
 | `.wa_control.json` | whatsapp_gateway webhook | bots via `get_pending_command()` | 04 §2 |
 | `BOT_TUNING.json` | SIGNAL_ANALYZER | MASTER_SIGNAL_BOT (hot reload on mtime) | 03 §1/§SA |
 | `momentum_config_override.json` | dashboard | MOMENTUM_AUTO_BOT (re-read every cycle) | 03 §5 |
+| `.autofit_history.json` | dashboard (`_autofit_loop`, 3-min samples) | itself — Auto Signal tab regime light | 02 §2/§4 |
+| `release_notes.json` | dashboard (UI notes; seeded from `_DEFAULT_RELEASE_NOTES` v1.0.0) | itself — version history card on the Dashboard tab | 02 §2/§4 |
 | `trendline_config.json` | dashboard | TRENDLINE_SCANNER_BOT (read once at import!) | 03 §6 |
 | `logs/master_signal/Master_Signal_*.log` | MASTER_SIGNAL_BOT | CHART_LEVEL (≤300 s fresh), PROD10 auto (≤90 s), SIGNAL_ANALYZER, dashboard | 03 §1 |
 | `logs/fibo_analyzer/*.log`, `logs/premium_tracker/*.log` | FIBO / PDT | SIGNAL_ANALYZER + dashboard **regex-scrape the text** — printed strings are contracts | 03 §2/§4 |
@@ -211,13 +214,22 @@ Rule: never run MOMENTUM_AUTO_BOT and PROD10 on the same index simultaneously.
 
 These were paid for with real incidents. Implement them exactly.
 
-1. **The trades endpoint lags order status.** `/v1/order/trades/{id}` is eventually
-   consistent and can return an empty `trade_list` for 200 ms–2 s after
-   `/v1/order/status` already says `EXECUTED`. Every fill-price fetch must: attempt
-   immediately (happy path = one call, zero added latency), then retry on empty with
-   backoff `(0, 0.25, 0.5, 1.0, 1.25)`, then fall back to the status payload's
-   `average_price`/`avg_price` + `filled_quantity`/`quantity`.
-   *(Incident 2026-08-04 11:28: single-attempt fetch failed 216 ms after fill.)*
+1. **The trades endpoint lags order status — and a non-empty `trade_list` is NOT
+   proof of completeness.** `/v1/order/trades/{id}` is eventually consistent: it can
+   return an empty `trade_list` for 200 ms–2 s after `/v1/order/status` already says
+   `EXECUTED`, and for large orders (which fill as multiple exchange trades) it can
+   return only the FIRST fills. Every fill-price fetch must: know the expected fill
+   qty (callers pass the ordered qty of the EXECUTED order; else read
+   `filled_quantity` from order-status first), attempt immediately (happy path = one
+   call, zero added latency), retry while the list is empty OR sums short of the
+   expected qty with backoff `(0, 0.25, 0.5, 1.0, 1.25, 1.5, 2.0)`, then fall back:
+   incomplete list → return `(partial_avg_price, expected_qty)` (position SIZE is
+   authoritative, price is an estimate); no trades at all → the status payload's
+   `average_price`/`avg_price` + `filled_quantity`/`quantity`. NEVER let a short
+   trade_list shrink the managed quantity.
+   *(Incident 2026-08-04 11:28: single-attempt fetch failed 216 ms after fill.
+   Incident 2026-08-11 13:09: 1430-qty BUY filled as ~11 trades; first fetch saw one
+   130-qty fill → bot managed 130 and left 1300 qty without SL/target.)*
 2. **Never abandon a confirmed-executed BUY.** If the fill price is unrecoverable, estimate
    entry from the dashboard ref LTP / pre-order LTP / fresh LTP and CONTINUE managing the
    position (target + SL) with a loud alert (`⚠️ … using LTP estimate`). Only if no price of

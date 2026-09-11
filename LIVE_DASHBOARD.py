@@ -11,7 +11,7 @@ Open browser:            http://localhost:8765
 from __future__ import annotations
 import os, json, time, re as _re, threading, csv, sys
 import requests as _req
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -70,6 +70,205 @@ _BOT_REGISTRY = [
 
 _PY_BIN = sys.executable   # same Python that runs the dashboard — guaranteed to have all packages
 
+# ─────────────────────────────────────────────────────────────
+#  RELEASE NOTES — version history shown at the top of the dashboard.
+#  Seeded once into release_notes.json; notes added from the UI are appended
+#  to that file, so they survive a dashboard restart.
+# ─────────────────────────────────────────────────────────────
+APP_VERSION        = "1.0.1"
+RELEASE_NOTES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "release_notes.json")
+_rn_lock = threading.Lock()
+
+_DEFAULT_RELEASE_NOTES = {
+    "current_version": APP_VERSION,
+    "releases": [
+        {
+            "version": "1.0.1",
+            "date": "2026-09-11",
+            "title": "Auto Signal page, fixed hard SL and a per-bot control bar",
+            "sections": [
+                {"heading": "🎯 Auto Signal — new tab", "items": [
+                    "AUTO-FIT regime light for the Momentum Auto Bot: does the current tape match what the scalp model needs. Sampled every 3 minutes during market hours and kept for the whole day.",
+                    "Six inputs — volatility expansion and shock bar off the NIFTY 1-minute tape, Premium Pulse swing, ATM option ATR ÷ target, hard SLs in the last 30 minutes, and giveback from the day's peak P&L.",
+                    "ATR ÷ target is tagged as a setup input and caps the light at AMBER, so a wrong target/ATR geometry cannot pin the light RED all day and destroy its timing value.",
+                    "Page shows the live state with a recommended action, per-component cards with their thresholds, the day's timeline as a colour strip, a state-change table and a full sample log. History survives a dashboard restart.",
+                    "Advisory only — no bot reads it. Replayed on 2026-09-11 it turned RED at 13:42, twelve minutes before that day's ₹67k loss cluster, with only 5 state changes across the session.",
+                ]},
+                {"heading": "🛡 Risk controls", "items": [
+                    "HARD SL toggle: type the stop in points (e.g. 8) and every Auto trade uses exactly that stop, skipping the ATR machinery entirely.",
+                    "HARD SL and ATR SL are now mutually exclusive — turning the fixed stop on forces ATR SL off and disables ATR SRC, SL MULT and SL FLOOR.",
+                    "Stop points are typed inline on the panel instead of through a browser popup, and apply live to a running bot.",
+                ]},
+                {"heading": "🎛 Trade Board layout", "items": [
+                    "PROD10 and the Momentum Auto Bot each own a labelled block with a coloured rail, so it is obvious which controls drive which bot.",
+                    "The Auto Bot's controls are split into SETUP, RISK and FILTERS rows that wrap instead of hiding behind a horizontal scrollbar.",
+                ]},
+            ],
+            "notes": [],
+        },
+        {
+            "version": "1.0.0",
+            "date": "2026-09-11",
+            "title": "Trading cockpit — dashboard, bots and auto-execution",
+            "sections": [
+                {"heading": "Live Dashboard", "items": [
+                    "Single-page cockpit with 13 tabs: Live Dashboard, OI Intelligence, Trade Board, PnL Status, Performance, Bot Control, Scanner, AI Brain, VIX, Premium Pulse, Decision Engine, Control and Guide.",
+                    "Index ticker (NIFTY / BANKNIFTY / SENSEX / FINNIFTY) with a consensus signal box scoring bull vs bear across every feeding bot.",
+                    "Alert bell with sound, bot-status bar, theme picker and a 15-second auto-refresh.",
+                ]},
+                {"heading": "OI & market intelligence", "items": [
+                    "15 live OI signals — PCR, max pain, IV, buildup, writer bias, smart money and ATM momentum — fed by calculate_oi_pcr.py.",
+                    "VIX tab with session history, plus a VIX-driven auto-config that sets momentum velocity and consistency thresholds by volatility regime.",
+                    "Premium Pulse, Trendline Scanner, Fibonacci, Chart Level and Master Signal bots writing into the dashboard.",
+                ]},
+                {"heading": "Trading & execution", "items": [
+                    "Trade Board drives PROD10FEB — manual and quick-target orders, ATR-based hard SL, trailing SL and partial profit booking.",
+                    "Momentum Auto Bot: premium-velocity scanner that discovers ATM±N strikes, scores CE vs PE over an observation window and auto-trades the winner.",
+                    "Momentum controls on the AUTO row: index, expiry, lots, exit mode, target points, premium band, strike range, scan and poll seconds, cooldown and no-signal waits, SL multiplier and SL floor.",
+                    "PLACE TGT toggle parks a LIMIT SELL at entry+target the instant the BUY fills, cancelled automatically before any hard SL, trail or max-hold exit.",
+                    "Hist ATR hard SL follows the PROD10 method: 14-period EMA ATR from 5-minute candles over a 150-minute lookback, floored at the fixed SL.",
+                    "Target and cooldown timings apply live — changing them re-times a countdown that is already running and retunes an open trade's target.",
+                    "PAPER / MOCK / LIVE trade modes, order validation, choppiness detector and a consecutive-hard-SL circuit breaker.",
+                ]},
+                {"heading": "Safety & operations", "items": [
+                    "Trade Control Panel on port 8790 — emergency position view, one-click exit and ready-made curls.",
+                    "Bot Control tab starts and stops every bot; shared cached Groww token keeps all bots under the token rate limit.",
+                    "Trade history to JSONL and Excel, PnL and Performance tabs, and a Guide tab documenting every signal.",
+                ]},
+            ],
+            "notes": [],
+        }
+    ],
+}
+
+
+def _load_release_notes() -> dict:
+    """Read release_notes.json, seeding it on first run."""
+    with _rn_lock:
+        try:
+            if os.path.exists(RELEASE_NOTES_PATH):
+                with open(RELEASE_NOTES_PATH) as f:
+                    doc = json.load(f)
+                if isinstance(doc, dict) and doc.get("releases"):
+                    return _merge_seed_releases(doc)
+        except Exception as e:
+            print(f"[RELEASE NOTES] read error ({e}) — falling back to defaults")
+        doc = json.loads(json.dumps(_DEFAULT_RELEASE_NOTES))
+        try:
+            with open(RELEASE_NOTES_PATH, "w") as f:
+                json.dump(doc, f, indent=2)
+        except Exception as e:
+            print(f"[RELEASE NOTES] seed write failed: {e}")
+        return doc
+
+
+def _vkey(v) -> tuple:
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except Exception:
+        return (0,)
+
+
+def _merge_seed_releases(doc: dict) -> dict:
+    """Add releases shipped in a new build to the user's existing release_notes.json.
+
+    Their own notes are never touched — only versions the file has never seen are
+    added, and current_version moves forward to APP_VERSION when it is newer."""
+    have = {str(r.get("version")) for r in doc.get("releases", [])}
+    added = [r for r in _DEFAULT_RELEASE_NOTES["releases"] if str(r["version"]) not in have]
+    changed = False
+    if added:
+        doc["releases"] = json.loads(json.dumps(added)) + doc.get("releases", [])
+        doc["releases"].sort(key=lambda r: _vkey(r.get("version")), reverse=True)
+        changed = True
+    if _vkey(doc.get("current_version")) < _vkey(APP_VERSION):
+        doc["current_version"] = APP_VERSION
+        changed = True
+    if changed:
+        try:
+            with open(RELEASE_NOTES_PATH, "w") as f:
+                json.dump(doc, f, indent=2)
+            if added:
+                print(f"[RELEASE NOTES] added {', '.join('v' + str(r['version']) for r in added)}")
+        except Exception as e:
+            print(f"[RELEASE NOTES] merge write failed: {e}")
+    return doc
+
+
+def _save_release_notes(doc: dict) -> tuple[bool, str]:
+    with _rn_lock:
+        tmp = RELEASE_NOTES_PATH + ".tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump(doc, f, indent=2)
+            os.replace(tmp, RELEASE_NOTES_PATH)     # atomic — never a half-written file
+            return True, ""
+        except Exception as e:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+            return False, str(e)
+
+
+def _release_notes_action(body: dict) -> dict:
+    """add_note | delete_note | add_release — every change is persisted to disk."""
+    action = (body.get("action") or "").strip()
+    doc    = _load_release_notes()
+    rels   = doc.setdefault("releases", [])
+
+    def _find(ver):
+        return next((r for r in rels if str(r.get("version")) == str(ver)), None)
+
+    if action == "add_note":
+        text = (body.get("text") or "").strip()
+        ver  = (body.get("version") or doc.get("current_version") or APP_VERSION).strip()
+        if not text:
+            return {"ok": False, "error": "Note text is empty"}
+        if len(text) > 2000:
+            return {"ok": False, "error": "Note is too long (max 2000 chars)"}
+        rel = _find(ver)
+        if not rel:
+            return {"ok": False, "error": f"Unknown version {ver}"}
+        rel.setdefault("notes", []).append({
+            "id":   f"n{int(time.time() * 1000)}",
+            "text": text,
+            "ts":   datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+
+    elif action == "delete_note":
+        rel = _find(body.get("version"))
+        if not rel:
+            return {"ok": False, "error": "Unknown version"}
+        nid   = str(body.get("id") or "")
+        notes = rel.get("notes", [])
+        rel["notes"] = [n for n in notes if str(n.get("id")) != nid]
+        if len(rel["notes"]) == len(notes):
+            return {"ok": False, "error": "Note not found"}
+
+    elif action == "add_release":
+        ver = (body.get("version") or "").strip().lstrip("vV")
+        if not _re.match(r"^\d+\.\d+\.\d+$", ver):
+            return {"ok": False, "error": "Version must look like 1.2.0"}
+        if _find(ver):
+            return {"ok": False, "error": f"Version {ver} already exists"}
+        rels.insert(0, {
+            "version":  ver,
+            "date":     datetime.now().strftime("%Y-%m-%d"),
+            "title":    (body.get("title") or "").strip() or "Release",
+            "sections": [],
+            "notes":    [],
+        })
+        doc["current_version"] = ver
+
+    else:
+        return {"ok": False, "error": f"Unknown action: {action}"}
+
+    ok, err = _save_release_notes(doc)
+    if not ok:
+        return {"ok": False, "error": f"Could not save: {err}"}
+    return {"ok": True, "data": doc}
+
 _bot_procs: dict = {}   # {bot_id: Popen} — only for non-terminal (oi_pcr)
 _bot_logs:  dict = {}   # {bot_id: list[str]}
 _bot_lock   = threading.Lock()
@@ -111,7 +310,10 @@ def _bot_start(bot_id: str, config: dict = None) -> dict:
                     "consec_sl_brake", "consec_sl_pause_min",
                     "HARD_SL_ATR_BASED", "HARD_SL_ATR_MULTIPLIER",
                     "atr_source",
-                    "min_score_filter", "velocity_filter"}
+                    "min_score_filter", "velocity_filter",
+                    "TRAIL_START_PROFIT", "cooldown_sec", "no_signal_wait_sec",
+                    "HARD_SL_POINTS", "place_target_order",
+                    "HARD_SL_FIXED", "HARD_SL_FIXED_POINTS"}
         override = {k: v for k, v in config.items() if k in _allowed}
         if override:
             try:
@@ -748,6 +950,8 @@ _idx_state: dict  = {}          # {nifty, banknifty, sensex}
 _idx_lock         = threading.Lock()
 _idx_prev: dict   = {}          # {sym: prev_close} — fetched once via Quote API
 _idx_ohlc: dict   = {}          # {nifty: {open,high,low,close}} — refreshed every 60s from Quote API
+_ltp_day_extremes: dict = {}    # {date,high,low} — NIFTY H/L from the 3s LTP stream, session only
+                                # (phantom-free, unlike Quote-API OHLC which carries the fake 09:00 wick)
 
 def _idx_entry(ltp: float, prev: float) -> dict:
     chg = round(ltp - prev, 2) if prev else 0.0
@@ -811,6 +1015,18 @@ def _idx_refresh_loop():
                         result[label] = _idx_entry(ltp, prev)
             if result:
                 with _idx_lock: _idx_state.update(result)
+            # Track NIFTY LTP extremes during the real session → phantom-free day H/L
+            nl = float((result.get("nifty") or {}).get("last", 0) or 0)
+            if nl:
+                nowdt = datetime.now()
+                if "09:15" <= nowdt.strftime("%H:%M") <= "15:30":
+                    with _idx_lock:
+                        if _ltp_day_extremes.get("date") != nowdt.date().isoformat():
+                            _ltp_day_extremes.clear()
+                            _ltp_day_extremes.update({"date": nowdt.date().isoformat(), "high": nl, "low": nl})
+                        else:
+                            _ltp_day_extremes["high"] = max(_ltp_day_extremes["high"], nl)
+                            _ltp_day_extremes["low"]  = min(_ltp_day_extremes["low"],  nl)
             # Refresh OHLC (day high/low) every 60s via Quote API
             if now - _last_ohlc_refresh >= 60:
                 threading.Thread(target=_fetch_idx_quote, daemon=True).start()
@@ -824,6 +1040,297 @@ def read_market_indices() -> dict:
         state = dict(_idx_state)
     state["_ohlc"] = dict(_idx_ohlc)   # include day range data in every snapshot
     return state
+
+# ─────────────────────────────────────────────────────────────
+#  MARKET REGIME HISTORY — last N trading days, daily candles
+#  Which days were trending vs sideways, from NIFTY OHLC + VIX
+# ─────────────────────────────────────────────────────────────
+_regime_hist_cache: dict = {}          # {"ts": epoch, ...payload}
+_regime_hist_lock  = threading.Lock()
+_REGIME_HIST_TTL   = 1800              # re-fetch daily candles every 30 min
+_regime_hist_fail_ts  = [0.0]          # backoff: don't hammer the API after a failed fetch
+_regime_hist_building = threading.Event()
+
+def _candle_date(ts):
+    """Candle timestamp → date. Handles epoch s, epoch ms, and ISO strings."""
+    try:
+        if isinstance(ts, str) and not ts.isdigit():
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).date()
+        v = float(ts)
+        if v > 1e12:                      # epoch ms
+            v /= 1000.0
+        return datetime.fromtimestamp(v).date()
+    except Exception:
+        return None
+
+def _fetch_hist_candles(groww_symbol: str, exchange: str, interval: str, days_back: int = 32) -> list:
+    """Fetch candles [ts,o,h,l,c,...] for a CASH index via the historical API."""
+    token = _get_ltp_token()
+    if not token:
+        return []
+    from datetime import timedelta
+    end   = datetime.now()
+    start = end - timedelta(days=days_back)
+    try:
+        r = _ltp_session.get(
+            "https://api.groww.in/v1/historical/candles",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                     "X-API-VERSION": "1.0"},
+            params={"exchange": exchange, "segment": "CASH", "groww_symbol": groww_symbol,
+                    "start_time": start.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_time":   end.strftime("%Y-%m-%d %H:%M:%S"),
+                    "candle_interval": interval},
+            timeout=15)
+        if r.status_code != 200:
+            print(f"[regime hist] {groww_symbol} HTTP {r.status_code}")
+            return []
+        body = r.json()
+        return body.get("candles", []) or body.get("payload", {}).get("candles", [])
+    except Exception as e:
+        print(f"[regime hist] {groww_symbol}: {e}")
+        return []
+
+def _daily_ohlc_from_15m(candles: list) -> list:
+    """Aggregate 15-min candles → per-day OHLC, dropping Groww's phantom bars.
+    The index feed stamps a fake 09:00 bar with a huge wick each day (see
+    reference-groww-phantom-open-candle) which inflates daily H/L — so keep only
+    real-session bars (>= 09:15) and drop any bar with range > 8x the day's median."""
+    from datetime import time as _dtime
+    by_day: dict = {}
+    for c in candles:
+        try:
+            dt = datetime.fromisoformat(str(c[0]).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if dt.time() < _dtime(9, 15):
+            continue                       # phantom pre-session bar
+        by_day.setdefault(dt.date(), []).append(
+            (dt, float(c[1]), float(c[2]), float(c[3]), float(c[4])))
+    out = []
+    for day in sorted(by_day):
+        bars = sorted(by_day[day])
+        ranges = sorted(b[2] - b[3] for b in bars)
+        med = ranges[len(ranges) // 2] or 1
+        real = [b for b in bars if (b[2] - b[3]) <= 8 * med] or bars
+        out.append({"date": day,
+                    "open":  real[0][1],
+                    "high":  max(b[2] for b in real),
+                    "low":   min(b[3] for b in real),
+                    "close": real[-1][4]})
+    return out
+
+def _fetch_day_option_candles(groww_symbol: str, day_iso: str) -> list:
+    """15-min candles for one option contract on one day (works for expired contracts).
+    Paced + 429-retried: Groww's historical API rate-limits bursts, so calls are
+    sequential with a small gap — never parallelize these."""
+    token = _get_ltp_token()
+    if not token:
+        return []
+    time.sleep(0.25)
+    for attempt in (1, 2):
+        try:
+            r = _ltp_session.get(
+                "https://api.groww.in/v1/historical/candles",
+                headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                         "X-API-VERSION": "1.0"},
+                params={"exchange": "NSE", "segment": "FNO", "groww_symbol": groww_symbol,
+                        "start_time": f"{day_iso} 09:00:00", "end_time": f"{day_iso} 15:30:00",
+                        "candle_interval": "15minute"},
+                timeout=12)
+            if r.status_code == 429 and attempt == 1:
+                time.sleep(1.2)
+                continue
+            if r.status_code != 200:
+                return []
+            body = r.json()
+            return body.get("candles", []) or body.get("payload", {}).get("candles", [])
+        except Exception:
+            return []
+    return []
+
+def _atm_premium_day(date_obj, atm_strike: int):
+    """That day's ATM CE/PE open→close from the weekly contract's candles.
+    Weekly NIFTY expiry is Tuesday; ±1 day candidates cover holiday-shifted expiries.
+    Returns {"CE": (open, close), "PE": (open, close), "expiry": iso} or None."""
+    from datetime import timedelta
+    base = date_obj + timedelta(days=(1 - date_obj.weekday()) % 7)   # next Tue (or same day)
+    for exp in (base, base - timedelta(days=1), base + timedelta(days=1)):
+        if exp < date_obj:
+            continue
+        res = {"expiry": exp.isoformat()}
+        for side in ("CE", "PE"):
+            sym = f"NSE-NIFTY-{exp.strftime('%d%b%y')}-{atm_strike}-{side}"
+            candles = [c for c in _fetch_day_option_candles(sym, date_obj.isoformat())
+                       if str(c[0])[11:16] >= "09:15"]
+            if not candles:
+                res = None
+                break
+            res[side] = (float(candles[0][1]), float(candles[-1][4]))
+        if res:
+            return res
+    return None
+
+def _classify_regime_day(range_pct: float, eff: float, move_pct: float):
+    """Daily OHLC → regime label. Mirrors the live Market Regime Detector buckets:
+    efficiency = |close-open| / (high-low) — how much of the range was a sustained move.
+    Thresholds calibrated to phantom-filtered ranges (real NIFTY days run ~0.4-1.1%)."""
+    if range_pct >= 1.0 and eff >= 0.6:
+        return ("🔥 STRONG TREND " + ("UP" if move_pct >= 0 else "DOWN"), "strong")
+    if range_pct >= 0.55 and eff >= 0.5:
+        return (("↗ TRENDING UP" if move_pct >= 0 else "↘ TRENDING DOWN"), "trend")
+    if range_pct >= 0.75 and eff < 0.3:
+        return ("↔ BOTH-SIDE CHOP", "chop")
+    if range_pct < 0.45:
+        return ("— SIDEWAYS", "side")
+    return ("〜 MIXED", "mixed")
+
+def build_regime_history(days: int = 15) -> dict:
+    """Last `days` trading sessions classified trending/sideways/chop from daily candles."""
+    with _regime_hist_lock:
+        if _regime_hist_cache and (time.time() - _regime_hist_cache.get("ts", 0)) < _REGIME_HIST_TTL:
+            return _regime_hist_cache
+    if (time.time() - _regime_hist_fail_ts[0]) < 300:   # failed recently — back off 5 min
+        return _regime_hist_cache or {"days": [], "error": "candle fetch unavailable — retrying shortly"}
+
+    # NIFTY: aggregate 15-min candles ourselves — the 1day feed's H/L carry the
+    # phantom 09:00 wick and its open is unreliable (reports prior close).
+    nifty = _daily_ohlc_from_15m(_fetch_hist_candles("NSE-NIFTY", "NSE", "15minute"))
+    if not nifty:
+        _regime_hist_fail_ts[0] = time.time()
+        return _regime_hist_cache or {"days": [], "error": "no candle data (token/API unavailable)"}
+    vix_candles = _fetch_hist_candles("NSE-INDIAVIX", "NSE", "1day")
+    vix_by_date = {}
+    for c in vix_candles:
+        d = _candle_date(c[0])
+        if d:
+            vix_by_date[d.isoformat()] = round(float(c[4]), 2)
+
+    today = datetime.now().date()
+    rows, prev_close = [], 0.0
+    for c in nifty:
+        d = c["date"]
+        o, h, l, cl = (c["open"], c["high"], c["low"], c["close"])
+        if not (o and h and l and cl):
+            prev_close = cl or prev_close
+            continue
+        if d == today:
+            # intraday: candles refresh every 30 min — bring close up to live LTP.
+            # H/L stay candle-derived (Quote-API OHLC carries the phantom 09:00 wick).
+            live_ltp = float((_idx_state.get("nifty") or {}).get("last", 0) or 0)
+            if live_ltp:
+                cl = live_ltp
+                h, l = max(h, cl), min(l, cl)
+        rng       = h - l
+        range_pct = rng / cl * 100 if cl else 0
+        move_pts  = cl - o
+        move_pct  = move_pts / o * 100 if o else 0
+        eff       = abs(move_pts) / rng if rng else 0
+        gap_pct   = (o - prev_close) / prev_close * 100 if prev_close else 0
+        label, key = _classify_regime_day(range_pct, eff, move_pct)
+        date_iso  = d.isoformat()
+        vix_close = vix_by_date.get(date_iso, 0)
+        rows.append({
+            "date": date_iso, "day": d.strftime("%a"),
+            "open": round(o, 2), "high": round(h, 2), "low": round(l, 2), "close": round(cl, 2),
+            "range_pts": round(rng, 1), "range_pct": round(range_pct, 2),
+            "move_pts": round(move_pts, 1), "move_pct": round(move_pct, 2),
+            "eff": round(eff * 100), "gap_pct": round(gap_pct, 2),
+            "vix": vix_close, "label": label, "key": key,
+            "partial": d == today,   # today's candle is still forming
+        })
+        prev_close = cl
+
+    rows = rows[-days:]
+    # VIX day-over-day change
+    for i, r in enumerate(rows):
+        pv = rows[i-1]["vix"] if i > 0 else 0
+        r["vix_chg_pct"] = round((r["vix"] - pv) / pv * 100, 1) if (r["vix"] and pv) else 0
+
+    # ── ATM premium activity, rebuilt from that day's weekly option candles ──
+    # Sequential — _fetch_day_option_candles self-paces to respect API rate limits.
+    def _prem_for(r):
+        try:
+            d   = datetime.strptime(r["date"], "%Y-%m-%d").date()
+            atm = int(round(r["open"] / 50.0) * 50)
+            p   = _atm_premium_day(d, atm)
+            if not p:
+                return
+            (ceo, cec), (peo, pec) = p["CE"], p["PE"]
+            r["atm_strike"] = atm
+            r["expiry"]     = p["expiry"]
+            r["ce_chg"]     = round(cec - ceo, 1)
+            r["pe_chg"]     = round(pec - peo, 1)
+            r["ce_chg_pct"] = round((cec - ceo) / ceo * 100, 1) if ceo else 0
+            r["pe_chg_pct"] = round((pec - peo) / peo * 100, 1) if peo else 0
+            r["straddle_open"]  = round(ceo + peo, 1)
+            r["straddle_close"] = round(cec + pec, 1)
+            # Daily analog of the live PREMIUM ACTIVITY card: net directional flow.
+            # Pure theta days bleed CE and PE equally (dir ≈ 0); trend days pay one
+            # side at the other's expense. Normalized by straddle so days compare.
+            strdl_o  = ceo + peo
+            dir_pct  = (r["ce_chg"] - r["pe_chg"]) / strdl_o * 100 if strdl_o else 0
+            r["prem_dir_pct"]  = round(dir_pct, 1)
+            r["prem_activity"] = ("HIGH" if abs(dir_pct) >= 35 else
+                                  "MODERATE" if abs(dir_pct) >= 15 else "STAGNANT")
+            r["prem_bias"] = "BULLISH" if dir_pct >= 15 else "BEARISH" if dir_pct <= -15 else "NEUTRAL"
+            winner_pct = r["ce_chg_pct"] if cec > ceo else r["pe_chg_pct"]
+            if cec < ceo and pec < peo:
+                r["prem_label"], r["prem_key"] = "CRUSH", "crush"          # theta ate both sides
+            elif cec > ceo and pec > peo:
+                r["prem_label"], r["prem_key"] = "EXPANSION", "expand"     # vol event, both paid
+            elif winner_pct < 5:
+                r["prem_label"], r["prem_key"] = "DECAY", "crush"          # winning side barely moved
+            elif cec > ceo:
+                r["prem_label"], r["prem_key"] = "CE PAID", "dir_up"       # one-way directional
+            else:
+                r["prem_label"], r["prem_key"] = "PE PAID", "dir_down"
+        except Exception:
+            pass
+    for r in rows:
+        _prem_for(r)
+
+    counts = {}
+    for r in rows:
+        counts[r["key"]] = counts.get(r["key"], 0) + 1
+    payload = {"ts": time.time(), "generated": datetime.now().strftime("%H:%M:%S"),
+               "days": rows, "counts": counts}
+    with _regime_hist_lock:
+        _regime_hist_cache.clear()
+        _regime_hist_cache.update(payload)
+    return payload
+
+def _build_regime_history_async():
+    """Kick off a background regime-history refresh; never stacks threads."""
+    if _regime_hist_building.is_set():
+        return
+    _regime_hist_building.set()
+    def _run():
+        try:
+            build_regime_history()
+        finally:
+            _regime_hist_building.clear()
+    threading.Thread(target=_run, daemon=True).start()
+
+def read_clean_day_ohlc() -> dict:
+    """Today's phantom-filtered NIFTY OHLC for the live Market Regime card.
+    Candle-derived H/L (fake 09:00 wick removed) widened by the 3s LTP stream's
+    session extremes. Non-blocking: serves cache, refreshes in the background."""
+    today_iso = datetime.now().date().isoformat()
+    with _regime_hist_lock:
+        fresh = bool(_regime_hist_cache) and (time.time() - _regime_hist_cache.get("ts", 0)) < _REGIME_HIST_TTL
+        rows  = list(_regime_hist_cache.get("days", [])) if _regime_hist_cache else []
+    if not fresh:
+        _build_regime_history_async()
+    row = next((r for r in rows if r.get("date") == today_iso), None)
+    if not row:
+        return {}
+    out = {"open": row["open"], "high": row["high"], "low": row["low"], "src": "15m-filtered"}
+    with _idx_lock:
+        ext = dict(_ltp_day_extremes)
+    if ext.get("date") == today_iso and ext.get("high"):
+        out["high"] = round(max(out["high"], ext["high"]), 2)
+        out["low"]  = round(min(out["low"],  ext["low"]),  2)
+    return out
 
 # ─────────────────────────────────────────────────────────────
 #  PERSONAL TRADING AI — PnL + Market Intelligence
@@ -1824,6 +2331,565 @@ def fetch_expiries(index:str) -> list:
                    if i.get("underlying_symbol","").upper()==index.upper()
                    and i.get("expiry_date","").strip() >= min_date})[:12]
 
+# ─────────────────────────────────────────────────────────────
+#  PREMIUM PULSE — how are ATM premiums behaving today?
+#  Samples ATM CE/PE LTP every 15s, backfills the day from 5-min
+#  option candles, classifies momentum per window (day/1h/15m/5m),
+#  detects decay + traps, and records a verdict every 5 minutes.
+#  Served at /api/premium_pulse → 💓 Premium Pulse tab.
+# ─────────────────────────────────────────────────────────────
+_PULSE_INDICES     = ("NIFTY", "SENSEX")
+_PULSE_IDX_LABEL   = {"NIFTY": "nifty", "SENSEX": "sensex"}   # _idx_state keys
+_PULSE_STEP        = {"NIFTY": 50, "SENSEX": 100}
+_PULSE_SAMPLE_SEC  = 2     # LTP sample + Final Call decision cadence (1 batched call/tick)
+_PULSE_VERDICT_SEC = 300
+_PULSE_DECISION_KEEP = 3600   # Final Call history horizon (1 hour)
+_PULSE_VERDICT_FILE = os.path.join(BASE, ".premium_pulse_verdicts.json")
+_pulse_lock  = threading.Lock()
+_pulse_state: dict = {}   # {index: {date, atm, expiry, ce_ts, pe_ts, exch,
+                          #          series:{"CE":[(t,ltp)..],"PE":[..]},
+                          #          spot_series:[(t,spot)..],
+                          #          verdicts:[..], last_verdict_ts}}
+
+def _pulse_market_open(dt=None) -> bool:
+    dt = dt or datetime.now()
+    if dt.weekday() >= 5: return False
+    hm = dt.hour * 60 + dt.minute
+    return (9 * 60 + 15) <= hm <= (15 * 60 + 30)
+
+def _pulse_day_start_epoch() -> float:
+    n = datetime.now()
+    return n.replace(hour=9, minute=15, second=0, microsecond=0).timestamp()
+
+def _pulse_resolve_contracts(index: str, spot: float) -> dict:
+    """Nearest expiry + ATM strike → trading symbols from instrument.csv."""
+    step = _PULSE_STEP.get(index, 50)
+    atm  = int(round(spot / step) * step)
+    expiries = fetch_expiries(index)
+    if not expiries: return {}
+    expiry = expiries[0]
+    exch   = EXCH_MAP.get(index, "NSE")
+    syms   = {}
+    for item in _load_instruments_for_ltp():
+        if item.get("underlying_symbol", "").upper() != index: continue
+        if item.get("expiry_date", "").strip() != expiry: continue
+        it = item.get("instrument_type", "").upper()
+        if it not in ("CE", "PE"): continue
+        try:
+            if int(float(item.get("strike_price", 0))) != atm: continue
+        except (ValueError, TypeError): continue
+        if item.get("trading_symbol"): syms[it] = item["trading_symbol"].strip()
+    if "CE" not in syms or "PE" not in syms: return {}
+    return {"atm": atm, "expiry": expiry, "exch": exch,
+            "ce_ts": syms["CE"], "pe_ts": syms["PE"]}
+
+def _pulse_backfill_side(index: str, exch: str, expiry: str, strike: int, side: str) -> list:
+    """Today's 5-min candles for one option contract → [(epoch, ltp)].
+    Paced — Groww's historical API rate-limits bursts (never parallelize)."""
+    token = _get_ltp_token()
+    if not token: return []
+    try:
+        exp = datetime.strptime(expiry, "%Y-%m-%d")
+    except Exception:
+        return []
+    sym = f"{exch}-{index}-{exp.strftime('%d%b%y')}-{strike}-{side}"
+    day = datetime.now().strftime("%Y-%m-%d")
+    time.sleep(0.3)
+    try:
+        r = _ltp_session.get(
+            "https://api.groww.in/v1/historical/candles",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                     "X-API-VERSION": "1.0"},
+            params={"exchange": exch, "segment": "FNO", "groww_symbol": sym,
+                    "start_time": f"{day} 09:15:00", "end_time": f"{day} 15:30:00",
+                    "candle_interval": "5minute"},
+            timeout=12)
+        if r.status_code != 200: return []
+        body = r.json()
+        candles = body.get("candles", []) or body.get("payload", {}).get("candles", [])
+    except Exception:
+        return []
+    out, now_ep = [], time.time()
+    for c in candles:
+        try:
+            ts = str(c[0])
+            ep = float(ts) if ts.replace(".", "").isdigit() else \
+                 datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+            if ep > 1e12: ep /= 1000.0
+            if not out:                       # first bar's open = day-open point
+                out.append((ep, float(c[1])))
+            out.append((min(ep + 300, now_ep), float(c[4])))   # bar close at bar end
+        except Exception:
+            continue
+    return out
+
+def _pulse_init_index(index: str, spot: float):
+    """(Re)resolve ATM contracts and backfill their day series."""
+    c = _pulse_resolve_contracts(index, spot)
+    if not c: return
+    ce_hist = _pulse_backfill_side(index, c["exch"], c["expiry"], c["atm"], "CE")
+    pe_hist = _pulse_backfill_side(index, c["exch"], c["expiry"], c["atm"], "PE")
+    with _pulse_lock:
+        old = _pulse_state.get(index) or {}
+        _pulse_state[index] = {
+            "date": datetime.now().date().isoformat(),
+            "atm": c["atm"], "expiry": c["expiry"], "exch": c["exch"],
+            "ce_ts": c["ce_ts"], "pe_ts": c["pe_ts"],
+            "series": {"CE": ce_hist, "PE": pe_hist},
+            "spot_series": old.get("spot_series", []) if old.get("date") == datetime.now().date().isoformat() else [],
+            "verdicts": old.get("verdicts", []) if old.get("date") == datetime.now().date().isoformat() else [],
+            "decisions": old.get("decisions", []) if old.get("date") == datetime.now().date().isoformat() else [],
+            "last_verdict_ts": old.get("last_verdict_ts", 0.0),
+        }
+    print(f"[pulse] {index} → ATM {c['atm']} {c['expiry']} "
+          f"(backfill CE {len(ce_hist)} / PE {len(pe_hist)} pts)")
+
+def _pulse_resample_1m(series: list) -> list:
+    """Last value per minute → [(minute_epoch, v)]."""
+    by_min: dict = {}
+    for t, v in series:
+        by_min[int(t // 60) * 60] = v
+    return sorted(by_min.items())
+
+def _pulse_window_stats(series: list, minutes: int = 0) -> dict:
+    """Change/velocity/efficiency over the last `minutes` (0 = since day open)."""
+    now = time.time()
+    cutoff = _pulse_day_start_epoch() if not minutes else now - minutes * 60
+    pts = [p for p in series if p[0] >= cutoff and p[1] > 0]
+    if len(pts) < 2: return {}
+    first, last = pts[0][1], pts[-1][1]
+    elapsed_min = max((pts[-1][0] - pts[0][0]) / 60.0, 1.0)
+    chg = last - first
+    pct = (chg / first * 100.0) if first else 0.0
+    m1  = _pulse_resample_1m(pts)
+    diffs = [abs(m1[i][1] - m1[i-1][1]) for i in range(1, len(m1))]
+    path  = sum(diffs)
+    eff   = (abs(chg) / path) if path > 0 else 1.0
+    hi = max(v for _, v in pts); lo = min(v for _, v in pts)
+    return {"first": round(first, 2), "last": round(last, 2),
+            "chg": round(chg, 2), "pct": round(pct, 2),
+            "vel": round(chg / elapsed_min, 2),
+            "eff": round(min(eff, 1.0), 2),
+            "range_pct": round((hi - lo) / first * 100.0, 2) if first else 0.0,
+            "n": len(pts)}
+
+# |Δ%| thresholds per window: (flat, slow, steady) — above steady = fast
+_PULSE_THRESH = {"5m": (1.5, 4.0, 8.0), "15m": (2.5, 6.0, 12.0),
+                 "60m": (4.0, 10.0, 20.0), "day": (6.0, 15.0, 30.0)}
+
+def _pulse_move_class(pct: float, wkey: str) -> str:
+    f, s, st = _PULSE_THRESH.get(wkey, (2, 5, 10))
+    a = abs(pct)
+    if a < f:  return "FLAT"
+    if a < s:  return "SLOW"
+    if a < st: return "STEADY"
+    return "FAST"
+
+def _pulse_traps(series: list, min_prem: float = 5.0) -> list:
+    """Spike-and-reverse events: ≥5% run-up within 15 min that gives back
+    ≥60% within the next 15 min. Classic premium trap for buyers."""
+    m = _pulse_resample_1m([p for p in series if p[1] >= min_prem])
+    events, i, n = [], 0, len(m)
+    while i < n - 3:
+        base_v = m[i][1]
+        peak_j, peak_v = None, base_v
+        for j in range(i + 1, min(i + 16, n)):
+            if m[j][1] > peak_v: peak_v, peak_j = m[j][1], j
+        rise = (peak_v - base_v) / base_v * 100.0 if base_v > 0 else 0.0
+        if peak_j is not None and rise >= 5.0:
+            tail = [v for _, v in m[peak_j:min(peak_j + 16, n)]]
+            trough = min(tail) if tail else peak_v
+            give = (peak_v - trough) / (peak_v - base_v) * 100.0 if peak_v > base_v else 0.0
+            if give >= 60.0 and len(tail) >= 3:
+                events.append({"t": datetime.fromtimestamp(m[peak_j][0]).strftime("%H:%M"),
+                               "spike_pct": round(rise, 1), "gave_back_pct": round(min(give, 100.0), 1)})
+                i = peak_j + 15
+                continue
+        i += 3
+    return events
+
+def _pulse_verdict(win: dict, traps_n: int, decay_1h: bool, decay_day: bool) -> dict:
+    """Windows → behavior label + what to do about it."""
+    g = lambda w, s: (win.get(w, {}).get(s) or {})
+    ce5, pe5   = g("5m", "ce"),  g("5m", "pe")
+    ce15, pe15 = g("15m", "ce"), g("15m", "pe")
+    st60, stday = g("60m", "strad"), g("day", "strad")
+    ce5p, pe5p   = ce5.get("pct", 0),  pe5.get("pct", 0)
+    ce15p, pe15p = ce15.get("pct", 0), pe15.get("pct", 0)
+    # activity = biggest move either way (routes FLAT vs busy)
+    c5  = _pulse_move_class(max(abs(ce5p),  abs(pe5p)),  "5m")
+    c15 = _pulse_move_class(max(abs(ce15p), abs(pe15p)), "15m")
+    # the BUYABLE side — signed compare, NOT abs: a crashing PE must never be
+    # named the momentum side (that told the user to ride a falling premium)
+    side5  = "CE" if ce5p  >= pe5p  else "PE"
+    side15 = "CE" if ce15p >= pe15p else "PE"
+    up5    = ce5p  if side5  == "CE" else pe5p
+    up15   = ce15p if side15 == "CE" else pe15p
+    c5up   = _pulse_move_class(max(up5, 0.0),  "5m")
+    c15up  = _pulse_move_class(max(up15, 0.0), "15m")
+    eff15 = min(ce15.get("eff", 1), pe15.get("eff", 1)) if ce15 and pe15 else \
+            (ce15 or pe15).get("eff", 1) if (ce15 or pe15) else 1
+    active_eff = (ce15 if side15 == "CE" else pe15).get("eff", 0)
+    reasons = []
+    if decay_1h or decay_day:
+        reasons.append("Both CE & PE bleeding — theta/IV crush "
+                       + (f"(straddle {st60.get('pct', 0):+.1f}% in 1h)" if st60 else
+                          f"(straddle {stday.get('pct', 0):+.1f}% today)"))
+    if traps_n: reasons.append(f"{traps_n} trap spike(s) today — rallies getting sold into")
+    if c5 != "FLAT":
+        big5 = "CE" if abs(ce5p) >= abs(pe5p) else "PE"
+        reasons.append(f"5m: {big5} {(ce5p if big5=='CE' else pe5p):+.1f}% ({c5})")
+    if c15 != "FLAT":
+        big15 = "CE" if abs(ce15p) >= abs(pe15p) else "PE"
+        reasons.append(f"15m: {big15} {(ce15p if big15=='CE' else pe15p):+.1f}% ({c15}, consistency {active_eff:.0%})")
+
+    if (decay_1h or decay_day) and c5up in ("FLAT", "SLOW"):
+        return {"behavior": "PREMIUM DECAY", "emoji": "🩸", "tone": "bear",
+                "action": "AVOID buying options — premiums are bleeding on both sides. "
+                          "Sit out, or take only very quick scalps on a strong burst. Holding = theta loss.",
+                "reasons": reasons}
+    if traps_n >= 2 and eff15 < 0.4:
+        return {"behavior": "TRAP / WHIPSAW", "emoji": "🪤", "tone": "warn",
+                "action": "Scalp ONLY with tight SL — spikes are being sold into. Never chase a spike; "
+                          "book profits fast (10–15%) and do not hold.",
+                "reasons": reasons}
+    if c5up == "FAST" or c15up == "FAST":
+        side = side5 if c5up == "FAST" else side15
+        s_eff = (ce15 if side == "CE" else pe15).get("eff", 0)
+        if s_eff >= 0.55:
+            return {"behavior": f"FAST MOMENTUM ({side})", "emoji": "🚀", "tone": "bull",
+                    "action": f"QUICK SCALP — {side} premium is rising fast and one-way. Enter with the "
+                              "momentum side, book 10–20% quickly, trail tight. Don't overstay.",
+                    "reasons": reasons}
+        return {"behavior": "FAST BUT CHOPPY", "emoji": "⚡", "tone": "warn",
+                "action": "Big moves both ways with poor follow-through — scalp with tight SL, "
+                          "small size, book fast. Avoid holding through swings.",
+                "reasons": reasons}
+    if (c15up == "STEADY" or (c5up == "STEADY" and c15up != "FLAT")) \
+            and active_eff >= 0.55 and up15 > 0:
+        return {"behavior": f"STEADY TREND ({side15})", "emoji": "📈", "tone": "bull",
+                "action": f"HOLD / RIDE — {side15} premium building consistently. Trail SL instead of "
+                          "quick booking; let the trend pay.",
+                "reasons": reasons}
+    # premiums busy but nothing RISING — one side being dumped, other not paying yet
+    if c15 in ("STEADY", "FAST") and c15up in ("FLAT", "SLOW"):
+        dn = "CE" if ce15p <= pe15p else "PE"
+        other = "PE" if dn == "CE" else "CE"
+        return {"behavior": f"ONE-SIDE CRUSH ({dn}↓)", "emoji": "📉", "tone": "warn",
+                "action": f"{dn} is being dumped — directional bias favors {other}, but {other} premium "
+                          f"isn't rising yet. Enter {other} only when it actually starts building; "
+                          "until then writers are collecting both sides.",
+                "reasons": reasons}
+    if c5up == "SLOW" or c15up == "SLOW":
+        return {"behavior": "SLIGHT MOVEMENT", "emoji": "🐢", "tone": "info",
+                "action": "Small drifts only — be selective. Take only A+ setups with tight targets; "
+                          "theta beats slow moves.",
+                "reasons": reasons}
+    return {"behavior": "FLAT", "emoji": "😴", "tone": "dim",
+            "action": "WAIT — premiums are not moving. Any buy bleeds theta here. "
+                      "Stay out until a window turns SLOW/STEADY or faster.",
+            "reasons": reasons}
+
+# ── FINAL CALL — one concrete instruction, refreshed every sample tick (5s) ──
+def _pulse_decision_from(windows: dict, traps: list, decay_1h: bool, decay_day: bool) -> dict:
+    """Everything on the tab distilled into ONE actionable line with a side."""
+    g = lambda w, s: (windows.get(w, {}).get(s) or {})
+    ce5, pe5   = g("5m", "ce"),  g("5m", "pe")
+    ce15, pe15 = g("15m", "ce"), g("15m", "pe")
+    w60s       = g("60m", "strad")
+    # active side: 5m weighted over 15m — the side money is flowing INTO now
+    ce_m = ce5.get("pct", 0) * 0.6 + ce15.get("pct", 0) * 0.4
+    pe_m = pe5.get("pct", 0) * 0.6 + pe15.get("pct", 0) * 0.4
+    side = "CE" if ce_m >= pe_m else "PE"
+    s5   = ce5 if side == "CE" else pe5
+    s15  = ce15 if side == "CE" else pe15
+    p5, p15 = s5.get("pct", 0), s15.get("pct", 0)
+    eff15   = s15.get("eff", 0)
+    c5  = _pulse_move_class(max(abs(ce5.get("pct", 0)), abs(pe5.get("pct", 0))), "5m")
+    c15 = _pulse_move_class(max(abs(ce15.get("pct", 0)), abs(pe15.get("pct", 0))), "15m")
+    # trap in the last ~25 min?
+    recent_trap = False
+    now_dt = datetime.now()
+    for e in traps[-3:]:
+        try:
+            hh, mm = map(int, e["t"].split(":"))
+            age = (now_dt - now_dt.replace(hour=hh, minute=mm, second=0)).total_seconds()
+            if 0 <= age <= 1500: recent_trap = True
+        except Exception:
+            pass
+
+    if (decay_1h or decay_day) and c5 in ("FLAT", "SLOW"):
+        return {"key": "STAY_OUT", "emoji": "🔴", "tone": "bear", "side": "",
+                "label": "STAY OUT — premiums decaying",
+                "why": f"CE & PE both bleeding (straddle {w60s.get('pct', 0):+.1f}% in 1h) — buys lose even when right"}
+    if recent_trap and p5 >= 4:
+        return {"key": "DONT_CHASE", "emoji": "🔴", "tone": "bear", "side": side,
+                "label": f"DON'T CHASE {side} — trap risk",
+                "why": f"{side} spiking {p5:+.1f}% in 5m right after a trap — wait for the spike to hold 15 min"}
+    if c5 == "FAST" and p5 > 0 and eff15 >= 0.5:
+        return {"key": "SCALP", "emoji": "🟢", "tone": "bull", "side": side,
+                "label": f"BUY {side} — QUICK SCALP",
+                "why": f"{side} {p5:+.1f}% in 5m and one-way ({eff15:.0%}) — enter now, book 10–20% fast, trail tight"}
+    if c15 in ("STEADY", "FAST") and p15 > 0 and eff15 >= 0.55 and p5 > -1.5:
+        return {"key": "RIDE", "emoji": "🟢", "tone": "bull", "side": side,
+                "label": f"BUY / HOLD {side} — RIDE TREND",
+                "why": f"{side} {p15:+.1f}% in 15m with {eff15:.0%} consistency — hold with trailing SL"}
+    if len(traps) >= 2 and eff15 < 0.4:
+        return {"key": "SCALP_ONLY", "emoji": "🟡", "tone": "warn", "side": "",
+                "label": "SCALP ONLY — whipsaw, stay nimble",
+                "why": f"{len(traps)} traps today and choppy path — pullback entries, tight SL, book instantly"}
+    if c5 == "SLOW" and p5 > 0 and p15 > 0:
+        return {"key": "WATCH", "emoji": "🟡", "tone": "warn", "side": side,
+                "label": f"WATCH {side} — pullback entry only",
+                "why": f"{side} drifting up ({p5:+.1f}% 5m, {p15:+.1f}% 15m) but no burst yet — wait for a dip or acceleration"}
+    return {"key": "WAIT", "emoji": "⚪", "tone": "dim", "side": "",
+            "label": "WAIT — no edge right now",
+            "why": f"5m {c5} / 15m {c15} — premiums not paying; theta wins until a window wakes up"}
+
+def _pulse_record_decision(index: str):
+    """Compute the Final Call and append to span-grouped history (1h horizon).
+    Consecutive identical calls extend the last span instead of adding rows."""
+    core = _pulse_core(index)
+    if core.get("error"): return
+    d = _pulse_decision_from(core["windows"], core["traps"],
+                             core["decay_1h"], core["decay_day"])
+    now = time.time()
+    with _pulse_lock:
+        st = _pulse_state.get(index)
+        if not st: return
+        spans = st.setdefault("decisions", [])
+        if spans and spans[-1]["label"] == d["label"]:
+            spans[-1]["to"] = now
+            spans[-1]["ticks"] += 1
+            spans[-1]["why"] = d["why"]          # keep the freshest numbers
+            st["_dec_pending"] = None
+        else:
+            # debounce: a different call must hold 2 consecutive ticks (~4s)
+            # before it replaces the current span — kills 1-tick flicker on
+            # borderline conditions without hiding real changes
+            pend = st.get("_dec_pending")
+            if pend and pend.get("label") == d["label"]:
+                spans.append({**d, "from": pend["from"], "to": now, "ticks": 2})
+                st["_dec_pending"] = None
+            else:
+                st["_dec_pending"] = {**d, "from": now}
+        while spans and spans[0]["to"] < now - _PULSE_DECISION_KEEP:
+            spans.pop(0)
+
+def _pulse_decision_view(spans: list) -> list:
+    """Spans → newest-first display rows for the Final Call history."""
+    out = []
+    for s in reversed(spans):
+        out.append({"from": datetime.fromtimestamp(s["from"]).strftime("%H:%M:%S"),
+                    "to":   datetime.fromtimestamp(s["to"]).strftime("%H:%M:%S"),
+                    "secs": int(s["to"] - s["from"]), "key": s.get("key", ""),
+                    "emoji": s["emoji"], "tone": s["tone"], "label": s["label"],
+                    "side": s.get("side", ""), "why": s["why"], "ticks": s["ticks"]})
+    return out
+
+def _pulse_latest_decision(spans: list) -> dict:
+    if not spans: return {}
+    s = spans[-1]
+    return {"emoji": s["emoji"], "tone": s["tone"], "label": s["label"],
+            "side": s.get("side", ""), "why": s["why"], "key": s.get("key", ""),
+            "since": datetime.fromtimestamp(s["from"]).strftime("%H:%M:%S"),
+            "secs": int(s["to"] - s["from"])}
+
+def _pulse_core(index: str) -> dict:
+    """Shared analysis for _pulse_compute and the Final Call decision engine:
+    series snapshot + windows + traps + decay flags."""
+    with _pulse_lock:
+        st = _pulse_state.get(index)
+        if not st: return {"error": "no data yet — sampler warming up"}
+        st = {**st, "series": {"CE": list(st["series"]["CE"]), "PE": list(st["series"]["PE"])},
+              "spot_series": list(st["spot_series"]), "verdicts": list(st["verdicts"]),
+              "decisions": list(st.get("decisions", []))}
+    ce_s, pe_s = st["series"]["CE"], st["series"]["PE"]
+    if len(ce_s) < 2 or len(pe_s) < 2:
+        return {"error": "collecting samples — need a few minutes of data", "st": st}
+    strad_s = []
+    pe_m = dict(_pulse_resample_1m(pe_s))
+    for t, v in _pulse_resample_1m(ce_s):
+        if t in pe_m: strad_s.append((t, v + pe_m[t]))
+    windows = {}
+    for wkey, mins in (("day", 0), ("60m", 60), ("15m", 15), ("5m", 5)):
+        w = {"ce": _pulse_window_stats(ce_s, mins), "pe": _pulse_window_stats(pe_s, mins),
+             "strad": _pulse_window_stats(strad_s, mins)}
+        spot_w = _pulse_window_stats(st["spot_series"], mins)
+        w["spot_pct"] = spot_w.get("pct", 0.0) if spot_w else 0.0
+        if wkey == "day":
+            # true since-open move from the index day-open (spot samples only
+            # start when the dashboard starts)
+            day_open = float((_idx_ohlc.get(_PULSE_IDX_LABEL[index]) or {}).get("open", 0) or 0)
+            last_spot = st["spot_series"][-1][1] if st["spot_series"] else 0
+            if day_open > 0 and last_spot > 0:
+                w["spot_pct"] = round((last_spot - day_open) / day_open * 100.0, 2)
+        pmax = max(abs((w["ce"] or {}).get("pct", 0)), abs((w["pe"] or {}).get("pct", 0)))
+        w["cls"] = _pulse_move_class(pmax, wkey) if (w["ce"] or w["pe"]) else "—"
+        windows[wkey] = w
+    traps = _pulse_traps(ce_s) + _pulse_traps(pe_s)
+    traps.sort(key=lambda e: e["t"])
+    w60, wday = windows["60m"], windows["day"]
+    decay_1h  = bool(w60["ce"] and w60["pe"]
+                     and w60["ce"]["pct"] <= -3 and w60["pe"]["pct"] <= -3
+                     and abs(w60["spot_pct"]) < 0.35)
+    decay_day = bool(wday["ce"] and wday["pe"]
+                     and wday["ce"]["pct"] <= -8 and wday["pe"]["pct"] <= -8)
+    return {"st": st, "ce_s": ce_s, "pe_s": pe_s, "windows": windows,
+            "traps": traps, "decay_1h": decay_1h, "decay_day": decay_day}
+
+def _pulse_chart_series(ce_s: list, pe_s: list) -> dict:
+    """1-min resampled CE/PE lines for the day chart (also served every 3s)."""
+    pe_map = dict(_pulse_resample_1m(pe_s))
+    chart = {"t": [], "ce": [], "pe": []}
+    for t, v in _pulse_resample_1m(ce_s):
+        if t in pe_map:
+            chart["t"].append(datetime.fromtimestamp(t).strftime("%H:%M"))
+            chart["ce"].append(round(v, 2)); chart["pe"].append(round(pe_map[t], 2))
+    return chart
+
+def _pulse_momo(core: dict) -> dict:
+    """CE/PE momentum snapshot for the blinking side cards (10s poll)."""
+    if core.get("error"): return {}
+    w = core["windows"]
+    g = lambda wk, s: (w.get(wk, {}).get(s) or {})
+    ce5p, pe5p   = g("5m", "ce").get("pct", 0),  g("5m", "pe").get("pct", 0)
+    ce15p, pe15p = g("15m", "ce").get("pct", 0), g("15m", "pe").get("pct", 0)
+    return {"ce_ltp": core["ce_s"][-1][1], "pe_ltp": core["pe_s"][-1][1],
+            "ce5": round(ce5p, 2), "pe5": round(pe5p, 2),
+            "ce15": round(ce15p, 2), "pe15": round(pe15p, 2),
+            # blinking rule: side is RISING at least SLOW-class on 5m or 15m
+            "ce_on": bool(ce5p >= 1.5 or ce15p >= 2.5),
+            "pe_on": bool(pe5p >= 1.5 or pe15p >= 2.5)}
+
+def _pulse_compute(index: str) -> dict:
+    """Full payload for one index — computed fresh from in-memory series."""
+    core = _pulse_core(index)
+    if core.get("error"):
+        err = {"ok": False, "error": core["error"]}
+        st0 = core.get("st")
+        if st0:
+            err["decision_history"] = _pulse_decision_view(st0.get("decisions", []))
+        return err
+    st, ce_s, pe_s = core["st"], core["ce_s"], core["pe_s"]
+    windows, traps = core["windows"], core["traps"]
+    decay_1h, decay_day = core["decay_1h"], core["decay_day"]
+    verdict = _pulse_verdict(windows, len(traps), decay_1h, decay_day)
+    n_samples = min(len(ce_s), len(pe_s))
+    verdict["confidence"] = "HIGH" if n_samples >= 60 else "MEDIUM" if n_samples >= 20 else "LOW"
+    chart = _pulse_chart_series(ce_s, pe_s)
+    spot_last = st["spot_series"][-1][1] if st["spot_series"] else 0
+    return {"ok": True, "index": index, "ts": datetime.now().strftime("%H:%M:%S"),
+            "atm": st["atm"], "expiry": st["expiry"],
+            "ce_sym": st["ce_ts"], "pe_sym": st["pe_ts"],
+            "spot": round(spot_last, 2),
+            "ce_ltp": ce_s[-1][1], "pe_ltp": pe_s[-1][1],
+            "straddle": round(ce_s[-1][1] + pe_s[-1][1], 2),
+            "market_open": _pulse_market_open(),
+            "windows": windows, "traps": traps,
+            "decay": {"active": decay_1h or decay_day,
+                      "text": ("1-hour decay — both sides bleeding while index barely moved" if decay_1h
+                               else "Full-day decay — both sides well below open" if decay_day else "")},
+            **verdict, "chart": chart,
+            "verdicts": list(reversed(st["verdicts"]))[:80],
+            "decision": _pulse_latest_decision(st.get("decisions", [])),
+            "decision_history": _pulse_decision_view(st.get("decisions", []))}
+
+def _pulse_save_verdicts():
+    try:
+        with _pulse_lock:
+            data = {"date": datetime.now().date().isoformat(),
+                    "verdicts": {i: (_pulse_state.get(i) or {}).get("verdicts", [])
+                                 for i in _PULSE_INDICES}}
+        with open(_PULSE_VERDICT_FILE, "w") as f: json.dump(data, f)
+    except Exception:
+        pass
+
+def _pulse_load_verdicts():
+    try:
+        data = json.loads(open(_PULSE_VERDICT_FILE).read())
+        if data.get("date") != datetime.now().date().isoformat(): return
+        with _pulse_lock:
+            for i, v in (data.get("verdicts") or {}).items():
+                if v: _pulse_state.setdefault(i, {"date": data["date"], "series": {"CE": [], "PE": []},
+                                                  "spot_series": [], "verdicts": [],
+                                                  "last_verdict_ts": 0.0})["verdicts"] = v
+    except Exception:
+        pass
+
+def _pulse_sampler_loop():
+    """Background: sample ATM CE/PE LTPs, roll contracts, record 5-min verdicts."""
+    _pulse_load_verdicts()
+    time.sleep(6)   # let the 3s index-LTP poller produce a spot first
+    while True:
+        try:
+            now = time.time()
+            today = datetime.now().date().isoformat()
+            is_open = _pulse_market_open()
+            batch, meta = [], []
+            for index in _PULSE_INDICES:
+                spot = float((_idx_state.get(_PULSE_IDX_LABEL[index]) or {}).get("last", 0) or 0)
+                if spot <= 0: continue
+                with _pulse_lock:
+                    st = _pulse_state.get(index)
+                    stale = (not st or st.get("date") != today or not st.get("atm")
+                             or abs(spot - st["atm"]) > 0.75 * _PULSE_STEP[index])
+                if stale:
+                    if is_open or not (_pulse_state.get(index) or {}).get("atm"):
+                        _pulse_init_index(index, spot)
+                    with _pulse_lock:
+                        st = _pulse_state.get(index)
+                if not st or not st.get("atm"): continue
+                if is_open:
+                    exch = st["exch"]
+                    batch += [f"{exch}_{st['ce_ts']}", f"{exch}_{st['pe_ts']}"]
+                    meta.append((index, f"{exch}_{st['ce_ts']}", f"{exch}_{st['pe_ts']}", spot))
+            if batch:
+                pl = _groww_get("/v1/live-data/ltp",
+                                {"segment": "FNO", "exchange_symbols": batch}) or {}
+                with _pulse_lock:
+                    for index, ce_k, pe_k, spot in meta:
+                        st = _pulse_state.get(index)
+                        if not st: continue
+                        ce = float(pl.get(ce_k, 0) or 0); pe = float(pl.get(pe_k, 0) or 0)
+                        if ce > 0: st["series"]["CE"].append((now, ce))
+                        if pe > 0: st["series"]["PE"].append((now, pe))
+                        st["spot_series"].append((now, spot))
+                        day0 = _pulse_day_start_epoch()
+                        for k in ("CE", "PE"):
+                            st["series"][k] = [p for p in st["series"][k] if p[0] >= day0]
+                        st["spot_series"] = st["spot_series"][-15000:]
+                # Final Call — one decision per tick, span-grouped, 1h history
+                for index, _ce_k, _pe_k, _spot in meta:
+                    _pulse_record_decision(index)
+            # 5-min verdict snapshots (market hours only)
+            if is_open:
+                dirty = False
+                for index in _PULSE_INDICES:
+                    with _pulse_lock:
+                        st = _pulse_state.get(index)
+                        due = bool(st and (now - st.get("last_verdict_ts", 0)) >= _PULSE_VERDICT_SEC
+                                   and len(st["series"]["CE"]) >= 2)
+                    if not due: continue
+                    snap = _pulse_compute(index)
+                    if snap.get("ok"):
+                        row = {"t": datetime.now().strftime("%H:%M"),
+                               "behavior": snap["behavior"], "emoji": snap["emoji"],
+                               "tone": snap["tone"], "action": snap["action"],
+                               "ce5": (snap["windows"]["5m"]["ce"] or {}).get("pct", 0),
+                               "pe5": (snap["windows"]["5m"]["pe"] or {}).get("pct", 0),
+                               "strad": snap["straddle"]}
+                        with _pulse_lock:
+                            st = _pulse_state.get(index)
+                            if st:
+                                st["verdicts"].append(row)
+                                st["last_verdict_ts"] = now
+                                dirty = True
+                if dirty: _pulse_save_verdicts()
+        except Exception as e:
+            print(f"[pulse] {e}")
+        time.sleep(_PULSE_SAMPLE_SEC if _pulse_market_open() else 60)
+
 PTAI_ANALYSIS_REFRESH = 300   # 5 min
 PTAI_AI_REFRESH       = 1800  # 30 min
 
@@ -2045,6 +3111,320 @@ def _fetch_live_option_ltp(strike: int, direction: str, index: str) -> float:
             pass
         break
     return 0.0
+
+# ─────────────────────────────────────────────────────────────
+#  AUTO-FIT SIGNAL — "do current conditions match what the Momentum Auto Bot
+#  needs?".  Recomputed every 3 minutes; the whole day is kept so the dedicated
+#  Auto Signal page can show the history with timestamps.
+#
+#  It is ADVISORY: nothing in the bot reads it yet.  It does not predict which
+#  trade wins — validated on 7 live sessions it only detects, within a minute or
+#  two, that the tape stopped matching the scalp model (2026-09-11: RED at 13:42,
+#  12 min before the −₹67k cluster).
+# ─────────────────────────────────────────────────────────────
+AUTOFIT_PATH     = os.path.join(BASE, ".autofit_history.json")
+AUTOFIT_INTERVAL = 180          # seconds — one sample every 3 minutes
+_autofit: dict = {"date": "", "current": None, "history": [], "next_ts": 0.0}
+_autofit_lock = threading.Lock()
+
+# Component thresholds — (amber, red).  Kept here so the UI can render them.
+AUTOFIT_TH = {
+    "expansion":  (1.35, 1.80),   # median range of last 5 × 1-min bars ÷ prior 55-bar median
+    "shock":      (2.00, 3.00),   # biggest of the last 3 bars ÷ that same baseline
+    "atr_target": (3.00, 5.00),   # option ATR ÷ target points
+    "prem_swing": (4.00, 8.00),   # |5-min premium delta| from Premium Pulse, points
+    "sl_recent":  (1, 2),         # hard-SL hits in the last 30 min
+    "giveback":   (15.0, 25.0),   # % of the day's peak P&L handed back
+}
+AUTOFIT_RED_COOLOFF = 5          # samples (5 × 3 min = 15 min) a RED stays latched
+
+
+def _fetch_index_candles(interval: str, minutes_back: int) -> list:
+    """1-min / 5-min NIFTY index candles for today, phantom 09:00 bar filtered out."""
+    token = _get_ltp_token()
+    if not token:
+        return []
+    now = datetime.now()
+    start = now - timedelta(minutes=minutes_back)
+    try:
+        r = _ltp_session.get(
+            "https://api.groww.in/v1/historical/candles",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                     "X-API-VERSION": "1.0"},
+            params={"exchange": "NSE", "segment": "CASH", "groww_symbol": "NSE-NIFTY",
+                    "start_time": start.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                    "candle_interval": interval},
+            timeout=12)
+        if r.status_code != 200:
+            return []
+        body = r.json()
+        c = body.get("candles", []) or body.get("payload", {}).get("candles", [])
+        # Groww stamps a phantom 09:00 bar with a huge wick — never let it set the baseline
+        return [x for x in c if str(x[0])[11:16] >= "09:15"]
+    except Exception:
+        return []
+
+
+def _fetch_atm_option_atr(spot: float) -> tuple:
+    """14-period EMA ATR of the ATM CE from 5-min candles (same method the bot uses
+    for its hard SL).  Returns (atr, symbol) or (None, reason)."""
+    try:
+        instruments = _load_instruments_for_ltp()
+        today = datetime.now().date()
+        expiries = sorted({
+            i["expiry_date"].strip() for i in instruments
+            if i.get("underlying_symbol", "").upper() == "NIFTY"
+            and i.get("expiry_date", "").strip()
+            and datetime.strptime(i["expiry_date"].strip(), "%Y-%m-%d").date() >= today
+        })
+        if not expiries:
+            return None, "no expiry"
+        atm = int(round(spot / 50.0) * 50)
+        row = next((i for i in instruments
+                    if i.get("underlying_symbol", "").upper() == "NIFTY"
+                    and i.get("expiry_date", "").strip() == expiries[0]
+                    and i.get("instrument_type", "").upper() == "CE"
+                    and int(float(i.get("strike_price") or 0)) == atm), None)
+        if not row:
+            return None, f"no ATM {atm}CE row"
+        sym = row.get("groww_symbol", "")          # ONLY this form is accepted by the API
+        token = _get_ltp_token()
+        now = datetime.now()
+        r = _ltp_session.get(
+            "https://api.groww.in/v1/historical/candles",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                     "X-API-VERSION": "1.0"},
+            params={"exchange": "NSE", "segment": "FNO", "groww_symbol": sym,
+                    "start_time": (now - timedelta(minutes=150)).strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                    "candle_interval": "5minute"},
+            timeout=12)
+        body = (r.json() or {}) if r.status_code == 200 else {}
+        c = body.get("candles", []) or body.get("payload", {}).get("candles", [])
+        if len(c) < 20:
+            return None, f"only {len(c)} candles"
+        hi = [x[2] for x in c]; lo = [x[3] for x in c]; cl = [x[4] for x in c]
+        trs = [max(hi[i] - lo[i], abs(hi[i] - cl[i - 1]), abs(lo[i] - cl[i - 1]))
+               for i in range(1, len(hi))]
+        if len(trs) < 15:
+            return None, "short TR series"
+        k = 2 / 15.0
+        ema = sum(trs[:14]) / 14
+        for v in trs[14:]:
+            ema = v * k + ema * (1 - k)
+        return round(ema, 2), sym
+    except Exception as e:
+        return None, f"{type(e).__name__}"
+
+
+def _autofit_bot_context() -> dict:
+    """Momentum bot's own state: target points, recent hard SLs, P&L giveback."""
+    ctx = {"target_pts": 1.5, "sl_30m": 0, "giveback_pct": 0.0,
+           "peak": 0.0, "now_pnl": 0.0, "drawdown": 0.0}
+    try:
+        ov_path = os.path.join(BASE, "momentum_config_override.json")
+        if os.path.exists(ov_path):
+            with open(ov_path) as f:
+                ctx["target_pts"] = float(json.load(f).get("TRAIL_START_PROFIT", 1.5))
+    except Exception:
+        pass
+    try:
+        path = os.path.join(BASE, "logs", "trade_history",
+                            f"{datetime.now().strftime('%Y-%m-%d')}.jsonl")
+        if os.path.exists(path):
+            cum = peak = 0.0
+            cutoff = (datetime.now() - timedelta(minutes=30)).strftime("%H:%M:%S")
+            for line in open(path):
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if r.get("bot") != "Auto" or r.get("mode") != "live":
+                    continue
+                cum += float(r.get("pnl") or 0)
+                peak = max(peak, cum)
+                if "HARD SL" in (r.get("exit_reason") or "") and (r.get("time_exit") or "") >= cutoff:
+                    ctx["sl_30m"] += 1
+            ctx["peak"] = round(peak, 2)
+            ctx["now_pnl"] = round(cum, 2)
+            ctx["drawdown"] = round(max(0.0, peak - cum), 2)
+            if peak > 0:
+                ctx["giveback_pct"] = round(max(0.0, (peak - cum) / peak * 100), 1)
+    except Exception:
+        pass
+    return ctx
+
+
+def _autofit_premium_swing() -> float:
+    """Largest |5-min premium delta| from the newest Premium Pulse verdict (points)."""
+    try:
+        with open(os.path.join(BASE, ".premium_pulse_verdicts.json")) as f:
+            doc = json.load(f)
+        if doc.get("date") != datetime.now().strftime("%Y-%m-%d"):
+            return 0.0
+        rows = (doc.get("verdicts") or {}).get("NIFTY") or []
+        if not rows:
+            return 0.0
+        last = rows[-1]
+        return round(max(abs(float(last.get("ce5") or 0)), abs(float(last.get("pe5") or 0))), 2)
+    except Exception:
+        return 0.0
+
+
+def _lvl(value, key, invert=False) -> int:
+    """0 GREEN / 1 AMBER / 2 RED against AUTOFIT_TH."""
+    if value is None:
+        return 0
+    amber, red = AUTOFIT_TH[key]
+    if invert:
+        return 2 if value <= red else 1 if value <= amber else 0
+    return 2 if value >= red else 1 if value >= amber else 0
+
+
+def _autofit_market_open(ts=None) -> bool:
+    ts = ts or datetime.now()
+    return ts.weekday() < 5 and "09:15" <= ts.strftime("%H:%M") <= "15:30"
+
+
+def _compute_autofit() -> dict:
+    """One AUTO-FIT sample. Never raises — a failed input scores GREEN and says so."""
+    ts = datetime.now()
+    comps, notes = {}, []
+
+    if not _autofit_market_open(ts):
+        return {
+            "t": ts.strftime("%H:%M:%S"), "ts": ts.strftime("%Y-%m-%d %H:%M:%S"),
+            "state": "CLOSED", "raw_state": "CLOSED", "cooling": False,
+            "headline": "Market closed — signal resumes at 09:15",
+            "action": "No live reading outside 09:15–15:30",
+            "triggers": [], "notes": [], "spot": 0, "atr": None,
+            "target_pts": _autofit_bot_context()["target_pts"], "components": {},
+        }
+
+    candles = _fetch_index_candles("1minute", 240)
+    spot = float(candles[-1][4]) if candles else 0.0
+    expansion = shock = None
+    if len(candles) >= 40:
+        import statistics as _st
+        rngs  = [float(x[2]) - float(x[3]) for x in candles]
+        base  = _st.median(rngs[-60:-5]) or 0.1      # 55-bar baseline, ending 5 bars ago
+        last5 = _st.median(rngs[-5:])
+        expansion = round(last5 / base, 2)
+        shock     = round(max(rngs[-3:]) / base, 2)
+    else:
+        notes.append(f"only {len(candles)} index candles — volatility inputs skipped")
+
+    ctx = _autofit_bot_context()
+    atr, atr_note = _fetch_atm_option_atr(spot) if spot else (None, "no spot")
+    atr_target = round(atr / ctx["target_pts"], 2) if (atr and ctx["target_pts"]) else None
+    if atr is None:
+        notes.append(f"ATM option ATR unavailable ({atr_note})")
+    swing = _autofit_premium_swing()
+
+    comps["expansion"]  = {"kind": "tape", "label": "Volatility expansion", "value": expansion,
+                           "unit": "×", "level": _lvl(expansion, "expansion"),
+                           "desc": "median range of the last 5 one-minute bars ÷ the prior 55-bar median"}
+    comps["shock"]      = {"kind": "tape", "label": "Shock bar", "value": shock, "unit": "×",
+                           "level": _lvl(shock, "shock"),
+                           "desc": "biggest of the last 3 one-minute bars ÷ the same baseline"}
+    # ATR ÷ target describes the SETUP (target vs premium noise), not the tape, so it
+    # caps the light at AMBER — otherwise a permanently-wrong geometry pins it RED all
+    # day and the light stops carrying any timing information.
+    comps["atr_target"] = {"label": "ATR ÷ target", "value": atr_target, "unit": "×",
+                           "level": _lvl(atr_target, "atr_target"), "caps_at": 1,
+                           "kind": "setup",
+                           "desc": f"ATM option ATR {atr if atr else '—'} pts ÷ target {ctx['target_pts']} pts — "
+                                   f"how deep inside the noise the target sits. Caps the light at AMBER: "
+                                   f"it is a setup property, not a regime change."}
+    comps["prem_swing"] = {"kind": "tape", "label": "Premium swing", "value": swing, "unit": "pts",
+                           "level": _lvl(swing, "prem_swing"),
+                           "desc": "largest 5-minute CE/PE premium delta from Premium Pulse"}
+    comps["sl_recent"]  = {"kind": "damage", "label": "Hard SLs (30 min)", "value": ctx["sl_30m"], "unit": "",
+                           "level": _lvl(ctx["sl_30m"], "sl_recent"),
+                           "desc": "hard-SL exits the Auto bot took in the last 30 minutes"}
+    comps["giveback"]   = {"kind": "damage", "label": "Peak giveback", "value": ctx["giveback_pct"], "unit": "%",
+                           "level": _lvl(ctx["giveback_pct"], "giveback"),
+                           "desc": f"₹{ctx['drawdown']:,.0f} given back from today's peak "
+                                   f"₹{ctx['peak']:,.0f} (now ₹{ctx['now_pnl']:,.0f})"}
+
+    worst = max(min(c["level"], c.get("caps_at", 2)) for c in comps.values())
+    raw_state = ("RED", "AMBER", "GREEN")[2 - worst]
+    triggers = [c["label"] for c in comps.values()
+                if min(c["level"], c.get("caps_at", 2)) == worst and worst > 0]
+
+    with _autofit_lock:
+        hist = _autofit.get("history") or []
+    latched = 0
+    for prev in reversed(hist[-AUTOFIT_RED_COOLOFF:]):
+        if prev.get("raw_state") == "RED":
+            latched = 1
+            break
+    state = "RED" if (raw_state == "RED" or latched) else raw_state
+    cooling = state == "RED" and raw_state != "RED"
+
+    if state == "RED":
+        headline = ("Cooling off after a shock — still RED" if cooling
+                    else "Conditions do NOT match the auto scalp model")
+        action = "Auto bot OFF — trade manually, or wait for GREEN"
+    elif state == "AMBER":
+        headline = "Conditions are drifting away from the model"
+        action = "Half size, widen the target, or hand over to manual"
+    else:
+        headline = "Conditions match what the auto scalp model needs"
+        action = "Auto bot OK at normal size"
+
+    return {
+        "t": ts.strftime("%H:%M:%S"), "ts": ts.strftime("%Y-%m-%d %H:%M:%S"),
+        "state": state, "raw_state": raw_state, "cooling": cooling,
+        "headline": headline, "action": action,
+        "triggers": triggers, "notes": notes,
+        "spot": round(spot, 2), "atr": atr, "target_pts": ctx["target_pts"],
+        "components": comps,
+    }
+
+
+def _autofit_loop():
+    """Sample every AUTOFIT_INTERVAL seconds; keep the whole day; survive restarts."""
+    global _autofit
+    try:
+        if os.path.exists(AUTOFIT_PATH):
+            with open(AUTOFIT_PATH) as f:
+                doc = json.load(f)
+            if doc.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                with _autofit_lock:
+                    _autofit.update(date=doc["date"], current=doc.get("current"),
+                                    history=doc.get("history") or [])
+                print(f"[AUTO-FIT] restored {len(_autofit['history'])} samples from today")
+    except Exception as e:
+        print(f"[AUTO-FIT] history read error: {e}")
+
+    while True:
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            with _autofit_lock:
+                if _autofit.get("date") != today:          # new session — start clean
+                    _autofit.update(date=today, current=None, history=[])
+            sample = _compute_autofit()
+            with _autofit_lock:
+                _autofit["current"] = sample
+                if sample["state"] != "CLOSED":      # history is the trading day only
+                    _autofit["history"].append(sample)
+                _autofit["history"] = _autofit["history"][-200:]     # ~10 h of 3-min samples
+                _autofit["next_ts"] = time.time() + AUTOFIT_INTERVAL
+                snapshot = {"date": _autofit["date"], "current": sample,
+                            "history": _autofit["history"]}
+            try:
+                tmp = AUTOFIT_PATH + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(snapshot, f)
+                os.replace(tmp, AUTOFIT_PATH)
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"[AUTO-FIT] sample failed: {e}")
+        time.sleep(AUTOFIT_INTERVAL)
+
 
 def _ltp_fetcher_loop() -> None:
     global _ltp_result
@@ -3096,6 +4476,7 @@ def _refresh() -> None:
         "margin":       margin,
         "orders":       orders,
         "mkt_idx":      mkt_idx,
+        "clean_ohlc":   read_clean_day_ohlc(),
         "pnl_analysis": dict(_ptai_analysis),
         "pnl_ai":       dict(_ptai_ai),
         "ptai_ok":      _ptai_ok,
@@ -3278,6 +4659,106 @@ body{background:var(--bg);color:var(--txt);font-family:'Inter','Courier New',san
 
 /* ── Cards ── */
 .card{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:14px;transition:border-color .3s;}
+
+/* ── Auto Signal tab (AUTO-FIT regime light) ── */
+.af-hero{display:flex;gap:18px;align-items:stretch;justify-content:space-between;flex-wrap:wrap;
+  border:1px solid var(--bdr);border-radius:12px;padding:16px 20px;background:var(--bg2);
+  border-left:6px solid var(--dim);transition:border-color .3s,background .3s;}
+.af-hero.g{border-left-color:var(--bull);background:linear-gradient(90deg,rgba(0,229,160,.10),var(--bg2) 45%);}
+.af-hero.a{border-left-color:var(--warn);background:linear-gradient(90deg,rgba(255,193,7,.10),var(--bg2) 45%);}
+.af-hero.r{border-left-color:var(--bear);background:linear-gradient(90deg,rgba(255,77,109,.12),var(--bg2) 45%);}
+.af-hero-l{flex:1;min-width:280px;}
+.af-hero-r{display:flex;flex-direction:column;gap:5px;align-items:flex-end;font-size:11px;}
+.af-state{font-size:30px;font-weight:900;letter-spacing:2px;line-height:1.1;}
+.af-headline{font-size:13px;color:var(--txt);margin-top:4px;}
+.af-action{font-size:12px;font-weight:700;margin-top:7px;}
+.af-trig{font-size:10px;color:var(--dim);margin-top:5px;font-family:'JetBrains Mono',monospace;}
+.af-meta{display:flex;gap:8px;align-items:baseline;color:var(--dim);}
+.af-meta b{color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:12px;}
+.af-btn{margin-top:6px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.45);
+  color:#fbbf24;border-radius:6px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;}
+.af-btn:hover{background:rgba(251,191,36,.3);}
+.af-note{margin:12px 0 14px;padding:9px 14px;border-radius:8px;font-size:10.5px;line-height:1.6;
+  color:var(--dim);background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);}
+.af-note b{color:var(--txt);}
+.af-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;}
+.af-c{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;border-top:3px solid var(--dim);}
+.af-c.g{border-top-color:var(--bull);} .af-c.a{border-top-color:var(--warn);} .af-c.r{border-top-color:var(--bear);}
+.af-c-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.af-c-l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);font-weight:700;}
+.af-c-v{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:800;}
+.af-c-th{font-size:9px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:3px;}
+.af-c-d{font-size:10px;color:#8fa3bf;line-height:1.5;margin-top:6px;}
+.af-sec-h{font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--info);margin-bottom:10px;}
+.af-strip{display:flex;gap:2px;flex-wrap:wrap;align-items:flex-end;}
+.af-cell{width:9px;height:26px;border-radius:2px;background:var(--bdr);cursor:default;}
+.af-cell.g{background:var(--bull);} .af-cell.a{background:var(--warn);} .af-cell.r{background:var(--bear);}
+.af-cell.now{outline:2px solid var(--txt);outline-offset:1px;}
+.af-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:var(--dim);}
+.af-dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+.af-dot.af-g{background:var(--bull);} .af-dot.af-a{background:var(--warn);} .af-dot.af-r{background:var(--bear);}
+.af-tbl{width:100%;border-collapse:collapse;font-size:11px;font-family:'JetBrains Mono',monospace;}
+.af-tbl th{text-align:left;padding:6px 10px;color:var(--dim);font-weight:700;font-size:9.5px;
+  letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--bdr);white-space:nowrap;}
+.af-tbl td{padding:5px 10px;border-bottom:1px solid rgba(28,45,72,.5);white-space:nowrap;}
+.af-tbl tr:hover td{background:rgba(56,189,248,.05);}
+.af-empty{color:var(--dim);font-style:italic;font-family:'Inter',sans-serif;}
+.af-pill{font-weight:800;font-size:10px;letter-spacing:.5px;padding:1px 7px;border-radius:9px;}
+.af-pill.g{color:var(--bull);background:rgba(0,229,160,.14);}
+.af-pill.a{color:var(--warn);background:rgba(255,193,7,.14);}
+.af-pill.r{color:var(--bear);background:rgba(255,77,109,.14);}
+
+/* ── Release notes (version history) ── */
+.rn-card{grid-column:1/-1;background:linear-gradient(180deg,rgba(168,85,247,.07),var(--bg2) 60%);
+  border:1px solid rgba(168,85,247,.32);border-radius:12px;margin-bottom:14px;overflow:hidden;}
+.rn-hdr{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;user-select:none;
+  border-bottom:1px solid rgba(168,85,247,.18);}
+.rn-hdr:hover{background:rgba(168,85,247,.06);}
+.rn-title{font-size:12px;font-weight:800;letter-spacing:1.1px;color:var(--accent);}
+.rn-ver{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;color:#f0abfc;
+  background:rgba(168,85,247,.16);border:1px solid rgba(168,85,247,.45);border-radius:11px;padding:2px 10px;}
+.rn-sub{flex:1;font-size:10px;color:var(--dim);}
+.rn-chev{color:var(--accent);font-size:11px;transition:transform .2s;}
+.rn-body{padding:14px 18px 16px;}
+.rn-rel{padding:12px 0;border-top:1px dashed rgba(168,85,247,.18);}
+.rn-rel:first-child{border-top:none;padding-top:2px;}
+.rn-rel-hdr{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.rn-rel-ver{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:#f0abfc;}
+.rn-rel-date{font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;}
+.rn-rel-title{font-size:12px;color:var(--txt);font-weight:600;}
+.rn-pill{font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;padding:2px 7px;
+  border-radius:9px;background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.4);color:var(--info);}
+.rn-sec{margin:8px 0 4px;}
+.rn-sec-h{font-size:9.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--info);margin-bottom:4px;}
+.rn-list{list-style:none;margin:0;padding:0;}
+.rn-list li{position:relative;padding-left:16px;margin:3px 0;font-size:11px;line-height:1.6;color:#b6c6dd;}
+.rn-list li::before{content:'▸';position:absolute;left:2px;color:var(--accent);font-size:10px;}
+.rn-notes{margin-top:10px;padding:9px 12px;background:rgba(56,189,248,.05);
+  border:1px solid rgba(56,189,248,.18);border-radius:8px;}
+.rn-notes-h{font-size:9.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--info);margin-bottom:5px;}
+.rn-note{display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-top:1px solid rgba(56,189,248,.1);}
+.rn-note:first-of-type{border-top:none;}
+.rn-note-ts{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);white-space:nowrap;padding-top:2px;}
+.rn-note-txt{flex:1;font-size:11px;line-height:1.55;color:var(--txt);white-space:pre-wrap;word-break:break-word;}
+.rn-note-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:11px;padding:0 2px;line-height:1.4;}
+.rn-note-del:hover{color:var(--bear);}
+.rn-empty{font-size:10px;color:var(--dim);font-style:italic;}
+.rn-add{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;
+  border-top:1px solid rgba(168,85,247,.18);}
+.rn-add select,.rn-add input{background:var(--bg3);border:1px solid var(--bdr);color:var(--txt);
+  border-radius:6px;padding:6px 9px;font-size:11px;font-family:inherit;}
+.rn-add input{flex:1;min-width:240px;}
+.rn-add input:focus,.rn-add select:focus{outline:none;border-color:var(--accent);}
+.rn-btn{background:rgba(168,85,247,.16);border:1px solid rgba(168,85,247,.5);color:#f0abfc;
+  border-radius:6px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.rn-btn:hover{background:rgba(168,85,247,.3);}
+.rn-btn.ghost{background:none;border-color:var(--bdr);color:var(--dim);}
+.rn-btn.ghost:hover{border-color:var(--accent);color:#f0abfc;}
+.rn-msg{font-size:10px;font-family:'JetBrains Mono',monospace;}
+.hdr-ver{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;color:#f0abfc;
+  background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.42);border-radius:10px;
+  padding:2px 9px;cursor:pointer;}
+.hdr-ver:hover{background:rgba(168,85,247,.28);}
 .card:hover{border-color:#2a4060;}
 .card.ce-bdr{border:2px solid var(--bull);box-shadow:0 0 18px rgba(0,229,160,.08);}
 .card.pe-bdr{border:2px solid var(--bear);box-shadow:0 0 18px rgba(255,77,109,.08);}
@@ -3439,6 +4920,12 @@ input[type=range]::-webkit-slider-thumb{
             background:none;letter-spacing:.8px;font-weight:600;transition:all .2s;}
 .toggle-on {border-color:var(--bull);color:var(--bull);}
 .toggle-off{border-color:var(--dim);color:var(--dim);}
+
+/* ── Start PROD10 button blink (green = running, red = offline) ── */
+@keyframes p10-blink-green{0%,100%{box-shadow:0 0 4px rgba(108,255,10,.35);opacity:1}50%{box-shadow:0 0 18px rgba(108,255,10,.85);opacity:.7}}
+@keyframes p10-blink-red  {0%,100%{box-shadow:0 0 4px rgba(255,0,0,.35);opacity:1}50%{box-shadow:0 0 18px rgba(255,0,0,.85);opacity:.7}}
+#tb-start-p10-btn.p10-running{background:#6CFF0A!important;color:#000!important;animation:p10-blink-green 1.2s infinite;}
+#tb-start-p10-btn.p10-offline{background:#FF0000!important;animation:p10-blink-red 1.2s infinite;}
 
 /* ── Header extras ── */
 .mtc{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid;font-weight:700;font-family:'JetBrains Mono',monospace;}
@@ -3710,7 +5197,27 @@ input[type=range]::-webkit-slider-thumb{
          border-bottom:1px solid var(--bdr);}
 .tb-cbar-row{display:flex;align-items:flex-end;gap:10px;padding:6px 14px;flex-wrap:nowrap;
              overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--bdr) transparent;}
+.tb-cbar-row.wrap{flex-wrap:wrap;overflow-x:visible;row-gap:9px;column-gap:12px;padding:8px 14px;}
 .tb-cbar-row::-webkit-scrollbar{height:3px;}
+.tb-rowtag{font-size:9px;font-weight:800;letter-spacing:1px;white-space:nowrap;min-width:64px;
+           align-self:center;}
+/* Each bot owns a block, so it is obvious which controls drive which bot */
+.tb-grp{border-left:4px solid var(--bdr);margin:0;}
+.tb-grp+.tb-grp{border-top:2px solid var(--bdr);}
+.tb-grp.p10{border-left-color:var(--info);background:linear-gradient(90deg,rgba(56,189,248,.05),transparent 30%);}
+.tb-grp.auto{border-left-color:var(--accent);background:linear-gradient(90deg,rgba(168,85,247,.06),transparent 38%);}
+.tb-grp-hdr{display:flex;align-items:baseline;gap:9px;padding:5px 14px 2px;flex-wrap:wrap;}
+.tb-grp-name{font-size:10.5px;font-weight:900;letter-spacing:1.2px;}
+.tb-grp.p10 .tb-grp-name{color:var(--info);}
+.tb-grp.auto .tb-grp-name{color:var(--accent);}
+.tb-grp-sub{font-size:9px;color:var(--dim);letter-spacing:.3px;}
+.tb-grp .tb-cbar-row{padding-top:4px;padding-bottom:6px;}
+.tb-grp .tb-cbar-row+.tb-cbar-row{border-top:1px dashed rgba(148,163,184,.16);}
+.tb-rowtag.sub{min-width:74px;padding-left:10px;position:relative;font-size:8.5px;opacity:.95;}
+.tb-rowtag.sub::before{content:'└';position:absolute;left:0;color:var(--dim);font-weight:400;}
+.tb-sep{width:1px;background:var(--bdr);align-self:stretch;margin:0 3px;}
+.tb-inp-sm:disabled{opacity:.35;cursor:not-allowed;}
+.tb-grp-off{opacity:.38;}
 .tb-cbar-row::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px;}
 .mb-vel-cons-badge{display:flex;flex-direction:column;gap:2px;min-width:54px;}
 .mb-vel-cons-val{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4ade80;}
@@ -4057,6 +5564,7 @@ select.tb-inp-sm{width:96px;}
     <div class="idx-cards" id="mkt-ticker"></div>
   </div>
   <div class="hdr-r">
+    <span class="hdr-ver" id="hdr-ver" onclick="rnJumpToNotes()" title="Current app version — click for release notes">v—</span>
     <div id="htime" style="font-family:'JetBrains Mono',monospace">—</div>
     <span id="mtc-badge" class="mtc mtc-ok">—m left</span>
     <div>Refresh <span id="countdown">15</span>s</div>
@@ -4092,12 +5600,14 @@ select.tb-inp-sm{width:96px;}
   <button class="tab-btn active" onclick="switchTab('dashboard',this)">📡 Live Dashboard</button>
   <button class="tab-btn" onclick="switchTab('oi',this);initOITab()">🔬 OI Intelligence</button>
   <button class="tab-btn" onclick="switchTab('trade',this);initTradeTab()">🚀 Trade Board</button>
+  <button class="tab-btn" id="autofit-tab-btn" onclick="switchTab('autofit',this);initAutoFitTab()" style="color:#fbbf24">🎯 Auto Signal</button>
   <button class="tab-btn" onclick="switchTab('pnl',this);loadTradeHistory()">💹 PnL Status</button>
   <button class="tab-btn" onclick="switchTab('perf',this);initPerfTab()">📈 Performance</button>
   <button class="tab-btn" onclick="switchTab('bots',this);initBotsTab()">🤖 Bot Control</button>
   <button class="tab-btn" onclick="switchTab('scanner',this);initScannerTab()">🔭 Scanner</button>
   <button class="tab-btn" id="aibrain-tab-btn" onclick="switchTab('aibrain',this);initAiBrainTab()" style="color:#c084fc">🧠 AI Brain</button>
   <button class="tab-btn" onclick="switchTab('vix',this);initVixTab()">🌡 VIX</button>
+  <button class="tab-btn" onclick="switchTab('pulse',this);initPulseTab()" style="color:#f0abfc">💓 Premium Pulse</button>
   <button class="tab-btn" onclick="switchTab('engine',this)" style="color:#4ade80">⚡ Decision Engine</button>
   <button class="tab-btn" onclick="switchTab('control',this);initControlTab()" style="color:#f85149">🛡 Control</button>
   <button class="tab-btn" onclick="switchTab('guide',this)">🗺️ Guide</button>
@@ -4106,6 +5616,27 @@ select.tb-inp-sm{width:96px;}
 <!-- Dashboard tab -->
 <div id="tab-dashboard" class="tab-pane active">
 <div class="main">
+
+  <!-- ── Release notes / version history ── -->
+  <div class="rn-card" id="rn-card">
+    <div class="rn-hdr" onclick="rnTogglePanel()">
+      <span class="rn-title">📋 RELEASE NOTES</span>
+      <span class="rn-ver" id="rn-current-ver">v—</span>
+      <span class="rn-sub" id="rn-subtitle">loading…</span>
+      <span class="rn-chev" id="rn-chev">▲</span>
+    </div>
+    <div class="rn-body" id="rn-body">
+      <div class="rn-empty" id="rn-releases">Loading release notes…</div>
+      <div class="rn-add">
+        <select id="rn-note-ver" title="Which release this note belongs to"></select>
+        <input type="text" id="rn-note-text" maxlength="2000" placeholder="Add your own note — what changed, what to watch, what to fix next…"
+               onkeydown="if(event.key==='Enter')rnAddNote()">
+        <button class="rn-btn" onclick="rnAddNote()">＋ Add note</button>
+        <button class="rn-btn ghost" onclick="rnAddRelease()" title="Start a new version entry">🏷 New version</button>
+        <span class="rn-msg" id="rn-msg"></span>
+      </div>
+    </div>
+  </div>
 
   <div class="cons neutral" id="cbox">
     <div class="csig" id="csig">LOADING…</div>
@@ -4207,6 +5738,69 @@ select.tb-inp-sm{width:96px;}
 </div><!-- end #tab-dashboard -->
 
 <!-- PnL Status tab -->
+<!-- Auto Signal tab — AUTO-FIT regime light for the Momentum Auto Bot -->
+<div id="tab-autofit" class="tab-pane">
+<div class="main" style="display:block">
+
+  <div class="af-hero" id="af-hero">
+    <div class="af-hero-l">
+      <div class="af-state" id="af-state">—</div>
+      <div class="af-headline" id="af-headline">loading…</div>
+      <div class="af-action" id="af-action"></div>
+      <div class="af-trig" id="af-trig"></div>
+    </div>
+    <div class="af-hero-r">
+      <div class="af-meta"><span>NIFTY</span><b id="af-spot">—</b></div>
+      <div class="af-meta"><span>ATM ATR ÷ target</span><b id="af-ratio">—</b></div>
+      <div class="af-meta"><span>Sampled</span><b id="af-last">—</b></div>
+      <div class="af-meta"><span>Next in</span><b id="af-next">—</b></div>
+      <button class="af-btn" onclick="afLoad(true)" title="Fetch the newest sample now (the engine itself samples every 3 minutes)">↻ Refresh view</button>
+    </div>
+  </div>
+
+  <div class="af-note">
+    Advisory only — the bot does not read this signal yet. It does not predict which trade wins;
+    on 7 live sessions it detects <b>within a minute or two</b> that the tape stopped matching the
+    scalp model. On 2026-09-11 it turned RED at 13:42, twelve minutes before the −₹67k loss cluster.
+  </div>
+
+  <div class="af-grid" id="af-comps"></div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="af-sec-h">📊 Today's signal timeline <span id="af-tl-sub" style="color:var(--dim);font-weight:400;font-size:10px"></span></div>
+    <div class="af-strip" id="af-strip"></div>
+    <div class="af-legend">
+      <span><i class="af-dot af-g"></i> GREEN — auto bot OK at normal size</span>
+      <span><i class="af-dot af-a"></i> AMBER — half size / widen target / prefer manual</span>
+      <span><i class="af-dot af-r"></i> RED — auto off, manual only</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="af-sec-h">🕐 State changes today</div>
+    <div style="overflow-x:auto">
+      <table class="af-tbl" id="af-changes"><thead><tr>
+        <th>Time</th><th>Change</th><th>Held for</th><th>Triggered by</th>
+      </tr></thead><tbody><tr><td colspan="4" class="af-empty">No samples yet today.</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="af-sec-h" style="cursor:pointer" onclick="afToggleLog()">
+      📋 All samples <span id="af-log-chev" style="color:var(--dim);font-size:11px">▼</span>
+      <span style="color:var(--dim);font-weight:400;font-size:10px">— one every 3 minutes, newest first</span>
+    </div>
+    <div id="af-log-wrap" style="display:none;overflow-x:auto">
+      <table class="af-tbl" id="af-log"><thead><tr>
+        <th>Time</th><th>State</th><th>Expansion</th><th>Shock</th><th>ATR÷tgt</th>
+        <th>Swing</th><th>SL 30m</th><th>Giveback</th><th>Spot</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+</div>
+</div>
+
 <div id="tab-pnl" class="tab-pane">
 <div id="tab-pnl-inner">
 
@@ -4557,9 +6151,14 @@ select.tb-inp-sm{width:96px;}
   <!-- ── Config bar ── -->
   <div class="tb-cbar">
 
-    <!-- Row 1: PROD10 controls -->
-    <div class="tb-cbar-row">
-      <div style="font-size:9px;font-weight:700;color:var(--info);letter-spacing:1px;align-self:center;white-space:nowrap;min-width:48px">PROD10</div>
+    <!-- ═══ PROD10 manual bot ═══ -->
+    <div class="tb-grp p10">
+      <div class="tb-grp-hdr">
+        <span class="tb-grp-name">🚀 PROD10 — MANUAL BOT</span>
+        <span class="tb-grp-sub">click a strike in the chain to fire · these controls drive PROD10 only</span>
+      </div>
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag sub" style="color:var(--info)">SETUP</div>
 
       <div class="tb-cfg-grp" title="Index to trade — NIFTY (NSE) or SENSEX / BANKNIFTY / FINNIFTY (BSE)">
         <span class="tb-lbl-sm">INDEX</span>
@@ -4657,6 +6256,11 @@ select.tb-inp-sm{width:96px;}
                 style="padding:4px 14px;font-size:10px;font-weight:700;border-radius:6px;cursor:pointer;
                        background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;
                        white-space:nowrap">▶ Start PROD10</button>
+        <button onclick="tbStopProd10()" id="tb-stop-p10-btn"
+                title="Stop the running PROD10 bot process"
+                style="display:none;padding:4px 14px;font-size:10px;font-weight:700;border-radius:6px;cursor:pointer;
+                       background:#FF0000;color:#fff;border:none;margin-left:6px;
+                       white-space:nowrap">⏹ Stop PROD10</button>
       </div>
     </div>
 
@@ -4691,9 +6295,16 @@ select.tb-inp-sm{width:96px;}
       </div>
     </div>
 
-    <!-- Row 2: Momentum Auto Bot controls -->
-    <div class="tb-cbar-row">
-      <div style="font-size:9px;font-weight:700;color:#a855f7;letter-spacing:1px;align-self:center;white-space:nowrap;min-width:48px">⚡ AUTO</div>
+    </div><!-- /PROD10 block -->
+
+    <!-- ═══ Momentum Auto Bot — every row below belongs to this bot ═══ -->
+    <div class="tb-grp auto">
+      <div class="tb-grp-hdr">
+        <span class="tb-grp-name">⚡ MOMENTUM AUTO BOT</span>
+        <span class="tb-grp-sub">scans and trades on its own · SETUP, RISK and FILTERS below apply to this bot only — not to PROD10</span>
+      </div>
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag sub" style="color:#a855f7">SETUP</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm">INDEX</span>
         <select id="mb-index" class="tb-inp-sm" onchange="mbLoadExpiries()">
           <option>NIFTY</option><option>BANKNIFTY</option><option>SENSEX</option><option>FINNIFTY</option>
@@ -4714,6 +6325,10 @@ select.tb-inp-sm{width:96px;}
           <option value="manual">Manual (trail)</option>
           <option value="quick">Quick (target)</option>
         </select>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" id="mb-target-lbl" title="Quick mode: exit target in premium points above entry. Manual mode: profit in points at which the trail SL activates. Editable while the bot is running — a change applies to an open trade within ~3s.">TARGET PTS</span>
+        <input type="number" id="mb-target-pts" class="tb-inp-sm" value="1" min="0.25" max="100" step="0.25" onchange="mbPushTiming(this)"
+               title="Quick mode = hard target (+N pts over entry). Manual mode = trail activation point. Applies live to a running bot and to an open trade." style="width:52px">
       </div>
       <!-- TRADE MODE toggles — aligned under PROD10's PAPER/ATR-SL/MOCK section -->
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#a855f7">TRADE MODE</span>
@@ -4744,18 +6359,65 @@ select.tb-inp-sm{width:96px;}
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Trail SL poll interval (lower = less exit slippage)">POLL SEC</span>
         <input type="number" id="mb-poll-sec" class="tb-inp-sm" value="1" min="1" max="5" title="Trail SL poll interval (seconds) — 1s = tightest exit, 3s = more slippage on SL hits" style="width:44px">
       </div>
+      <div class="tb-sep"></div>
+      <div class="tb-cfg-grp" style="justify-content:flex-end">
+        <button onclick="mbStartAutoBot()" id="mb-start-btn" class="mb-launch-btn">🚀 Auto Bot</button>
+      </div>
+    </div>
+
+    <!-- Row 3: Momentum Auto Bot — risk, exits and filters -->
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag sub" style="color:#f87171">RISK</div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#fbbf24" title="Place the target as a resting LIMIT SELL at the exchange the instant the BUY is done (PROD10 quick-mode style), instead of polling the LTP and market-selling at target. The exchange holds the target even if the bot dies or a fast tick is missed; the bot cancels it before any hard SL / trail / max-hold exit.">PLACE TGT</span>
+        <button id="mb-place-tgt-btn" class="toggle-btn toggle-off" onclick="mbTogglePlaceTgt()"
+          title="ON — a LIMIT SELL at entry+TARGET PTS is parked right after the BUY (exchange-side target). OFF — current behaviour: the bot polls the LTP and MARKET sells when the target is hit.">OFF</button>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Post-trade cooldown — seconds to wait after a closed trade before scanning again. Editable while running: a change re-times the cooldown already counting down.">COOLDOWN S</span>
+        <input type="number" id="mb-cooldown-sec" class="tb-inp-sm" value="120" min="0" max="3600" step="5" onchange="mbPushTiming(this)"
+               title="Seconds to wait after a trade closes before the next scan (default 120). Applies live — shortening it cuts a cooldown that is already running." style="width:52px">
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="No-signal wait — seconds to wait after a scan that found no momentum signal. Editable while running.">NO-SIG S</span>
+        <input type="number" id="mb-nosig-sec" class="tb-inp-sm" value="60" min="0" max="1800" step="5" onchange="mbPushTiming(this)"
+               title="Seconds to wait after a scan with no signal before re-scanning (default 60). Applies live to a wait already counting down." style="width:52px">
+      </div>
+      <div class="tb-sep"></div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#f87171" title="Fixed hard SL in premium points — every trade uses exactly this stop and all ATR logic is skipped. Mutually exclusive with ATR SL.">HARD SL</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          <button id="mb-hard-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleHardSL()"
+            title="ON — a fixed points stop on every trade (ATR ignored). OFF — ATR SL / SL FLOOR decide.">OFF</button>
+          <input type="number" id="mb-hard-sl-pts" class="tb-inp-sm" value="8" min="0.5" max="100" step="0.5"
+                 onchange="mbHardSLPtsChanged()" disabled
+                 title="Hard SL in premium points, e.g. 8 — used for every trade while HARD SL is ON."
+                 style="width:46px">
+          <span style="font-size:9px;color:var(--dim)">pts</span>
+        </div>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR-based Hard SL — dynamic SL based on ATR × multiplier. Ignored while HARD SL is ON.">ATR SL</span>
+        <button id="mb-atr-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleAtrSL()" title="Dynamic Hard SL based on ATR × multiplier. OFF = fixed 8-pt Hard SL.">OFF</button>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR source (only active when ATR SL is ON) — HIST ATR: 14-period EMA ATR from 60 min of 1-min historical candles, accurate real volatility, no 3-pt floor (PROD10 style). TICK RNG: live high-low range from 15–25 sec tick scan window × multiplier, fast but shallow, minimum 3-pt floor.">ATR SRC</span>
+        <button id="mb-atr-src-btn" class="toggle-btn" style="font-size:10px;padding:3px 9px;border-color:#374151;background:rgba(55,65,81,.15);color:#4b5563;cursor:not-allowed;opacity:0.45" onclick="mbToggleAtrSource()" title="Disabled — turn ATR SL ON first. HIST ATR: 14-period EMA ATR from 1-min candles (accurate, no floor). TICK RNG: scan-window tick range × multiplier (fast, floor 3 pts).">HIST ATR</button>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR multiplier for the hard SL — raw SL = ATR × this (PROD10 default 1.5). Only used when ATR SL is ON.">SL MULT</span>
+        <input type="number" id="mb-sl-mult" class="tb-inp-sm" value="1.5" min="0.25" max="5" step="0.1" onchange="mbPushTiming(this)"
+               title="Hard SL = ATR × this multiplier, floored at SL FLOOR. Applies from the next entry." style="width:46px">
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Hard SL floor in premium points — used as the fixed SL when ATR SL is OFF, and as the floor under the ATR SL when it is ON (PROD10 rule: SL is never tighter than this).">SL FLOOR</span>
+        <input type="number" id="mb-sl-floor" class="tb-inp-sm" value="8" min="1" max="100" step="0.5" onchange="mbPushTiming(this)"
+               title="Fixed hard SL in points when ATR SL is OFF; floor under the ATR SL when ON. Applies from the next entry." style="width:46px">
+      </div>
+    </div>
+
+    <!-- Row 4: Momentum Auto Bot — entry filters + capital -->
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag sub" style="color:#60b8f0">FILTERS</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Choppiness detector — detects sideways market, pauses entries when HIGH">CHOP</span>
         <button id="mb-chop-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleChop()" title="Choppiness tracker ON — bot detects sideways market and pauses new entries automatically. Toggle OFF to disable.">ON</button>
       </div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Stop after 2 consecutive Hard SLs — circuit breaker pauses entries for 30 min">CONS SL</span>
         <button id="mb-cons-sl-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleConsSL()" title="Circuit breaker: pause entries for 30 min after N consecutive Hard SLs. Recommended ON.">ON</button>
       </div>
-      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR-based Hard SL — dynamic SL based on ATR × multiplier">ATR SL</span>
-        <button id="mb-atr-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleAtrSL()" title="Dynamic Hard SL based on ATR × multiplier. OFF = fixed 8-pt Hard SL.">OFF</button>
-      </div>
-      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR source (only active when ATR SL is ON) — HIST ATR: 14-period EMA ATR from 60 min of 1-min historical candles, accurate real volatility, no 3-pt floor (PROD10 style). TICK RNG: live high-low range from 15–25 sec tick scan window × multiplier, fast but shallow, minimum 3-pt floor.">ATR SRC</span>
-        <button id="mb-atr-src-btn" class="toggle-btn" style="font-size:10px;padding:3px 9px;border-color:#374151;background:rgba(55,65,81,.15);color:#4b5563;cursor:not-allowed;opacity:0.45" onclick="mbToggleAtrSource()" title="Disabled — turn ATR SL ON first. HIST ATR: 14-period EMA ATR from 1-min candles (accurate, no floor). TICK RNG: scan-window tick range × multiplier (fast, floor 3 pts).">HIST ATR</button>
-      </div>
+      <div class="tb-sep"></div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Min score filter — ON requires winning side score ≥0.275; OFF picks highest positive side regardless">MIN SCORE</span>
         <button id="mb-min-score-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleMinScore()" title="Score filter ON — winning side needs net score ≥ 0.275 (velocity × consistency). OFF = pick highest positive score side without a floor.">ON</button>
       </div>
@@ -4780,10 +6442,7 @@ select.tb-inp-sm{width:96px;}
           <button id="mb-vix-refresh-btn" onclick="mbVixRefreshConfig()" title="Refresh VIX and recompute config — use after every 3–4 trades" style="display:none;font-size:11px;padding:2px 8px;border-radius:12px;cursor:pointer;border:1px solid #60b8f0;background:rgba(96,184,240,.15);color:#60b8f0;font-weight:700">↻</button>
         </div>
       </div>
-      <div class="tb-cfg-grp" style="justify-content:center">
-        <button onclick="mbStartAutoBot()" id="mb-start-btn" class="mb-launch-btn">🚀 Auto Bot</button>
-      </div>
-      <div style="width:1px;background:var(--bdr);align-self:stretch;margin:0 4px"></div>
+      <div class="tb-sep"></div>
       <!-- Capital calculator -->
       <div class="tb-cfg-grp">
         <span class="tb-lbl-sm" style="color:#f59e0b">CAPITAL CALC</span>
@@ -4810,7 +6469,7 @@ select.tb-inp-sm{width:96px;}
     </div>
 
     <!-- VIX Auto Config status panel — shown when VIX AUTO toggle is ON -->
-    <div id="mb-vix-status-panel" style="display:none;background:rgba(96,184,240,.07);border:1px solid rgba(96,184,240,.28);border-radius:6px;margin-top:6px;font-size:10px;font-family:'JetBrains Mono',monospace;overflow:hidden">
+    <div id="mb-vix-status-panel" style="display:none;background:rgba(96,184,240,.07);border:1px solid rgba(96,184,240,.28);border-radius:6px;margin:2px 14px 8px;font-size:10px;font-family:'JetBrains Mono',monospace;overflow:hidden">
       <!-- Clickable header row -->
       <div onclick="mbVixTogglePanel()" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(96,184,240,.15)" id="mb-vix-panel-header">
         <span style="color:#60b8f0;font-weight:700;letter-spacing:.5px">⚡ VIX AUTO CONFIG</span>
@@ -4820,6 +6479,7 @@ select.tb-inp-sm{width:96px;}
       <!-- Collapsible body -->
       <div id="mb-vix-panel-body" style="padding:10px 12px;line-height:1.5"></div>
     </div>
+    </div><!-- /AUTO block -->
 
   </div>
 
@@ -6422,6 +8082,26 @@ select.tb-inp-sm{width:96px;}
     </div>
   </div>
 
+  <!-- 15-day regime history — which sessions trended vs chopped -->
+  <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+      <span style="font-size:10px;letter-spacing:1px;color:var(--dim)">15-DAY REGIME HISTORY
+        <span style="font-size:9px;color:#475569;font-weight:400;letter-spacing:0;margin-left:6px">daily NIFTY candles + VIX close — trending vs sideways per session</span>
+      </span>
+      <span id="rh-summary" style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--dim)">loading…</span>
+    </div>
+    <div id="rh-table" style="overflow-x:auto;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--dim)">Loading daily candles…</div>
+    <div style="font-size:9px;color:#475569;margin-top:8px;line-height:1.6">
+      EFFICIENCY = |close − open| ÷ (high − low) — how much of the day's range was a sustained one-way move.
+      eff ≥50% with range ≥0.55% → trending · eff &lt;30% with range ≥0.75% → both-side chop · range &lt;0.45% → sideways.
+      Daily OHLC is rebuilt from 15-min candles with Groww's phantom 09:00 wick filtered out.
+      PREMIUM ACTIVITY = that day's weekly ATM CE/PE open→close (strike = day open rounded to 50, expired contracts included; hover for straddle, strike &amp; net flow).
+      Activity level = net directional flow |CEΔ−PEΔ| ÷ straddle: &lt;15% STAGNANT (flat — theta bleeds both sides equally) · 15–35% MODERATE ↗/↘ · &gt;35% HIGH ↗/↘ (strong one-way flow, follow the money). Expiry-day (Tue) readings run hot as ATM collapses to zero.
+      Second chip: CRUSH = both sides bled · CE/PE PAID = one side up ≥5% · DECAY = winning side barely moved · EXPANSION = both sides up (vol event).
+      Regime classification itself uses index OHLC + VIX; premiums are shown as confirming evidence.
+    </div>
+  </div>
+
   <!-- Analysis + Regime + Recent ticks -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
 
@@ -6440,6 +8120,151 @@ select.tb-inp-sm{width:96px;}
   </div>
 
 </div><!-- end #tab-vix -->
+
+<!-- Premium Pulse tab — how are ATM premiums behaving today? -->
+<div id="tab-pulse" class="tab-pane" style="padding:16px 18px;overflow-y:auto;max-height:calc(100vh - 118px)">
+<style>#tab-pulse [data-pptip]{cursor:help}
+@keyframes ppblink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes ppmomoce{0%,100%{box-shadow:0 0 0 rgba(34,197,94,0);border-color:#14532d}
+  50%{box-shadow:0 0 22px rgba(34,197,94,.45);border-color:#22c55e}}
+@keyframes ppmomope{0%,100%{box-shadow:0 0 0 rgba(239,68,68,0);border-color:#7f1d1d}
+  50%{box-shadow:0 0 22px rgba(239,68,68,.45);border-color:#ef4444}}
+.pp-momo-live-ce{animation:ppmomoce 1.1s infinite}
+.pp-momo-live-pe{animation:ppmomope 1.1s infinite}</style>
+
+  <!-- Header: index picker + contract info -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <span style="font-size:10px;letter-spacing:1px;color:var(--dim);margin-right:6px">PREMIUM PULSE
+        <span style="font-size:9px;color:#475569;font-weight:400;letter-spacing:0;margin-left:6px">hover anything for details</span>
+      </span>
+      <button id="pp-idx-NIFTY"  class="pp-idx-btn" onclick="setPulseIdx('NIFTY')" data-pptip="idx"
+              style="padding:4px 14px;border-radius:6px;border:1px solid var(--bdr);background:#12233d;color:var(--txt);font-size:11px;font-weight:700;cursor:pointer">NIFTY</button>
+      <button id="pp-idx-SENSEX" class="pp-idx-btn" onclick="setPulseIdx('SENSEX')" data-pptip="idx"
+              style="padding:4px 14px;border-radius:6px;border:1px solid var(--bdr);background:transparent;color:var(--dim);font-size:11px;font-weight:700;cursor:pointer">SENSEX</button>
+    </div>
+    <div id="pp-contract" data-pptip="contract" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace">—</div>
+  </div>
+
+  <!-- Global fixed tooltip for Premium Pulse — never affects layout -->
+  <div id="pp-tooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;
+       background:#0c1a30;border:1px solid var(--bdr);border-radius:10px;padding:12px 15px;
+       max-width:360px;font-size:11px;line-height:1.7;color:var(--txt);
+       box-shadow:0 10px 32px rgba(0,0,0,.8);font-family:'Inter',sans-serif"></div>
+
+  <!-- CE / PE momentum cards — the live side that's moving blinks (10s poll) -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div id="pp-momo-ce" data-pptip="momo-ce"
+         style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:12px 16px;transition:border-color .3s">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:10px;letter-spacing:1px;color:var(--bull);font-weight:800">CE — CALL SIDE ⓘ</span>
+        <span id="pp-momo-ce-tag" style="font-size:9px;font-weight:800;letter-spacing:1px;color:var(--dim)">QUIET</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-family:'JetBrains Mono',monospace">
+        <span id="pp-momo-ce-ltp" style="font-size:24px;font-weight:800;color:var(--txt)">—</span>
+        <span id="pp-momo-ce-pcts" style="font-size:11px;color:var(--dim)">5m — · 15m —</span>
+      </div>
+    </div>
+    <div id="pp-momo-pe" data-pptip="momo-pe"
+         style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:12px 16px;transition:border-color .3s">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:10px;letter-spacing:1px;color:var(--bear);font-weight:800">PE — PUT SIDE ⓘ</span>
+        <span id="pp-momo-pe-tag" style="font-size:9px;font-weight:800;letter-spacing:1px;color:var(--dim)">QUIET</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-family:'JetBrains Mono',monospace">
+        <span id="pp-momo-pe-ltp" style="font-size:24px;font-weight:800;color:var(--txt)">—</span>
+        <span id="pp-momo-pe-pcts" style="font-size:11px;color:var(--dim)">5m — · 15m —</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINAL CALL — the one-line instruction, live every 3s -->
+  <div style="background:linear-gradient(135deg,#0d1526,#0a1220);border:1px solid #1e3a5f;border-radius:10px;padding:16px 18px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start">
+      <div>
+        <div data-pptip="final-call" style="font-size:9px;letter-spacing:1px;color:var(--dim);margin-bottom:8px">
+          🎯 FINAL CALL — WHAT TO DO NOW ⓘ
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-left:8px;animation:ppblink 1.6s infinite"></span>
+          <span style="font-size:8px;color:#475569">LIVE · 3s</span>
+        </div>
+        <div id="pp-dec-label" style="font-size:24px;font-weight:800;letter-spacing:.5px;line-height:1.2">—</div>
+        <div id="pp-dec-why" data-pptip="final-why" style="font-size:12px;line-height:1.7;color:var(--txt);margin-top:8px">Waiting for first decision…</div>
+        <div id="pp-dec-since" data-pptip="final-since" style="font-size:10px;color:var(--dim);margin-top:6px;font-family:'JetBrains Mono',monospace">—</div>
+      </div>
+      <div>
+        <div data-pptip="final-history" style="font-size:9px;letter-spacing:1px;color:var(--dim);margin-bottom:6px">LAST 1 HOUR — HOW THE CALL CHANGED ⓘ</div>
+        <div id="pp-dec-history" style="max-height:150px;overflow-y:auto;font-size:10px;line-height:1.5">
+          <div style="color:var(--dim);padding:4px 0">No decision history yet — fills as the sampler ticks every 2s.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Verdict card -->
+  <div id="pp-verdict-card" style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:18px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div data-pptip="verdict" style="font-size:9px;letter-spacing:1px;color:var(--dim);margin-bottom:6px">PREMIUM BEHAVIOR RIGHT NOW ⓘ
+          <span id="pp-conf" data-pptip="conf" style="margin-left:8px;padding:1px 8px;border-radius:10px;border:1px solid var(--bdr);font-size:8px;color:var(--dim)">—</span>
+        </div>
+        <div id="pp-behavior" style="font-size:26px;font-weight:800;letter-spacing:.5px">—</div>
+      </div>
+      <div data-pptip="straddle" style="text-align:right;font-family:'JetBrains Mono',monospace">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.8px;margin-bottom:4px">ATM STRADDLE ⓘ</div>
+        <div id="pp-straddle" style="font-size:22px;font-weight:700;color:var(--txt)">—</div>
+        <div id="pp-ltps" data-pptip="ltps" style="font-size:10px;color:var(--dim);margin-top:2px">—</div>
+      </div>
+    </div>
+    <div id="pp-action" data-pptip="action" style="font-size:13px;line-height:1.7;color:var(--txt);border-top:1px solid rgba(255,255,255,.06);margin-top:12px;padding-top:12px">Waiting for data…</div>
+    <div id="pp-reasons" data-pptip="reasons" style="font-size:11px;line-height:1.8;color:var(--dim);margin-top:6px"></div>
+    <div data-pptip="refresh" style="font-size:9px;color:var(--dim);margin-top:8px">Updated <span id="pp-ts">—</span> · refreshes every 20s · verdict logged every 5 min</div>
+  </div>
+
+  <!-- Windows grid: since open / 1h / 15m / 5m -->
+  <div id="pp-windows" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px"></div>
+
+  <!-- Chart -->
+  <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span data-pptip="chart" style="font-size:10px;letter-spacing:1px;color:var(--dim)">ATM PREMIUM — TODAY ⓘ</span>
+      <span data-pptip="chart" style="font-size:9px;font-family:'JetBrains Mono',monospace">
+        <span style="color:var(--bull)">━ CE</span>&nbsp;&nbsp;<span style="color:var(--bear)">━ PE</span>
+      </span>
+    </div>
+    <canvas id="pp-chart" data-pptip="chart" style="width:100%;height:170px;display:block"></canvas>
+    <div id="pp-chart-info" data-pptip="chart-click" style="font-size:10px;color:var(--dim);margin-top:8px;font-family:'JetBrains Mono',monospace;line-height:1.6">
+      Click any point on the chart to read its exact prices — click a second point to see the change between them. Third click resets.
+    </div>
+  </div>
+
+  <!-- Traps + decay row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:14px">
+      <div data-pptip="traps" style="font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:8px">🪤 TRAP SPIKES TODAY ⓘ</div>
+      <div id="pp-traps" data-pptip="traps" style="font-size:11px;line-height:1.9;font-family:'JetBrains Mono',monospace;color:var(--txt)">—</div>
+    </div>
+    <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:14px">
+      <div data-pptip="decay" style="font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:8px">🩸 DECAY CHECK ⓘ</div>
+      <div id="pp-decay" data-pptip="decay" style="font-size:11px;line-height:1.7;color:var(--txt)">—</div>
+    </div>
+  </div>
+
+  <!-- 5-min verdict history -->
+  <div style="background:#0a111e;border:1px solid var(--bdr);border-radius:10px;padding:14px">
+    <div data-pptip="history" style="font-size:10px;letter-spacing:1px;color:var(--dim);margin-bottom:8px">⏱ HOW TODAY EVOLVED — 5-MIN VERDICT LOG ⓘ</div>
+    <div style="max-height:260px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="color:var(--dim);font-size:9px;letter-spacing:.6px;text-align:left">
+          <th data-pptip="hist-time" style="padding:4px 8px">TIME</th><th data-pptip="history" style="padding:4px 8px">BEHAVIOR</th>
+          <th data-pptip="hist-ce5" style="padding:4px 8px">CE 5m</th><th data-pptip="hist-pe5" style="padding:4px 8px">PE 5m</th>
+          <th data-pptip="hist-strad" style="padding:4px 8px">STRADDLE</th><th data-pptip="hist-action" style="padding:4px 8px">ACTION</th>
+        </tr></thead>
+        <tbody id="pp-history"><tr><td colspan="6" style="padding:8px;color:var(--dim)">No verdicts yet — first one logs 5 minutes after market open.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- end #tab-pulse -->
 
 <div class="footer" id="footer">Last updated: — | Read-only — no API calls — log aggregator only</div>
 
@@ -7146,6 +8971,288 @@ function loadSavedColors(){
     }
   });
 }
+/* ── Auto Signal tab (AUTO-FIT regime light) ── */
+let _afTimer=null, _afCountdown=null, _afNextIn=null, _afLogOpen=false, _afDoc=null;
+const _AF_CLS={GREEN:'g', AMBER:'a', RED:'r', CLOSED:''};
+
+function initAutoFitTab(){
+  afLoad();
+  if(_afTimer) clearInterval(_afTimer);
+  _afTimer = setInterval(afLoad, 20000);          // view refresh; engine samples every 3 min
+  if(_afCountdown) clearInterval(_afCountdown);
+  _afCountdown = setInterval(()=>{
+    if(_afNextIn == null) return;
+    _afNextIn = Math.max(0, _afNextIn - 1);
+    const el=$('af-next');
+    if(el) el.textContent = _afNextIn ? `${Math.floor(_afNextIn/60)}m ${String(_afNextIn%60).padStart(2,'0')}s` : 'due now';
+  }, 1000);
+}
+
+function afToggleLog(){
+  _afLogOpen = !_afLogOpen;
+  const w=$('af-log-wrap'), c=$('af-log-chev');
+  if(w) w.style.display = _afLogOpen ? '' : 'none';
+  if(c) c.textContent = _afLogOpen ? '▲' : '▼';
+}
+
+async function afLoad(manual){
+  try{
+    const r = await fetch('/api/autofit');
+    _afDoc = await r.json();
+    _afNextIn = _afDoc.next_in_sec;
+    afRender();
+  }catch(e){
+    const h=$('af-headline'); if(h) h.textContent='Could not load signal: '+e.message;
+  }
+}
+
+function afFmt(v, unit){
+  if(v === null || v === undefined) return '—';
+  return (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : v) + (unit ? ' '+unit : '');
+}
+
+function afRender(){
+  const d=_afDoc||{}, cur=d.current, hist=d.history||[], th=d.thresholds||{};
+  const hero=$('af-hero');
+  if(!cur){
+    if(hero) hero.className='af-hero';
+    setText('af-state','—'); setText('af-headline','Waiting for the first sample (one every 3 minutes)…');
+    return;
+  }
+  const cls=_AF_CLS[cur.state]||'';
+  if(hero) hero.className='af-hero '+cls;
+  const stEl=$('af-state');
+  if(stEl){
+    stEl.textContent = cur.state + (cur.cooling ? '  · cooling off' : '');
+    stEl.style.color = cls==='g'?'var(--bull)':cls==='a'?'var(--warn)':cls==='r'?'var(--bear)':'var(--dim)';
+  }
+  setText('af-headline', cur.headline||'');
+  const act=$('af-action');
+  if(act){ act.textContent=cur.action||''; act.style.color = stEl ? stEl.style.color : ''; }
+  setText('af-trig', (cur.triggers&&cur.triggers.length ? 'triggered by: '+cur.triggers.join(', ') : '')
+                + (cur.notes&&cur.notes.length ? '   ⚠ '+cur.notes.join(' · ') : ''));
+  setText('af-spot', cur.spot ? cur.spot.toFixed(2) : '—');
+  const ratio=(cur.components&&cur.components.atr_target)?cur.components.atr_target.value:null;
+  setText('af-ratio', ratio!=null ? ratio.toFixed(2)+'×' : '—');
+  setText('af-last', cur.t||'—');
+
+  // ── component cards ──
+  const box=$('af-comps');
+  if(box){
+    const keys=['expansion','shock','atr_target','prem_swing','sl_recent','giveback'];
+    box.innerHTML = keys.filter(k=>cur.components&&cur.components[k]).map(k=>{
+      const c=cur.components[k], lv=['g','a','r'][c.level]||'g';
+      const t=th[k]||[];
+      const colour = lv==='g'?'var(--bull)':lv==='a'?'var(--warn)':'var(--bear)';
+      const kind = c.kind==='tape' ? 'tape' : c.kind==='damage' ? 'damage' : 'setup';
+      const cap  = c.caps_at===1 ? '<span class="af-pill a" style="margin-left:6px">caps at AMBER</span>' : '';
+      return `<div class="af-c ${lv}">
+        <div class="af-c-h"><span class="af-c-l">${rnEsc(c.label)} <span style="color:var(--dim);font-weight:400;text-transform:none">· ${kind}</span>${cap}</span>
+          <span class="af-c-v" style="color:${colour}">${afFmt(c.value, c.unit)}</span></div>
+        <div class="af-c-th">amber ≥ ${t[0]!=null?t[0]:'—'} · red ≥ ${t[1]!=null?t[1]:'—'}</div>
+        <div class="af-c-d">${rnEsc(c.desc||'')}</div>
+      </div>`;
+    }).join('') || '<div class="af-empty">No components — market closed.</div>';
+  }
+
+  // ── day timeline ──
+  const strip=$('af-strip');
+  if(strip){
+    strip.innerHTML = hist.map((h,i)=>{
+      const c=_AF_CLS[h.state]||'';
+      const tip=`${h.t} — ${h.state}${h.triggers&&h.triggers.length?' ('+h.triggers.join(', ')+')':''}`;
+      return `<div class="af-cell ${c}${i===hist.length-1?' now':''}" title="${rnEsc(tip)}"></div>`;
+    }).join('') || '<span class="af-empty">No samples yet today.</span>';
+    const g=hist.filter(h=>h.state==='GREEN').length, a=hist.filter(h=>h.state==='AMBER').length, r=hist.filter(h=>h.state==='RED').length;
+    setText('af-tl-sub', hist.length ? `— ${hist.length} samples · ${hist[0].t}→${hist[hist.length-1].t} · `
+        + `${g*3}m green, ${a*3}m amber, ${r*3}m red` : '');
+  }
+
+  // ── state-change table ──
+  const ch=[];
+  for(let i=0;i<hist.length;i++){
+    if(i===0 || hist[i].state!==hist[i-1].state){
+      ch.push({t:hist[i].t, from:i?hist[i-1].state:'—', to:hist[i].state,
+               trig:(hist[i].triggers||[]).join(', '), idx:i});
+    }
+  }
+  const tb=document.querySelector('#af-changes tbody');
+  if(tb){
+    tb.innerHTML = ch.length ? ch.slice().reverse().map((c,ri)=>{
+      const next = ch[ch.length-1-ri+1];
+      const held = (next ? next.idx : hist.length) - c.idx;
+      const cls=_AF_CLS[c.to]||'';
+      return `<tr><td>${rnEsc(c.t)}</td>
+        <td><span style="color:var(--dim)">${rnEsc(c.from)}</span> → <span class="af-pill ${cls}">${rnEsc(c.to)}</span></td>
+        <td>${held*3} min</td><td style="white-space:normal;color:var(--dim)">${rnEsc(c.trig||'—')}</td></tr>`;
+    }).join('') : '<tr><td colspan="4" class="af-empty">No samples yet today.</td></tr>';
+  }
+
+  // ── full sample log ──
+  const lb=document.querySelector('#af-log tbody');
+  if(lb){
+    const v=(h,k)=>{ const c=h.components&&h.components[k]; return c&&c.value!=null ? c.value : '—'; };
+    lb.innerHTML = hist.slice().reverse().map(h=>{
+      const cls=_AF_CLS[h.state]||'';
+      return `<tr><td>${rnEsc(h.t)}</td><td><span class="af-pill ${cls}">${rnEsc(h.state)}</span></td>
+        <td>${v(h,'expansion')}</td><td>${v(h,'shock')}</td><td>${v(h,'atr_target')}</td>
+        <td>${v(h,'prem_swing')}</td><td>${v(h,'sl_recent')}</td><td>${v(h,'giveback')}</td>
+        <td>${h.spot||'—'}</td></tr>`;
+    }).join('');
+  }
+}
+
+/* ── Release notes / version history ── */
+let _rnDoc = null;
+let _rnOpen = (localStorage.getItem('rnOpen') ?? '1') === '1';
+
+function rnEsc(t){
+  return String(t == null ? '' : t)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function rnTogglePanel(){
+  _rnOpen = !_rnOpen;
+  try{ localStorage.setItem('rnOpen', _rnOpen ? '1' : '0'); }catch(e){}
+  rnPaintPanelState();
+}
+
+function rnPaintPanelState(){
+  const body = document.getElementById('rn-body');
+  const chev = document.getElementById('rn-chev');
+  if(body) body.style.display = _rnOpen ? '' : 'none';
+  if(chev) chev.style.transform = _rnOpen ? '' : 'rotate(180deg)';
+}
+
+function rnJumpToNotes(){
+  const dashBtn = document.querySelector('.tab-btn');
+  const pane = document.getElementById('tab-dashboard');
+  if(pane && !pane.classList.contains('active') && dashBtn) switchTab('dashboard', dashBtn);
+  if(!_rnOpen) rnTogglePanel();
+  const card = document.getElementById('rn-card');
+  if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function rnMsg(text, ok){
+  const el = document.getElementById('rn-msg');
+  if(!el) return;
+  el.textContent = text || '';
+  el.style.color = ok ? 'var(--bull)' : 'var(--bear)';
+  if(text) setTimeout(()=>{ if(el.textContent === text) el.textContent = ''; }, 4000);
+}
+
+async function rnLoad(){
+  try{
+    const r = await fetch('/api/release_notes');
+    _rnDoc = await r.json();
+    rnRender();
+  }catch(e){
+    const box = document.getElementById('rn-releases');
+    if(box) box.textContent = 'Could not load release notes: ' + e.message;
+  }
+}
+
+function rnRender(){
+  const doc  = _rnDoc || {};
+  const rels = Array.isArray(doc.releases) ? doc.releases : [];
+  const cur  = doc.current_version || (rels[0] && rels[0].version) || '—';
+
+  const verBadge = document.getElementById('rn-current-ver');
+  if(verBadge) verBadge.textContent = 'v' + cur;
+  const hdrVer = document.getElementById('hdr-ver');
+  if(hdrVer) hdrVer.textContent = 'v' + cur;
+
+  const noteCount = rels.reduce((n,r)=> n + ((r.notes||[]).length), 0);
+  const sub = document.getElementById('rn-subtitle');
+  if(sub) sub.textContent = `${rels.length} release${rels.length===1?'':'s'}`
+        + (noteCount ? ` · ${noteCount} custom note${noteCount===1?'':'s'}` : '')
+        + ' — your notes are saved to release_notes.json';
+
+  const sel = document.getElementById('rn-note-ver');
+  if(sel){
+    const keep = sel.value;
+    sel.innerHTML = rels.map(r=>`<option value="${rnEsc(r.version)}">v${rnEsc(r.version)}</option>`).join('');
+    sel.value = rels.some(r=>String(r.version)===keep) ? keep : cur;
+  }
+
+  const box = document.getElementById('rn-releases');
+  if(!box) return;
+  if(!rels.length){ box.innerHTML = '<div class="rn-empty">No releases yet.</div>'; return; }
+
+  box.classList.remove('rn-empty');
+  box.innerHTML = rels.map((r, idx)=>{
+    const secs = (r.sections||[]).map(sc=>`
+      <div class="rn-sec">
+        <div class="rn-sec-h">${rnEsc(sc.heading)}</div>
+        <ul class="rn-list">${(sc.items||[]).map(i=>`<li>${rnEsc(i)}</li>`).join('')}</ul>
+      </div>`).join('');
+    const notes = (r.notes||[]);
+    const notesHtml = `
+      <div class="rn-notes">
+        <div class="rn-notes-h">📝 My notes</div>
+        ${notes.length ? notes.map(n=>`
+          <div class="rn-note">
+            <span class="rn-note-ts">${rnEsc(n.ts)}</span>
+            <span class="rn-note-txt">${rnEsc(n.text)}</span>
+            <button class="rn-note-del" title="Delete this note"
+              onclick="rnDeleteNote('${rnEsc(r.version)}','${rnEsc(n.id)}')">✕</button>
+          </div>`).join('')
+          : '<div class="rn-empty">No custom notes yet — add one below.</div>'}
+      </div>`;
+    return `
+      <div class="rn-rel">
+        <div class="rn-rel-hdr">
+          <span class="rn-rel-ver">v${rnEsc(r.version)}</span>
+          <span class="rn-rel-date">${rnEsc(r.date)}</span>
+          <span class="rn-rel-title">${rnEsc(r.title)}</span>
+          ${idx===0 ? '<span class="rn-pill">current</span>' : ''}
+        </div>
+        ${secs}
+        ${notesHtml}
+      </div>`;
+  }).join('');
+}
+
+async function rnPost(payload, okMsg){
+  try{
+    const r = await fetch('/api/release_notes', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if(d && d.ok){
+      if(d.data){ _rnDoc = d.data; rnRender(); } else { await rnLoad(); }
+      rnMsg(okMsg, true);
+      return true;
+    }
+    rnMsg('⚠ ' + ((d && d.error) || 'failed'), false);
+  }catch(e){
+    rnMsg('⚠ ' + e.message, false);
+  }
+  return false;
+}
+
+async function rnAddNote(){
+  const inp = document.getElementById('rn-note-text');
+  const sel = document.getElementById('rn-note-ver');
+  const text = (inp.value || '').trim();
+  if(!text){ rnMsg('⚠ Type a note first', false); return; }
+  if(await rnPost({action:'add_note', version: sel.value, text}, '✓ Note saved')) inp.value = '';
+}
+
+async function rnDeleteNote(version, id){
+  if(!confirm('Delete this note?')) return;
+  await rnPost({action:'delete_note', version, id}, '✓ Note deleted');
+}
+
+async function rnAddRelease(){
+  const version = (prompt('New version number (e.g. 1.1.0):') || '').trim();
+  if(!version) return;
+  const title = (prompt('Short title for this release:') || '').trim();
+  await rnPost({action:'add_release', version, title}, '✓ Version created');
+}
+
 /* ── Tab switching ── */
 function switchTab(id, btn){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
@@ -8338,9 +10445,13 @@ function renderMarketRegime(d){
 
   // ── 1. NIFTY day range — fibo bot preferred; Groww Quote API as live fallback ──
   const ohlcFallback = ((d.mkt_idx || {})._ohlc || {}).nifty || {};
-  const dh = fibo.day_high || ohlcFallback.high || 0;
-  const dl = fibo.day_low  || ohlcFallback.low  || 0;
-  const rangeSrc = (fibo.day_high && fibo.day_low) ? '' : (ohlcFallback.high ? ' (live)' : '');
+  // Prefer server-side phantom-filtered OHLC — fibo & Quote-API H/L both carry
+  // Groww's fake 09:00 wick, which inflates the range and false-triggers the
+  // both-side-whipsaw override (badge said CHOP while the score said SIDEWAYS).
+  const clean = d.clean_ohlc || {};
+  const dh = clean.high || fibo.day_high || ohlcFallback.high || 0;
+  const dl = clean.low  || fibo.day_low  || ohlcFallback.low  || 0;
+  const rangeSrc = clean.high ? ' (filtered)' : (fibo.day_high && fibo.day_low) ? '' : (ohlcFallback.high ? ' (live)' : '');
   const rangePts = (dh && dl) ? Math.round((dh - dl) * 10) / 10 : 0;
   const rangePct = (rangePts && spot) ? rangePts / spot * 100 : 0;
 
@@ -8499,7 +10610,7 @@ const _mrTips = {
   <span style="color:var(--warn)">80–150 pts</span><span style="color:#94a3b8">MODERATE — some movement but no clear trend</span>
   <span style="color:var(--bear)">&gt; 150 pts</span><span style="color:#94a3b8">WIDE — trending or event-driven session, momentum valid</span>
 </div>
-<div style="margin-top:8px;font-size:9px;color:#475569">Source: Fibonacci bot (live) · Groww Quote API (60s fallback)</div>`,
+<div style="margin-top:8px;font-size:9px;color:#475569">Source: phantom-filtered 15-min candles + live LTP extremes ("filtered") · Fibonacci bot · Groww Quote API — raw feeds carry Groww's fake 09:00 wick</div>`,
 
   straddle: `<b style="font-size:11px;letter-spacing:.8px">ATM STRADDLE</b>
 <div style="color:#64748b;font-size:10px;margin:4px 0 8px">ATM Call LTP + ATM Put LTP. What option writers are pricing in as the expected daily move.</div>
@@ -8553,6 +10664,86 @@ const _mrTips = {
     tip.style.left=x+'px'; tip.style.top=y+'px';
   }
 })();
+
+// ─────────────────── 15-DAY REGIME HISTORY (VIX tab) ────────────────────────
+const _RH_COLORS = {strong:'#ef4444', trend:'#4ade80', chop:'#f59e0b', side:'#64748b', mixed:'#a78bfa'};
+const _RH_NAMES  = {strong:'strong trend', trend:'trending', chop:'chop', side:'sideways', mixed:'mixed'};
+const _RH_PREM_COLORS = {crush:'#94a3b8', expand:'#a78bfa', dir_up:'#4ade80', dir_down:'#ef4444'};
+
+function _rhPremCell(x){
+  if(!x.prem_label) return '<span style="color:var(--dim)">—</span>';
+  const pc  = _RH_PREM_COLORS[x.prem_key] || 'var(--dim)';
+  const ceC = x.ce_chg >= 0 ? 'var(--bull)' : 'var(--bear)';
+  const peC = x.pe_chg >= 0 ? 'var(--bull)' : 'var(--bear)';
+  // Activity chip — daily analog of the live PREMIUM ACTIVITY card
+  const dir  = x.prem_dir_pct || 0;
+  const lvl  = x.prem_activity || 'STAGNANT';
+  const up   = dir >= 15, dn = dir <= -15;
+  const aCol = lvl==='HIGH' ? (dn ? '#ef4444' : '#4ade80') : lvl==='MODERATE' ? '#f59e0b' : '#94a3b8';
+  const aTxt = lvl + (up ? ' ↗' : dn ? ' ↘' : '');
+  const chip = (t,c) => `<span style="color:${c};font-weight:700;font-size:9px;letter-spacing:.6px;border:1px solid ${c}44;background:${c}14;border-radius:10px;padding:1px 7px">${t}</span>`;
+  const tt  = `ATM ${x.atm_strike} (exp ${x.expiry}) · straddle ₹${x.straddle_open} → ₹${x.straddle_close} · CE ${x.ce_chg>0?'+':''}${x.ce_chg} · PE ${x.pe_chg>0?'+':''}${x.pe_chg} · net flow ${dir>0?'+':''}${dir}% (${x.prem_bias||'—'})`;
+  return `<div title="${tt}">`
+    + chip(aTxt, aCol) + ' ' + chip(x.prem_label, pc)
+    + `<div style="font-size:9px;margin-top:3px"><span style="color:${ceC}">CE ${x.ce_chg_pct>0?'+':''}${x.ce_chg_pct}%</span>`
+    + ` <span style="color:${peC}">PE ${x.pe_chg_pct>0?'+':''}${x.pe_chg_pct}%</span>`
+    + ` <span style="color:var(--dim)">· ₹${x.straddle_close}</span></div></div>`;
+}
+
+async function loadRegimeHistory(){
+  const tbl = $('rh-table'), sum = $('rh-summary');
+  if(!tbl) return;
+  try{
+    const r = await fetch('/api/regime_history'); const d = await r.json();
+    const rows = d.days || [];
+    if(d.building){   // server is rebuilding in the background — poll until done
+      clearTimeout(window._rhRetry);
+      window._rhRetry = setTimeout(loadRegimeHistory, 5000);
+    }
+    if(!rows.length){
+      tbl.textContent = d.building ? 'Building 15-day history — fetching daily + option candles…'
+                       : d.error ? 'Unavailable: ' + d.error : 'No candle data';
+      if(sum) sum.textContent = d.building ? 'loading…' : '—';
+      return;
+    }
+    // Summary chips: counts per regime, in fixed order
+    if(sum){
+      const c = d.counts || {};
+      sum.innerHTML = ['strong','trend','mixed','chop','side']
+        .filter(k => c[k])
+        .map(k => `<span style="color:${_RH_COLORS[k]}">${c[k]} ${_RH_NAMES[k]}</span>`)
+        .join('<span style="color:#334155"> · </span>')
+        + (d.building ? ' <span style="color:#475569">· refreshing…</span>' : '');
+    }
+    const th = s => `<th style="text-align:left;padding:5px 12px 5px 0;font-size:9px;letter-spacing:.8px;color:var(--dim);font-weight:600;white-space:nowrap">${s}</th>`;
+    let html = `<table style="border-collapse:collapse;width:100%;min-width:980px"><thead><tr style="border-bottom:1px solid rgba(255,255,255,.08)">`
+             + th('DATE') + th('DAY') + th('CLOSE') + th('MOVE (C−O)') + th('RANGE') + th('EFFICIENCY') + th('PREMIUM ACTIVITY (ATM)') + th('VIX') + th('REGIME') + `</tr></thead><tbody>`;
+    [...rows].reverse().forEach(x => {                       // newest first
+      const col   = _RH_COLORS[x.key] || 'var(--dim)';
+      const mvCol = x.move_pts > 0 ? 'var(--bull)' : x.move_pts < 0 ? 'var(--bear)' : 'var(--dim)';
+      const effW  = Math.min(x.eff, 100);
+      const vixTxt = x.vix ? x.vix.toFixed(2) + (x.vix_chg_pct ? ` <span style="color:${x.vix_chg_pct>0?'var(--bear)':'var(--bull)'};font-size:9px">${x.vix_chg_pct>0?'+':''}${x.vix_chg_pct}%</span>` : '') : '—';
+      html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">`
+        + `<td style="padding:6px 12px 6px 0;color:var(--txt);white-space:nowrap">${x.date}${x.partial ? ' <span style="color:var(--warn);font-size:9px">live</span>' : ''}</td>`
+        + `<td style="padding:6px 12px 6px 0;color:var(--dim)">${x.day}</td>`
+        + `<td style="padding:6px 12px 6px 0;color:var(--txt)">${x.close.toLocaleString('en-IN')}</td>`
+        + `<td style="padding:6px 12px 6px 0;color:${mvCol};white-space:nowrap">${x.move_pts>0?'+':''}${x.move_pts} <span style="font-size:9px;opacity:.75">(${x.move_pct>0?'+':''}${x.move_pct}%)</span></td>`
+        + `<td style="padding:6px 12px 6px 0;color:var(--txt);white-space:nowrap">${x.range_pts} <span style="font-size:9px;color:var(--dim)">(${x.range_pct}%)</span></td>`
+        + `<td style="padding:6px 12px 6px 0;min-width:90px"><div style="display:flex;align-items:center;gap:6px">`
+        +   `<div style="flex:1;height:6px;border-radius:3px;background:#1e293b;overflow:hidden"><div style="width:${effW}%;height:100%;border-radius:3px;background:${col}"></div></div>`
+        +   `<span style="font-size:9px;color:var(--dim);min-width:28px">${x.eff}%</span></div></td>`
+        + `<td style="padding:6px 12px 6px 0;white-space:nowrap">${_rhPremCell(x)}</td>`
+        + `<td style="padding:6px 12px 6px 0;color:var(--txt);white-space:nowrap">${vixTxt}</td>`
+        + `<td style="padding:6px 0;white-space:nowrap"><span style="color:${col};font-weight:700;font-size:10px;letter-spacing:.6px;border:1px solid ${col}44;background:${col}14;border-radius:12px;padding:2px 10px">${x.label}</span></td>`
+        + `</tr>`;
+    });
+    tbl.innerHTML = html + `</tbody></table>`;
+  }catch(e){
+    tbl.textContent = 'Failed to load regime history';
+  }
+}
+loadRegimeHistory();
+setInterval(loadRegimeHistory, 30*60*1000);   // server caches candles 30 min
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -8870,6 +11061,9 @@ let _mbValidate=true;   // Auto bot: validate_orders — ON by default (matches 
 let _mbChopEnabled=true; // Auto bot: choppiness_enabled — ON by default
 let _mbConsSL=true;      // Auto bot: consec_sl_brake — ON by default
 let _mbAtrSL=false;          // Auto bot: HARD_SL_ATR_BASED — OFF by default
+let _mbPlaceTgt=false;       // Auto bot: place_target_order — resting LIMIT SELL at target
+let _mbHardSL=false;         // Auto bot: HARD_SL_FIXED — exact-points stop, overrides ATR SL
+let _mbHardSLPts=8;          // Auto bot: HARD_SL_FIXED_POINTS
 let _mbAtrSource='candle';   // Auto bot: atr_source — "candle" (PROD10 EMA) or "scan" (window range)
 let _mbMinScoreFilter=true;  // Auto bot: min_score_filter — ON by default
 let _mbVelFilter=true;      // Auto bot: velocity_filter — ON by default
@@ -9668,19 +11862,104 @@ function _mbSyncAtrSrcBtn(){
 }
 
 function mbToggleAtrSL(){
+  if(_mbHardSL){            // fixed stop owns the SL — don't allow a silent double-ON
+    alert(`HARD SL is ON — the stop is a fixed points value.
+
+Turn HARD SL off first to use an ATR-based stop.`);
+    return;
+  }
   _mbAtrSL=!_mbAtrSL;
-  const btn=$('mb-atr-sl-btn');
-  btn.textContent=_mbAtrSL?'ON':'OFF';
-  btn.className=`toggle-btn ${_mbAtrSL?'toggle-on':'toggle-off'}`;
-  btn.style.borderColor='#4ade80';
-  btn.style.background=_mbAtrSL?'rgba(74,222,128,.15)':'';
-  btn.style.color=_mbAtrSL?'#4ade80':'';
-  _mbSyncAtrSrcBtn();
+  _mbPaintSLMode();
   _mbPushConfig();
 }
 
+function mbToggleHardSL(){
+  _mbHardSL = !_mbHardSL;
+  if(_mbHardSL){
+    _mbHardSLPts = _mbReadHardSLPts();
+    _mbAtrSL = false;              // mutually exclusive — a fixed stop ignores ATR entirely
+  }
+  _mbPaintSLMode();
+  _mbPushConfig();
+}
+
+function mbHardSLPtsChanged(){
+  _mbHardSLPts = _mbReadHardSLPts();
+  _mbPaintSLMode();
+  if(_mbHardSL) _mbPushConfig();   // live-apply from the next entry
+}
+
+function _mbReadHardSLPts(){
+  const el=$('mb-hard-sl-pts');
+  const v=el ? parseFloat(el.value) : NaN;
+  return (Number.isFinite(v) && v > 0) ? v : 8;
+}
+
+function _mbPaintSLMode(){
+  // One stop mode at a time: HARD SL (fixed points) XOR ATR SL (ATR × mult, floored).
+  const hard=_mbHardSL;
+  const hb=$('mb-hard-sl-btn');
+  if(hb){
+    hb.textContent = hard ? 'ON' : 'OFF';
+    hb.className   = `toggle-btn ${hard?'toggle-on':'toggle-off'}`;
+    hb.style.borderColor=hard?'#f87171':'';
+    hb.style.background =hard?'rgba(248,113,113,.15)':'';
+    hb.style.color      =hard?'#f87171':'';
+    hb.title = hard
+      ? `Every trade uses a ${_mbHardSLPts}-point hard SL — ATR SL, SL MULT and SL FLOOR are ignored. Click to turn OFF.`
+      : 'OFF — ATR SL / SL FLOOR decide the stop. Click for a fixed points stop.';
+  }
+  const pts=$('mb-hard-sl-pts');
+  if(pts){
+    pts.disabled = !hard;
+    pts.value    = _mbHardSLPts;
+    pts.style.borderColor = hard ? '#f87171' : '';
+    pts.style.color       = hard ? '#f87171' : '';
+  }
+  // ATR SL button — forced OFF and dimmed while a fixed stop is active
+  const ab=$('mb-atr-sl-btn');
+  if(ab){
+    ab.textContent = _mbAtrSL ? 'ON' : 'OFF';
+    ab.className   = `toggle-btn ${_mbAtrSL?'toggle-on':'toggle-off'}`;
+    ab.style.borderColor = _mbAtrSL ? '#4ade80' : '';
+    ab.style.background  = _mbAtrSL ? 'rgba(74,222,128,.15)' : '';
+    ab.style.color       = _mbAtrSL ? '#4ade80' : '';
+    ab.style.opacity     = hard ? '0.35' : '1';
+    ab.style.cursor      = hard ? 'not-allowed' : 'pointer';
+    ab.title = hard
+      ? 'Disabled — HARD SL is ON, so the stop is a fixed points value. Turn HARD SL off to use ATR.'
+      : 'Dynamic Hard SL based on ATR × multiplier. OFF = fixed SL FLOOR points.';
+  }
+  // ATR-only inputs follow the ATR mode
+  ['mb-sl-mult','mb-sl-floor'].forEach(id=>{
+    const el=$(id); if(!el) return;
+    el.disabled = hard;
+    const grp = el.closest('.tb-cfg-grp');
+    if(grp) grp.classList.toggle('tb-grp-off', hard);
+  });
+  const srcGrp = $('mb-atr-src-btn') ? $('mb-atr-src-btn').closest('.tb-cfg-grp') : null;
+  if(srcGrp) srcGrp.classList.toggle('tb-grp-off', hard);
+  _mbSyncAtrSrcBtn();
+}
+
+function mbTogglePlaceTgt(){
+  _mbPlaceTgt=!_mbPlaceTgt;
+  _mbPaintPlaceTgt();
+  _mbPushConfig();
+}
+
+function _mbPaintPlaceTgt(){
+  const btn=$('mb-place-tgt-btn');
+  if(!btn) return;
+  btn.textContent=_mbPlaceTgt?'ON':'OFF';
+  btn.className=`toggle-btn ${_mbPlaceTgt?'toggle-on':'toggle-off'}`;
+  btn.style.borderColor=_mbPlaceTgt?'#fbbf24':'';
+  btn.style.background =_mbPlaceTgt?'rgba(251,191,36,.15)':'';
+  btn.style.color      =_mbPlaceTgt?'#fbbf24':'';
+}
+
 function mbToggleAtrSource(){
-  if(!_mbAtrSL) return;  // only interactive when ATR SL is ON
+  if(_mbHardSL || !_mbAtrSL) return;  // only interactive when ATR SL owns the stop
   _mbAtrSource = (_mbAtrSource === 'candle') ? 'scan' : 'candle';
   const btn=$('mb-atr-src-btn');
   const isCandle = _mbAtrSource === 'candle';
@@ -9923,19 +12202,97 @@ async function mbVixRefreshConfig(){
   }
 }
 
+function mbIntVal(id, dflt){
+  // Parse an int input allowing 0 as a valid value (|| would swallow it)
+  const el = $(id);
+  if(!el) return dflt;
+  const v = parseInt(el.value, 10);
+  return Number.isFinite(v) && v >= 0 ? v : dflt;
+}
+
+function _mbTimingCfg(){
+  // Target pts + cooldown timings as currently set in the UI
+  const t = parseFloat(($('mb-target-pts')||{}).value);
+  const m = parseFloat(($('mb-sl-mult')||{}).value);
+  const f = parseFloat(($('mb-sl-floor')||{}).value);
+  return {
+    TRAIL_START_PROFIT: (Number.isFinite(t) && t > 0) ? t : 1,
+    cooldown_sec:       mbIntVal('mb-cooldown-sec', 120),
+    no_signal_wait_sec: mbIntVal('mb-nosig-sec', 60),
+    HARD_SL_ATR_MULTIPLIER: (Number.isFinite(m) && m > 0) ? m : 1.5,
+    HARD_SL_POINTS:         (Number.isFinite(f) && f > 0) ? f : 8
+  };
+}
+
+function mbUpdateTargetLabel(){
+  // TARGET PTS means different things per exit mode — keep the label honest
+  const mode = ($('mb-exit-mode')||{}).value;
+  const lbl  = $('mb-target-lbl');
+  if(lbl) lbl.textContent = (mode === 'quick') ? 'TARGET PTS' : 'TRAIL @ PTS';
+}
+
+async function mbHydrateTiming(){
+  // Load target/cooldown from the override file so a dashboard reload keeps
+  // whatever a running bot is currently using
+  try{
+    const r = await fetch('/api/momentum/config');
+    const d = await r.json();
+    if(d && typeof d === 'object'){
+      if(d.TRAIL_START_PROFIT != null && $('mb-target-pts'))   $('mb-target-pts').value   = d.TRAIL_START_PROFIT;
+      if(d.cooldown_sec       != null && $('mb-cooldown-sec')) $('mb-cooldown-sec').value = d.cooldown_sec;
+      if(d.no_signal_wait_sec != null && $('mb-nosig-sec'))    $('mb-nosig-sec').value    = d.no_signal_wait_sec;
+      if(d.HARD_SL_ATR_MULTIPLIER != null && $('mb-sl-mult'))  $('mb-sl-mult').value      = d.HARD_SL_ATR_MULTIPLIER;
+      if(d.HARD_SL_POINTS != null && $('mb-sl-floor'))         $('mb-sl-floor').value     = d.HARD_SL_POINTS;
+      if(d.exit_mode && $('mb-exit-mode')) $('mb-exit-mode').value = d.exit_mode;
+      if(d.place_target_order != null){ _mbPlaceTgt = !!d.place_target_order; _mbPaintPlaceTgt(); }
+      if(d.HARD_SL_FIXED_POINTS != null) _mbHardSLPts = d.HARD_SL_FIXED_POINTS;
+      if(d.HARD_SL_FIXED != null) _mbHardSL = !!d.HARD_SL_FIXED;
+      if(d.HARD_SL_ATR_BASED != null) _mbAtrSL = !!d.HARD_SL_ATR_BASED;
+      if(_mbHardSL) _mbAtrSL = false;     // bot resolves it this way too
+      if(d.atr_source) _mbAtrSource = d.atr_source;
+      _mbPaintSLMode();
+    }
+  }catch(e){}
+  mbUpdateTargetLabel();
+  _mbPaintSLMode();          // paint the stop-mode controls even if the fetch failed
+}
+
+async function mbPushTiming(el){
+  // Live-apply target / cooldown edits to a running bot (bot re-reads the
+  // override file every cycle, during cooldown, and every 3s inside a trade)
+  try{
+    const r = await fetch('/api/momentum/config',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(_mbTimingCfg())
+    });
+    const d = await r.json();
+    if(el) mbFlashInput(el, d && d.ok);
+  }catch(e){ if(el) mbFlashInput(el, false); }
+}
+
+function mbFlashInput(el, ok){
+  const prevBorder = el.style.borderColor, prevBg = el.style.background;
+  el.style.borderColor = ok ? '#4ade80' : '#f87171';
+  el.style.background  = ok ? 'rgba(74,222,128,.18)' : 'rgba(248,113,113,.18)';
+  setTimeout(()=>{ el.style.borderColor = prevBorder; el.style.background = prevBg; }, 900);
+}
+
 function _mbPushConfig(){
   // Push current toggle state to running bot via override file (no-op if bot not running)
   fetch('/api/momentum/config',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
+    body: JSON.stringify(Object.assign({
       validate_orders:    _mbValidate,
       choppiness_enabled: _mbChopEnabled,
       consec_sl_brake:    _mbConsSL,
-      HARD_SL_ATR_BASED:  _mbAtrSL,
       atr_source:         _mbAtrSource,
       min_score_filter:   _mbMinScoreFilter,
-      velocity_filter:    _mbVelFilter
-    })
+      velocity_filter:    _mbVelFilter,
+      place_target_order: _mbPlaceTgt,
+      HARD_SL_FIXED:        _mbHardSL,
+      HARD_SL_FIXED_POINTS: _mbHardSLPts,
+      HARD_SL_ATR_BASED:    _mbHardSL ? false : _mbAtrSL
+    }, _mbTimingCfg()))
   }).catch(()=>{});
 }
 
@@ -9948,6 +12305,25 @@ async function tbStartProd10(){
     if(d.ok){ btn.textContent='✅ Started'; setTimeout(()=>{ btn.disabled=false; btn.textContent='▶ Start PROD10'; },4000); }
     else{ alert('Failed: '+(d.error||'unknown')); btn.disabled=false; btn.textContent='▶ Start PROD10'; }
   }catch(e){ alert('Error: '+e); btn.disabled=false; btn.textContent='▶ Start PROD10'; }
+}
+
+async function tbStopProd10(){
+  const btn=$('tb-stop-p10-btn');
+  if(!btn) return;
+  if(!confirm('Stop the running PROD10 bot?')) return;
+  btn.disabled=true; btn.textContent='⏳ Stopping…';
+  try{
+    const r=await fetch('/api/stop_prod10',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(!d.ok) alert('Failed: '+(d.error||'unknown'));
+    else{
+      // flip UI immediately — the log-staleness check takes up to 90s to notice
+      btn.style.display='none';
+      const sb=$('tb-start-p10-btn');
+      if(sb){ sb.classList.remove('p10-running'); sb.classList.add('p10-offline'); }
+    }
+  }catch(e){ alert('Error: '+e); }
+  btn.disabled=false; btn.textContent='⏹ Stop PROD10';
 }
 
 async function tbStartAutoV2(){
@@ -10195,6 +12571,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const lotsEl = document.getElementById('mb-lots');
   if(lotsEl) lotsEl.addEventListener('input', mbUpdateLotInfo);
 
+  // Target label follows the exit mode; hydrate timings from the override file
+  const emEl = document.getElementById('mb-exit-mode');
+  if(emEl) emEl.addEventListener('change', mbUpdateTargetLabel);
+  mbHydrateTiming();
+
   // Re-fetch lot size (and re-render capital) when expiry changes
   const expEl = document.getElementById('mb-expiry');
   if(expEl) expEl.addEventListener('change', async ()=>{
@@ -10214,12 +12595,17 @@ async function mbStartAutoBot(){
   const strikes  = parseInt($('mb-strikes').value) || 3;
   const scanSec  = parseInt($('mb-scan-sec').value) || 10;
   const pollSec  = parseInt($('mb-poll-sec').value) || 1;
+  const targetPt = parseFloat($('mb-target-pts').value) || 1;
+  const coolSec  = mbIntVal('mb-cooldown-sec', 120);
+  const noSigSec = mbIntVal('mb-nosig-sec', 60);
+  const slMult   = parseFloat($('mb-sl-mult').value)  || 1.5;
+  const slFloor  = parseFloat($('mb-sl-floor').value) || 8;
   const mode     = _mbMode;
   if(!expiry){ alert('Select an expiry first'); return; }
   if(premMin >= premMax){ alert('Min premium must be less than max premium'); return; }
   const modeLabel = mode.toUpperCase();
   if(mode === 'live'){
-    if(!confirm(`Launch Momentum Auto Bot in LIVE mode?\n\nIndex: ${index}  Expiry: ${expiry}  Lots: ${lots}\nPremium: ₹${premMin}–₹${premMax}  Strikes: ±${strikes}\n\nThis will place REAL orders on Groww.\n\nProceed?`)) return;
+    if(!confirm(`Launch Momentum Auto Bot in LIVE mode?\n\nIndex: ${index}  Expiry: ${expiry}  Lots: ${lots}\nPremium: ₹${premMin}–₹${premMax}  Strikes: ±${strikes}\nTarget: +${targetPt} pts (${exitMode})${_mbPlaceTgt ? ' — LIMIT SELL parked at entry+target' : ''}${_mbHardSL ? `\nHard SL: FIXED ${_mbHardSLPts} pts (ATR ignored)` : ''}  Cooldown: ${coolSec}s  No-signal: ${noSigSec}s\n\nThis will place REAL orders on Groww.\n\nProceed?`)) return;
   }
   btn.disabled = true; btn.textContent = '⏳ Launching…';
   btn.classList.remove('running');
@@ -10234,12 +12620,20 @@ async function mbStartAutoBot(){
         validate_orders: _mbValidate,
         scan_seconds: scanSec,
         poll_seconds: pollSec,
+        TRAIL_START_PROFIT: targetPt,
+        cooldown_sec:       coolSec,
+        no_signal_wait_sec: noSigSec,
+        HARD_SL_ATR_MULTIPLIER: slMult,
+        HARD_SL_POINTS:         slFloor,
         choppiness_enabled: _mbChopEnabled,
         consec_sl_brake: _mbConsSL,
-        HARD_SL_ATR_BASED: _mbAtrSL,
+        HARD_SL_ATR_BASED: _mbHardSL ? false : _mbAtrSL,
         atr_source: _mbAtrSource,
         min_score_filter: _mbMinScoreFilter,
-        velocity_filter:  _mbVelFilter
+        velocity_filter:  _mbVelFilter,
+        place_target_order: _mbPlaceTgt,
+        HARD_SL_FIXED:        _mbHardSL,
+        HARD_SL_FIXED_POINTS: _mbHardSLPts
       }})
     });
     const d = await r.json();
@@ -10365,6 +12759,10 @@ async function tbPollProd10Logs(){
     const [r, rs] = await Promise.all([fetch('/api/prod10_logs'), fetch('/api/trade/status')]);
     const d=await r.json(); const ts=await rs.json();
     tbRenderHistory(ts.history||[]);
+    const p10Btn=$('tb-start-p10-btn');
+    if(p10Btn){ p10Btn.classList.toggle('p10-running',!d.offline); p10Btn.classList.toggle('p10-offline',!!d.offline); }
+    const p10StopBtn=$('tb-stop-p10-btn');
+    if(p10StopBtn) p10StopBtn.style.display = d.offline ? 'none' : '';
     const el=$('tb-log'); if(!el) return;
     // PROD10 is offline
     if(d.offline){
@@ -12426,6 +14824,9 @@ document.addEventListener('click', e=>{
 // Start polling once page is ready
 document.addEventListener('DOMContentLoaded', notifStart);
 
+// Release notes: paint saved collapse state, then load from release_notes.json
+document.addEventListener('DOMContentLoaded', ()=>{ rnPaintPanelState(); rnLoad(); });
+
 // ── OI Intraday Chart ─────────────────────────────────────────────────────────
 let _oiChartVisible = false;
 let _oiChartData    = [];   // oldest → newest
@@ -13314,6 +15715,553 @@ function _mbAiRender(d){
     content.innerHTML = html || '<div class="mb-ai-idle"><div class="idle-msg">No summary content received</div></div>';
   }
 }
+/* ── Premium Pulse tab ─────────────────────────────────────── */
+let _ppIdx = 'NIFTY', _ppTimer = null, _ppFastTimer = null, _ppChartTimer = null,
+    _ppLast = null, _ppChartData = null, _ppSel = [];
+
+function _ppPaneActive(){
+  const pane = document.getElementById('tab-pulse');
+  return pane && pane.classList.contains('active');
+}
+
+function initPulseTab(){
+  fetchPulse(); fetchPulseFast(); fetchPulseChart();
+  if(!_ppTimer)      _ppTimer      = setInterval(()=>{ if(_ppPaneActive()) fetchPulse(); }, 20000);
+  // one fast feed drives BOTH the momentum cards and the Final Call — 3s live
+  if(!_ppFastTimer)  _ppFastTimer  = setInterval(()=>{ if(_ppPaneActive()) fetchPulseFast(); }, 3000);
+  if(!_ppChartTimer) _ppChartTimer = setInterval(()=>{ if(_ppPaneActive()) fetchPulseChart(); }, 3000);
+}
+
+function setPulseIdx(i){
+  _ppIdx = i; _ppSel = [];
+  ['NIFTY','SENSEX'].forEach(k=>{
+    const b = $('pp-idx-'+k); if(!b) return;
+    b.style.background = (k===i) ? '#12233d' : 'transparent';
+    b.style.color = (k===i) ? 'var(--txt)' : 'var(--dim)';
+  });
+  renderPulseSel();
+  fetchPulse(); fetchPulseFast(); fetchPulseChart();
+}
+
+async function fetchPulseFast(){
+  try{
+    const r = await fetch('/api/premium_pulse_decision?index='+_ppIdx);
+    const d = await r.json();
+    if(d && d.ok){
+      renderPulseDecision(d.decision, d.history, d.market_open);
+      if(d.momo && d.momo.ce_ltp !== undefined) renderPulseMomo(d.momo);
+    }
+  }catch(e){ /* dashboard offline — leave last render */ }
+}
+
+async function fetchPulseChart(){
+  try{
+    const r = await fetch('/api/premium_pulse_chart?index='+_ppIdx);
+    const d = await r.json();
+    if(d && d.ok && d.chart) drawPulseChart(d.chart);
+  }catch(e){ /* dashboard offline — leave last render */ }
+}
+
+function renderPulseMomo(m){
+  [['ce', m.ce_ltp, m.ce5, m.ce15, m.ce_on],
+   ['pe', m.pe_ltp, m.pe5, m.pe15, m.pe_on]].forEach(([k, ltp, p5, p15, on])=>{
+    const card = $('pp-momo-'+k); if(!card) return;
+    card.classList.toggle('pp-momo-live-'+k, !!on);
+    if(!on) card.style.borderColor = '';
+    const lt = $('pp-momo-'+k+'-ltp'); if(lt) lt.textContent = '₹'+(ltp||0).toFixed(1);
+    const pc = $('pp-momo-'+k+'-pcts');
+    if(pc) pc.innerHTML = '5m <span style="color:'+_ppPctClr(p5)+'">'+_ppFmtPct(p5)+'</span>'+
+                          ' · 15m <span style="color:'+_ppPctClr(p15)+'">'+_ppFmtPct(p15)+'</span>';
+    const tg = $('pp-momo-'+k+'-tag');
+    if(tg){
+      tg.textContent = on ? '⚡ MOMENTUM' : 'QUIET';
+      tg.style.color = on ? (k==='ce' ? 'var(--bull)' : 'var(--bear)') : 'var(--dim)';
+    }
+  });
+}
+
+function _ppDur(s){
+  if(s < 60) return s+'s';
+  const m = Math.floor(s/60);
+  return m + 'm' + (s%60 ? ' ' + (s%60) + 's' : '');
+}
+
+function renderPulseDecision(dec, hist, open){
+  const lb = $('pp-dec-label');
+  if(lb){
+    if(dec && dec.label){
+      lb.textContent = dec.emoji + ' ' + dec.label;
+      lb.style.color = _PP_TONE[dec.tone] || 'var(--txt)';
+      lb.dataset.pptip = 'dec:' + (dec.key || '');
+    } else {
+      lb.textContent = open === false ? '— market closed —' : '— warming up —';
+      lb.style.color = 'var(--dim)';
+      lb.dataset.pptip = 'final-call';
+    }
+  }
+  const wy = $('pp-dec-why');
+  if(wy) wy.textContent = (dec && dec.why) ? dec.why : (open === false
+    ? 'The Final Call runs only during market hours (9:15–15:30). Last hour of history stays visible on the right.'
+    : 'First decision lands within a few seconds of sampling starting.');
+  const si = $('pp-dec-since');
+  if(si) si.textContent = (dec && dec.since)
+    ? 'this call since ' + dec.since + ' · held ' + _ppDur(dec.secs||0) + (open === false ? ' · market closed' : '')
+    : '—';
+  const hb = $('pp-dec-history');
+  if(hb && hist){
+    hb.innerHTML = hist.length ? hist.map(h=>
+      '<div data-pptip="dec:'+(h.key||'')+'" style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+        '<span style="font-family:\\'JetBrains Mono\\',monospace;color:var(--dim);white-space:nowrap">'+h.from+'</span>'+
+        '<span style="font-family:\\'JetBrains Mono\\',monospace;color:#475569;white-space:nowrap">'+_ppDur(h.secs)+'</span>'+
+        '<span style="color:'+(_PP_TONE[h.tone]||'var(--txt)')+';font-weight:700;white-space:nowrap">'+h.emoji+' '+h.label+'</span>'+
+      '</div>').join('')
+      : '<div style="color:var(--dim);padding:4px 0">No decision history yet — fills as the sampler ticks every 2s.</div>';
+  }
+}
+
+async function fetchPulse(){
+  try{
+    const r = await fetch('/api/premium_pulse?index='+_ppIdx);
+    renderPulse(await r.json());
+  }catch(e){ /* dashboard offline — leave last render */ }
+}
+
+const _PP_TONE = {bull:'var(--bull)', bear:'var(--bear)', warn:'var(--warn)', info:'var(--info)', dim:'var(--dim)'};
+function _ppPctClr(p){ return p>0.05 ? 'var(--bull)' : p<-0.05 ? 'var(--bear)' : 'var(--dim)'; }
+function _ppFmtPct(p){ return (p>0?'+':'')+(p??0).toFixed(1)+'%'; }
+
+function renderPulse(d){
+  if(!d || !d.ok){
+    const a = $('pp-action');
+    if(a) a.textContent = (d && d.error) ? d.error : 'No data yet.';
+    return;
+  }
+  _ppLast = d;
+  if(d.decision || d.decision_history)
+    renderPulseDecision(d.decision, d.decision_history, d.market_open);
+  const tone = _PP_TONE[d.tone] || 'var(--txt)';
+  const be = $('pp-behavior');
+  if(be){
+    be.textContent = (d.emoji||'')+' '+d.behavior; be.style.color = tone;
+    be.dataset.pptip = 'beh:'+d.behavior.split(' (')[0];
+  }
+  const cf = $('pp-conf'); if(cf){ cf.textContent = 'confidence: '+(d.confidence||'—'); }
+  const ac = $('pp-action'); if(ac){ ac.textContent = d.action || ''; }
+  const rs = $('pp-reasons');
+  if(rs) rs.innerHTML = (d.reasons||[]).map(x=>'• '+x).join('<br>');
+  const st = $('pp-straddle'); if(st) st.textContent = '₹'+(d.straddle||0).toFixed(1);
+  const lt = $('pp-ltps'); if(lt) lt.textContent = 'CE ₹'+(d.ce_ltp||0).toFixed(1)+' · PE ₹'+(d.pe_ltp||0).toFixed(1);
+  const ts = $('pp-ts'); if(ts) ts.textContent = d.ts + (d.market_open ? '' : ' (market closed)');
+  const ct = $('pp-contract');
+  if(ct) ct.textContent = d.index+' '+d.atm+' · exp '+d.expiry+' · spot '+(d.spot||0).toFixed(1);
+
+  // Windows grid
+  const W = [['day','SINCE OPEN'],['60m','LAST 1 HOUR'],['15m','LAST 15 MIN'],['5m','LAST 5 MIN']];
+  const clsClr = {FLAT:'var(--dim)', SLOW:'var(--info)', STEADY:'var(--warn)', FAST:'var(--bear)'};
+  const grid = $('pp-windows');
+  if(grid) grid.innerHTML = W.map(([k,lbl])=>{
+    const w = (d.windows||{})[k] || {};
+    const row = (name,key,s)=>{
+      if(!s || s.pct===undefined) return '<div data-pptip="'+key+'" style="font-size:10px;color:var(--dim)">'+name+' —</div>';
+      return '<div data-pptip="'+key+'" style="display:flex;justify-content:space-between;font-size:11px;font-family:\\'JetBrains Mono\\',monospace">'+
+        '<span style="color:var(--dim)">'+name+'</span>'+
+        '<span style="color:'+_ppPctClr(s.pct)+'">'+_ppFmtPct(s.pct)+' <span style="color:var(--dim);font-size:9px">('+(s.chg>0?'+':'')+s.chg.toFixed(1)+'₹)</span></span></div>';
+    };
+    const eff = (w.ce&&w.ce.eff!==undefined) ? Math.min(w.ce.eff, (w.pe||{}).eff??1) : null;
+    const effTag = eff===null ? '' : eff>=0.6 ? 'one-way' : eff>=0.35 ? 'mixed' : 'whipsaw';
+    return '<div data-pptip="win-'+k+'" style="background:#0a111e;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px">'+
+        '<span style="font-size:9px;color:var(--dim);letter-spacing:.8px">'+lbl+'</span>'+
+        '<span data-pptip="cls:'+(w.cls||'')+'" style="font-size:9px;font-weight:800;letter-spacing:.5px;color:'+(clsClr[w.cls]||'var(--dim)')+'">'+(w.cls||'—')+'</span></div>'+
+      row('CE','row-ce',w.ce) + row('PE','row-pe',w.pe) + row('STRAD','row-strad',w.strad) +
+      '<div data-pptip="path" style="font-size:9px;color:var(--dim);margin-top:5px">spot '+_ppFmtPct(w.spot_pct||0)+
+        (effTag ? ' · path: '+effTag : '')+'</div></div>';
+  }).join('');
+
+  // Traps
+  const tr = $('pp-traps');
+  if(tr) tr.innerHTML = (d.traps&&d.traps.length)
+    ? d.traps.map(t=>t.t+'  spike +'+t.spike_pct+'% → gave back '+t.gave_back_pct+'%').join('<br>')
+    : '<span style="color:var(--dim)">None detected — no spike-and-dump moves today.</span>';
+
+  // Decay
+  const dc = $('pp-decay');
+  if(dc){
+    if(d.decay && d.decay.active){ dc.innerHTML = '<span style="color:var(--bear);font-weight:700">DECAY ACTIVE</span> — '+d.decay.text; }
+    else{
+      const day = ((d.windows||{}).day)||{};
+      const sp = (day.strad||{}).pct;
+      dc.innerHTML = '<span style="color:var(--bull);font-weight:700">No abnormal decay</span>'+
+        (sp!==undefined ? ' — straddle '+_ppFmtPct(sp)+' since open.' : '');
+    }
+  }
+
+  // Verdict history
+  const hb = $('pp-history');
+  if(hb){
+    const rows = d.verdicts||[];
+    hb.innerHTML = rows.length ? rows.map(v=>
+      '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'+
+      '<td data-pptip="hist-time" style="padding:4px 8px;font-family:\\'JetBrains Mono\\',monospace;color:var(--dim)">'+v.t+'</td>'+
+      '<td data-pptip="beh:'+String(v.behavior||'').split(' (')[0]+'" style="padding:4px 8px;font-weight:700;color:'+(_PP_TONE[v.tone]||'var(--txt)')+'">'+(v.emoji||'')+' '+v.behavior+'</td>'+
+      '<td data-pptip="hist-ce5" style="padding:4px 8px;font-family:\\'JetBrains Mono\\',monospace;color:'+_ppPctClr(v.ce5)+'">'+_ppFmtPct(v.ce5)+'</td>'+
+      '<td data-pptip="hist-pe5" style="padding:4px 8px;font-family:\\'JetBrains Mono\\',monospace;color:'+_ppPctClr(v.pe5)+'">'+_ppFmtPct(v.pe5)+'</td>'+
+      '<td data-pptip="hist-strad" style="padding:4px 8px;font-family:\\'JetBrains Mono\\',monospace;color:var(--dim)">₹'+(v.strad||0).toFixed(0)+'</td>'+
+      '<td data-pptip="hist-action" style="padding:4px 8px;color:var(--dim);font-size:10px">'+v.action+'</td></tr>').join('')
+      : '<tr><td colspan="6" style="padding:8px;color:var(--dim)">No verdicts yet — first one logs 5 minutes after market open.</td></tr>';
+  }
+
+  drawPulseChart(d.chart||{});
+}
+
+const _PP_CHART_PAD = {l:38, r:8, t:8, b:18};
+
+function drawPulseChart(c){
+  const cv = $('pp-chart');
+  if(!cv || !c.t || c.t.length < 2) return;
+  _ppChartData = c;
+  if(!cv._ppClickBound && cv.addEventListener){
+    cv._ppClickBound = true;
+    cv.addEventListener('click', _ppChartClick);
+  }
+  const dpr = window.devicePixelRatio||1;
+  const W = cv.clientWidth||600, H = cv.clientHeight||170;
+  cv.width = W*dpr; cv.height = H*dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  const padL=_PP_CHART_PAD.l, padR=_PP_CHART_PAD.r, padT=_PP_CHART_PAD.t, padB=_PP_CHART_PAD.b;
+  const all = c.ce.concat(c.pe);
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if(hi-lo < 1){ hi+=1; lo-=1; }
+  const x = i => padL + (W-padL-padR) * i/(c.t.length-1);
+  const y = v => padT + (H-padT-padB) * (1 - (v-lo)/(hi-lo));
+  ctx.font='9px JetBrains Mono,monospace'; ctx.lineWidth=1;
+  // horizontal grid: 12 minor divisions, every 4th is a labeled major line
+  for(let g=0; g<=12; g++){
+    const v = lo + (hi-lo)*g/12, yy = y(v), major = (g%4===0);
+    ctx.strokeStyle = major ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.028)';
+    ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(W-padR,yy); ctx.stroke();
+    if(major){ ctx.fillStyle='rgba(148,163,184,.7)'; ctx.fillText(v.toFixed(0), 4, yy+3); }
+  }
+  // vertical grid: line at every x-label tick + a minor line at each midpoint
+  const stepX = Math.max(1, Math.floor(c.t.length/6));
+  for(let i=0; i<c.t.length; i+=stepX){
+    ctx.strokeStyle='rgba(255,255,255,.05)';
+    ctx.beginPath(); ctx.moveTo(x(i),padT); ctx.lineTo(x(i),H-padB); ctx.stroke();
+    ctx.fillStyle='rgba(148,163,184,.7)'; ctx.fillText(c.t[i], x(i)-14, H-4);
+    const mid = i + Math.floor(stepX/2);
+    if(mid < c.t.length){
+      ctx.strokeStyle='rgba(255,255,255,.025)';
+      ctx.beginPath(); ctx.moveTo(x(mid),padT); ctx.lineTo(x(mid),H-padB); ctx.stroke();
+    }
+  }
+  const css = getComputedStyle(document.documentElement);
+  const ceClr = css.getPropertyValue('--bull').trim()||'#22c55e';
+  const peClr = css.getPropertyValue('--bear').trim()||'#ef4444';
+  const line = (arr,color)=>{
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.6;
+    arr.forEach((v,i)=>{ i? ctx.lineTo(x(i),y(v)) : ctx.moveTo(x(i),y(v)); });
+    ctx.stroke();
+  };
+  line(c.ce, ceClr);
+  line(c.pe, peClr);
+  // markers: manual clicks win; otherwise the AUTO pair (A = latest, B = 3 min back)
+  let markers = (_ppSel||[]).map((s,j)=>({t:s.t, label:(j? 'B':'A'), clr:'rgba(226,232,240,.45)'}));
+  if(!markers.length){
+    const au = _ppAutoSel(c);
+    if(au) markers = [{t:c.t[au.a], label:'A', clr:'rgba(250,204,21,.4)'},
+                      {t:c.t[au.b], label:'B', clr:'rgba(250,204,21,.4)'}];
+  }
+  markers.forEach(s=>{
+    const i = c.t.indexOf(s.t); if(i<0) return;
+    const xx = x(i);
+    ctx.strokeStyle=s.clr; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(xx,padT); ctx.lineTo(xx,H-padB); ctx.stroke();
+    ctx.setLineDash([]);
+    [[c.ce[i],ceClr],[c.pe[i],peClr]].forEach(([v,col])=>{
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(xx,y(v),3.2,0,6.2832); ctx.fill();
+      ctx.strokeStyle='rgba(10,17,30,.9)'; ctx.beginPath(); ctx.arc(xx,y(v),3.2,0,6.2832); ctx.stroke();
+    });
+    ctx.fillStyle='rgba(226,232,240,.95)'; ctx.font='bold 10px JetBrains Mono,monospace';
+    ctx.fillText(s.label, Math.min(xx+5, W-14), padT+11);
+    ctx.font='9px JetBrains Mono,monospace';
+  });
+  renderPulseSel();
+}
+
+function _ppAutoSel(c){
+  // default pair: A = latest point, B = the point ~3 minutes before A
+  const n = c && c.t ? c.t.length : 0;
+  if(n < 2) return null;
+  const toMin = s => { const p = String(s).split(':'); return (+p[0])*60 + (+p[1]); };
+  const lastM = toMin(c.t[n-1]);
+  let j = n-1;
+  while(j > 0 && lastM - toMin(c.t[j]) < 3) j--;
+  if(j === n-1) j = n-2;
+  return {a: n-1, b: j};
+}
+
+function _ppClearSel(){
+  _ppSel = [];
+  if(_ppChartData) drawPulseChart(_ppChartData);
+}
+
+function _ppChartClick(ev){
+  const c = _ppChartData;
+  if(!c || !c.t || c.t.length < 2) return;
+  const cv = $('pp-chart'); if(!cv || !cv.getBoundingClientRect) return;
+  const r = cv.getBoundingClientRect();
+  const W = cv.clientWidth || r.width;
+  let i = Math.round((ev.clientX - r.left - _PP_CHART_PAD.l) /
+                     (W - _PP_CHART_PAD.l - _PP_CHART_PAD.r) * (c.t.length-1));
+  i = Math.max(0, Math.min(c.t.length-1, i));
+  if(_ppSel.length >= 2) _ppSel = [];
+  if(_ppSel.length && _ppSel[0].t === c.t[i]) return;   // same point twice
+  _ppSel.push({t: c.t[i]});
+  drawPulseChart(c);
+}
+
+function renderPulseSel(){
+  const el = $('pp-chart-info'); if(!el) return;
+  const c = _ppChartData;
+  if(!c){
+    el.innerHTML = 'Click any point on the chart to read its exact prices — click a second point to see the change between them. Third click resets.';
+    el.style.color = 'var(--dim)';
+    return;
+  }
+  const pt   = i => ({t: c.t[i], ce: c.ce[i], pe: c.pe[i]});
+  const fPt  = (name, p, clr) => '<b style="color:'+clr+'">'+name+'</b> '+p.t+
+    ' · CE <span style="color:var(--bull)">₹'+p.ce.toFixed(1)+'</span>'+
+    ' · PE <span style="color:var(--bear)">₹'+p.pe.toFixed(1)+'</span>';
+  const fD   = (v0, v1) => {
+    const d = v0 ? (v1-v0)/v0*100 : 0, r = v1-v0;
+    return '<span style="color:'+_ppPctClr(d)+'">'+_ppFmtPct(d)+' ('+(r>0?'+':'')+r.toFixed(1)+'₹)</span>';
+  };
+  const lines = [];
+  // AUTO line — always on: A = latest, B = 3 min back, live with every redraw
+  const au = _ppAutoSel(c);
+  if(au){
+    const A = pt(au.a), B = pt(au.b);
+    lines.push('<b style="color:var(--warn)">⚡ AUTO</b>&nbsp;&nbsp;'+
+      fPt('A', A, 'var(--warn)')+'&nbsp;&nbsp;│&nbsp;&nbsp;'+fPt('B', B, 'var(--warn)')+
+      '&nbsp;&nbsp;│&nbsp;&nbsp;<b>Δ 3 min</b> CE '+fD(B.ce, A.ce)+' · PE '+fD(B.pe, A.pe));
+  }
+  // MANUAL line — the click A/B, unchanged
+  if(_ppSel.length){
+    const pts = _ppSel.map(s=>{
+      const i = c.t.indexOf(s.t);
+      return i < 0 ? null : pt(i);
+    }).filter(Boolean);
+    if(!pts.length){ _ppSel = []; renderPulseSel(); return; }
+    let html = pts.map((p,j)=>fPt(j? 'B':'A', p, 'var(--info)')).join('&nbsp;&nbsp;│&nbsp;&nbsp;');
+    if(pts.length === 2){
+      html += '&nbsp;&nbsp;│&nbsp;&nbsp;<b>A→B</b> CE '+fD(pts[0].ce, pts[1].ce)+' · PE '+fD(pts[0].pe, pts[1].pe);
+    } else {
+      html += '&nbsp;&nbsp;<span style="color:var(--dim)">— click a second point for A→B change</span>';
+    }
+    lines.push('<b style="color:var(--info)">🖱 MANUAL</b>&nbsp;&nbsp;'+html+
+      '&nbsp;&nbsp;<span onclick="_ppClearSel()" style="cursor:pointer;color:var(--dim);border:1px solid var(--bdr);border-radius:6px;padding:0 6px">✕ clear</span>');
+  } else {
+    lines.push('<span style="color:var(--dim)">Click any point for a manual A/B compare — second click measures A→B, third click resets.</span>');
+  }
+  el.style.color = 'var(--txt)';
+  el.innerHTML = lines.join('<br>');
+}
+
+/* ── Premium Pulse tooltips — hover any element for a full explanation ── */
+function _ppTipHead(t, sub){
+  return '<b style="font-size:11px;letter-spacing:.8px">'+t+'</b>'+
+         '<div style="color:#64748b;font-size:10px;margin:4px 0 8px">'+sub+'</div>';
+}
+function _ppTipDo(t){
+  return '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08);font-size:10px">'+
+         '<span style="color:var(--warn);font-weight:700">WHAT TO DO → </span><span style="color:#94a3b8">'+t+'</span></div>';
+}
+function _ppTipGrid(rows){
+  return '<div style="display:grid;grid-template-columns:86px 1fr;gap:3px 8px;font-size:10px">'+
+    rows.map(r=>'<span style="color:'+r[2]+'">'+r[0]+'</span><span style="color:#94a3b8">'+r[1]+'</span>').join('')+'</div>';
+}
+
+const _ppBehTips = {
+  'TRAP / WHIPSAW':
+    _ppTipHead('🪤 TRAP / WHIPSAW','Premiums are spiking up and then crashing back within minutes — repeatedly (2+ trap spikes today with poor follow-through). Every rally is being SOLD into by option writers. Breakouts are failing; buyers who chase green candles are the exit liquidity.')+
+    _ppTipGrid([['Why it happens','Range-bound index + strong writers. They let premium pop, then hammer it back down — the "trap".','#94a3b8'],
+                ['The danger','You buy the spike at the top, it retraces 60–100% in 10–15 min. Even correct direction loses money.','var(--bear)']])+
+    _ppTipDo('Do NOT chase any spike. If you must trade: enter only on pullbacks (not breakouts), SL tight 5–8%, book 10–15% the moment you have it, never hold, reduce size. Best play: sit out until a spike HOLDS for 15+ min — that is the real breakout.'),
+  'PREMIUM DECAY':
+    _ppTipHead('🩸 PREMIUM DECAY','Both CE AND PE are falling while the index barely moves. This is theta + IV crush — option writers are winning on both sides. Premium buyers lose money even when their direction call is right.')+
+    _ppTipGrid([['Trigger','CE & PE both ≤ −3% in 1h with spot < ±0.35%, or both ≤ −8% since open','#94a3b8'],
+                ['Typical days','Post-event IV cooldown, dull expiry-week sessions, lunchtime drift','#94a3b8']])+
+    _ppTipDo('AVOID buying options — every minute held costs money. If a strong burst appears, scalp it in-and-out within minutes. Today favors option sellers, not buyers. Wait for premium expansion (straddle rising) before turning active.'),
+  'FAST MOMENTUM':
+    _ppTipHead('🚀 FAST MOMENTUM','The side named in brackets is moving FAST (>8% in 5 min or >12% in 15 min) and mostly one-way (consistency ≥55%). Real directional money is flowing in — the best scalping condition that exists.')+
+    _ppTipGrid([['Character','Sharp, impulsive premium expansion — moves happen in minutes','var(--bull)'],
+                ['Lifespan','Bursts like this usually exhaust in 10–30 min — speed matters','var(--warn)']])+
+    _ppTipDo('QUICK SCALP with the momentum side. Enter fast, book 10–20% fast, trail tight behind it. Do NOT be greedy — these bursts end suddenly and give back. If you missed the move, don\\'t chase; wait for the next setup.'),
+  'FAST BUT CHOPPY':
+    _ppTipHead('⚡ FAST BUT CHOPPY','Premiums are moving big BUT in both directions — the path is a zigzag (consistency <55%). Large candles up immediately answered by large candles down. High reward, high trap-risk.')+
+    _ppTipGrid([['Character','Volatile two-way swings — news-driven or battle at a key level','var(--warn)'],
+                ['The danger','A wide SL gets eaten by the swing; a tight one gets wicked out','var(--bear)']])+
+    _ppTipDo('Scalp ONLY with small size and tight SL, book profits immediately (do not hold through a swing). Better: wait 10–15 min for one side to win — choppy-fast often resolves into a clean trend.'),
+  'STEADY TREND':
+    _ppTipHead('📈 STEADY TREND','The side named in brackets is building premium consistently (5–12% per 15 min, path ≥55% one-way). Not explosive, but persistent — direction has real follow-through. This is the best HOLDING condition.')+
+    _ppTipGrid([['Character','Stair-step premium rise — small pullbacks, higher highs','var(--bull)'],
+                ['Edge','Trend + consistency means giving the trade room actually pays','var(--bull)']])+
+    _ppTipDo('HOLD / RIDE the trending side. Use a trailing SL instead of quick booking — exiting at +10% on a steady trend day is leaving the real move behind. Re-check every 15 min: exit if the 15m window turns FLAT or flips to the other side.'),
+  'SLIGHT MOVEMENT':
+    _ppTipHead('🐢 SLIGHT MOVEMENT','Premiums are drifting, not driving — small moves (roughly 1.5–6% per window) with no acceleration. Tradable, but theta is a real competitor at this speed.')+
+    _ppTipGrid([['Character','Slow grind — direction exists but weak conviction','#94a3b8'],
+                ['The math','A 3%/15min drift barely outruns theta on ATM weeklies','var(--warn)']])+
+    _ppTipDo('Be selective — only A+ setups (level break + OI support + your other signals aligned). Keep targets tight (5–10%) and exits fast. If nothing lines up, skipping is a position too.'),
+  'ONE-SIDE CRUSH':
+    _ppTipHead('📉 ONE-SIDE CRUSH','One side is being DUMPED hard while the other side is not rising yet. The crush gives you the direction bias (PE crushed = bullish, CE crushed = bearish) — but there is nothing buyable until the other side starts building premium.')+
+    _ppTipGrid([['Why it happens','Writers hammering the losing side while the winning side\\'s IV cools — spot may even be trending','#94a3b8'],
+                ['The danger','Buying the "obvious" side too early: its premium is flat, so theta eats you while you wait','var(--bear)']])+
+    _ppTipDo('Note the bias, set an alert, and enter the OTHER side only when its 5m/15m turns positive (card starts blinking / window turns SLOW+). Until then, writers are collecting both sides.'),
+  'FLAT':
+    _ppTipHead('😴 FLAT','Premiums are not moving at all (under ~1.5% in 5 min, ~2.5% in 15 min). No directional money is entering options right now. Theta quietly eats every held position.')+
+    _ppTipGrid([['Character','Dead zone — often 11:30–13:30 lunch drift or pre-event wait','#94a3b8'],
+                ['The danger','Boredom trades: entering "because nothing is happening"','var(--bear)']])+
+    _ppTipDo('WAIT. Every buy here bleeds. Set an alert and come back when a window turns SLOW or faster, or when the straddle starts expanding — that is when the market wakes up.')
+};
+
+const _ppTips = {
+  'final-call': _ppTipHead('🎯 FINAL CALL','Everything on this tab — all 4 windows, path consistency, traps, decay — distilled into ONE instruction with a side. Re-evaluated every 2 seconds from fresh LTP samples (shown every 3 s). Hover the instruction itself for its specific meaning.')+
+    _ppTipGrid([['🟢 BUY','QUICK SCALP (burst live) or RIDE TREND (steady build)','var(--bull)'],
+                ['🟡 CAUTION','WATCH (pullback only) or SCALP ONLY (whipsaw)','var(--warn)'],
+                ['🔴 NO','DON\\'T CHASE (post-trap spike) or STAY OUT (decay)','var(--bear)'],
+                ['⚪ WAIT','No edge — doing nothing is the trade','#94a3b8']])+
+    '<div style="margin-top:6px;font-size:10px;color:#94a3b8">Priority: decay → trap-chase → burst → trend → whipsaw → drift → wait. It gives the HOW and the side — confirm direction with your other signals before size.</div>',
+  'final-why': _ppTipHead('WHY','The live numbers behind the current call — the exact 5m/15m moves, consistency and trap/decay facts that triggered it. Updates with every 2s re-evaluation.'),
+  'final-since': _ppTipHead('CALL STABILITY','When this exact call started and how long it has held. A call that has survived many 2s re-evaluations is stronger than one that just flipped — fresh flips deserve a few ticks of patience.'),
+  'final-history': _ppTipHead('LAST 1 HOUR — CALL TIMELINE','Every change of the Final Call in the last 60 minutes, newest first. Consecutive identical calls are merged into one row: start time · how long it held · the call.')+
+    '<div style="font-size:10px;color:#94a3b8">Read it like a tape: long green rows = tradeable stretches; rapid flip-flops = unstable conditions (trust the call less); a long ⚪/🔴 stretch turning 🟢 = the wake-up moment. Hover any row for that call\\'s meaning.</div>',
+  idx: _ppTipHead('INDEX PICKER','Switch the whole tab between NIFTY and SENSEX. Each index tracks its own ATM CE/PE contracts, windows, traps and verdict log independently.'),
+  contract: _ppTipHead('TRACKED CONTRACTS','Which exact option contracts this tab is watching right now: ATM strike · nearest weekly expiry · live spot.')+
+    '<div style="font-size:10px;color:#94a3b8">The ATM strike auto-rolls when spot drifts more than ¾ of a strike step (NIFTY 50 → 37.5 pts, SENSEX 100 → 75 pts) away. On a roll, the full day history of the NEW contracts is backfilled from 5-min candles, so windows stay correct.</div>',
+  verdict: _ppTipHead('PREMIUM BEHAVIOR VERDICT','The one-line answer to "what kind of premium day is this, right now?" — computed from the 4 windows below, trap count and decay state. Hover the big label itself for the full meaning of the current verdict.')+
+    _ppTipGrid([['Priority','DECAY → TRAP/WHIPSAW → FAST → STEADY → SLIGHT → FLAT (worst condition wins)','#94a3b8'],
+                ['Updates','Re-evaluated every 20s on screen; snapshotted to the log every 5 min','#94a3b8']]),
+  conf: _ppTipHead('CONFIDENCE','How much data is behind the verdict — roughly minutes of premium samples collected today.')+
+    _ppTipGrid([['LOW','< ~20 samples — just started, treat verdict as provisional','var(--bear)'],
+                ['MEDIUM','20–60 samples — usable, cross-check with your other signals','var(--warn)'],
+                ['HIGH','60+ samples — a full hour+ of data, verdict is well-grounded','var(--bull)']]),
+  straddle: _ppTipHead('ATM STRADDLE','ATM Call LTP + ATM Put LTP — the market\\'s live price for "how far will the index move?". The single best premium-richness gauge.')+
+    _ppTipGrid([['Rising','Volatility expanding — big move starting or feared. Good for buyers.','var(--bull)'],
+                ['Falling','IV/theta crush — writers winning. Bad for buyers.','var(--bear)'],
+                ['NIFTY guide','<₹120 cheap · ₹120–200 normal · >₹200 expensive (event pricing)','#94a3b8']]),
+  ltps: _ppTipHead('CE / PE LTP','Live last-traded prices of the tracked ATM Call and ATM Put. These two numbers are the raw feed for every window, chart and verdict on this tab.'),
+  action: _ppTipHead('SUGGESTED ACTION','The trade-style recommendation derived from the current behavior: quick scalp / hold-ride / scalp-only / selective / avoid / wait. It answers "HOW should I trade right now", not "WHICH direction" — combine with your directional signals (Master Signal, Fibo, OI) for the side.'),
+  reasons: _ppTipHead('EVIDENCE','The specific facts that produced this verdict: decay math, trap count, and the strongest recent window moves with their consistency. If the reasons look thin, trust the verdict less.'),
+  refresh: _ppTipHead('UPDATE CADENCE','Backend samples ATM LTPs every 2s during market hours; the momentum cards and Final Call repaint every 3s. This page refreshes every 20s while the tab is open. A verdict row is appended to the log every 5 minutes and survives dashboard restarts (same day).'),
+  'momo-ce': _ppTipHead('CE MOMENTUM CARD','Live ATM Call: LTP + 5m/15m change, refreshed every 3 s (backend samples the exchange every 2 s). The card BLINKS green when CE is rising with at least SLOW-class momentum (≥1.5% in 5m or ≥2.5% in 15m) — calls are being bought right now.')+
+    _ppTipDo('Blinking CE = bullish premium flow. Check the Final Call and windows before entering — a blink is the alert, not the entry.'),
+  'momo-pe': _ppTipHead('PE MOMENTUM CARD','Live ATM Put: LTP + 5m/15m change, refreshed every 3 s (backend samples the exchange every 2 s). The card BLINKS red when PE is rising with at least SLOW-class momentum (≥1.5% in 5m or ≥2.5% in 15m) — puts are being bought right now.')+
+    _ppTipDo('Blinking PE = bearish premium flow. Both cards blinking = volatility expansion, big move loading with direction unclear.'),
+  'chart-click': _ppTipHead('POINT INSPECTOR','Two readouts. ⚡ AUTO (always on, yellow markers): A pins the LATEST point, B pins 3 minutes earlier — Δ 3 min is the live short-burst change, updating with every 3 s redraw. 🖱 MANUAL: click any point to pin A, a second for B and the A→B change in % and ₹ — measure any move of the day; a third click starts a fresh A, ✕ clear returns to auto-only. Manual markers replace the auto markers on the chart while set; both readout lines stay visible.'),
+  chart: _ppTipHead('ATM PREMIUM CHART — TODAY','Minute-by-minute premium of the tracked ATM Call (green) and ATM Put (red) since 09:15, backfilled from 5-min candles + live ticks. Redraws every 3 s. Click any point to pin its prices; two clicks measure the change between them.')+
+    _ppTipGrid([['CE↑ + PE↓','Clean bullish flow — calls being bought, puts dumped','var(--bull)'],
+                ['CE↓ + PE↑','Clean bearish flow','var(--bear)'],
+                ['Both falling','Theta/IV crush — avoid buying','#94a3b8'],
+                ['Both rising','Volatility expansion — big move loading','var(--warn)'],
+                ['Spike + snapback','A trap — see the trap card','var(--warn)']]),
+  traps: _ppTipHead('🪤 TRAP SPIKES','A trap = premium ran up ≥5% within 15 minutes, then gave back ≥60% of that rise within the next 15 minutes. Each row: time of the peak · spike size · % given back.')+
+    '<div style="font-size:10px;color:#94a3b8">Traps mean breakout-buying is being punished. 1 trap can be noise; 2+ traps is a pattern — writers are defending levels. On trap days, entries on PULLBACKS beat entries on breakouts, and holding is dangerous.</div>'+
+    _ppTipDo('2+ traps → treat every fresh spike as suspect until it holds 15 min.'),
+  decay: _ppTipHead('🩸 DECAY CHECK','Flags when BOTH CE and PE are losing value — the signature of theta/IV crush where option sellers win.')+
+    _ppTipGrid([['1-hour decay','CE & PE both ≤ −3% in the last hour while spot moved < ±0.35%','var(--bear)'],
+                ['Full-day decay','CE & PE both ≤ −8% since open','var(--bear)'],
+                ['No decay','At least one side holding or gaining — normal conditions','var(--bull)']])+
+    _ppTipDo('Decay ACTIVE → do not buy and hold. Straddle % since open tells you how deep the bleed is.'),
+  history: _ppTipHead('⏱ 5-MIN VERDICT LOG','One snapshot every 5 minutes — how the day\\'s character evolved. Read it top-down before entering: a day that flipped FLAT→FAST→TRAP behaves very differently from one steadily building a trend. Hover any behavior in the list for its full meaning.'),
+  'hist-time': _ppTipHead('TIME','When this verdict was snapshotted (every 5 minutes during market hours). Newest at top.'),
+  'hist-ce5': _ppTipHead('CE 5m %','ATM Call premium change over the 5 minutes BEFORE that snapshot. Green = calls gaining (bullish flow at that moment).'),
+  'hist-pe5': _ppTipHead('PE 5m %','ATM Put premium change over the 5 minutes BEFORE that snapshot. Green = puts gaining (bearish flow at that moment).'),
+  'hist-strad': _ppTipHead('STRADDLE ₹','CE+PE combined price at that snapshot. Falling through the log = decay day; rising = volatility expanding.'),
+  'hist-action': _ppTipHead('ACTION','What the engine recommended at that moment. Compare with what the market then did — this is how you learn to trust (or override) the verdicts.'),
+  'win-day': _ppTipHead('SINCE OPEN (09:15 → now)','The full-day journey of the current ATM contracts — the big picture: who has won today, buyers or sellers.')+
+    _ppTipGrid([['FLAT','|Δ| < 6%','var(--info)'],['SLOW','6–15%','var(--info)'],['STEADY','15–30%','var(--warn)'],['FAST','> 30%','var(--bear)']])+
+    '<div style="margin-top:6px;font-size:10px;color:#94a3b8">Note: after an ATM roll the day series is the NEW contract\\'s own full-day history (backfilled), so this stays honest.</div>',
+  'win-60m': _ppTipHead('LAST 1 HOUR','The medium-term pulse — is the last hour trending, decaying or dead? This window drives the decay detector.')+
+    _ppTipGrid([['FLAT','|Δ| < 4%','var(--info)'],['SLOW','4–10%','var(--info)'],['STEADY','10–20%','var(--warn)'],['FAST','> 20%','var(--bear)']]),
+  'win-15m': _ppTipHead('LAST 15 MINUTES','The setup window — most scalp decisions should key off this one. It drives the STEADY TREND / FAST verdicts and their consistency check.')+
+    _ppTipGrid([['FLAT','|Δ| < 2.5%','var(--info)'],['SLOW','2.5–6%','var(--info)'],['STEADY','6–12%','var(--warn)'],['FAST','> 12%','var(--bear)']]),
+  'win-5m': _ppTipHead('LAST 5 MINUTES','Right now — the trigger window. A 5m FAST reading is an active burst; combined with one-way path it means momentum is live this instant.')+
+    _ppTipGrid([['FLAT','|Δ| < 1.5%','var(--info)'],['SLOW','1.5–4%','var(--info)'],['STEADY','4–8%','var(--warn)'],['FAST','> 8%','var(--bear)']]),
+  'row-ce': _ppTipHead('CE — ATM CALL PREMIUM','Change of the ATM Call premium over this window: % and ₹. Green = calls gaining (bullish money flow), red = calls losing.')+
+    '<div style="font-size:10px;color:#94a3b8">CE up while PE down = clean bullish flow. CE up AND PE up = volatility expansion (big move expected, direction unclear).</div>',
+  'row-pe': _ppTipHead('PE — ATM PUT PREMIUM','Change of the ATM Put premium over this window: % and ₹. Green = puts gaining (bearish money flow), red = puts losing.')+
+    '<div style="font-size:10px;color:#94a3b8">PE up while CE down = clean bearish flow. Both down = decay — sellers winning.</div>',
+  'row-strad': _ppTipHead('STRAD — CE + PE COMBINED','The straddle change over this window — the volatility meter, direction-neutral.')+
+    _ppTipGrid([['Rising','Vol expanding — premium buying gets easier','var(--bull)'],
+                ['Falling','Theta/IV crush — premium buying gets harder','var(--bear)'],
+                ['Flat','One side\\'s gain = other side\\'s loss — pure directional rotation','#94a3b8']]),
+  path: _ppTipHead('SPOT & PATH','Left: index move over this window. Right: HOW premiums travelled, not just how far — |net move| ÷ total zigzag distance.')+
+    _ppTipGrid([['one-way','≥60% efficient — clean move, trend-following works','var(--bull)'],
+                ['mixed','35–60% — some back-and-fill, use pullback entries','var(--warn)'],
+                ['whipsaw','<35% — pure zigzag, breakout entries get trapped','var(--bear)']])+
+    '<div style="margin-top:6px;font-size:10px;color:#94a3b8">Big premium move + tiny spot move = IV doing the work (can vanish as fast as it came).</div>',
+  'cls:FLAT': _ppTipHead('FLAT','Premium change in this window is below the flat threshold — nothing happening at this timescale. See the window card for the exact % bands.'),
+  'cls:SLOW': _ppTipHead('SLOW','A drift — premiums moving but without urgency. Tradable only with confluence; theta competes at this speed.'),
+  'cls:STEADY': _ppTipHead('STEADY','A real move with follow-through at this timescale. If the path tag says one-way, trend-riding is on the table.'),
+  'cls:FAST': _ppTipHead('FAST','Explosive move for this timescale — momentum is live. Check the path tag: one-way FAST = scalp it; whipsaw FAST = danger.'),
+  'cls:': _ppTipHead('NO DATA','Not enough samples in this window yet — wait a few minutes.')
+};
+
+const _ppDecTips = {
+  SCALP:
+    _ppTipHead('🟢 BUY — QUICK SCALP','The named side is bursting RIGHT NOW: >8% in 5 minutes with a mostly one-way 15-min path. This is live momentum — the highest-probability quick trade this engine signals.')+
+    _ppTipDo('Enter the named side immediately or not at all (no chasing after 2–3 min). Book 10–20% fast, trail the rest tight. If the burst stalls for 2 minutes, exit — bursts die suddenly.'),
+  RIDE:
+    _ppTipHead('🟢 BUY / HOLD — RIDE TREND','The named side has been building steadily for 15+ minutes with ≥55% one-way consistency, and the last 5 min hasn\\'t broken it. Trend is intact — holding pays better than scalping here.')+
+    _ppTipDo('Enter on any small dip, or keep holding if already in. Trailing SL, not fixed target. Exit signal: this call flipping to WAIT/STAY OUT, or the 15m window going FLAT.'),
+  WATCH:
+    _ppTipHead('🟡 WATCH — PULLBACK ENTRY ONLY','The named side is drifting up in both 5m and 15m, but there\\'s no burst yet. Direction is forming — entering on strength here risks buying a slow top.')+
+    _ppTipDo('Put the named side on watch. Enter only on a dip that holds, or when this flips to QUICK SCALP / RIDE TREND. Keep size small until momentum confirms.'),
+  SCALP_ONLY:
+    _ppTipHead('🟡 SCALP ONLY — STAY NIMBLE','Multiple traps today plus a choppy path — the market is punishing anyone who holds. Moves exist but they reverse.')+
+    _ppTipDo('Only pullback entries with tight SL (5–8%), book profits instantly (10–15%), never hold through a swing. Skip entries after a fresh spike.'),
+  DONT_CHASE:
+    _ppTipHead('🔴 DON\\'T CHASE — TRAP RISK','A spike is happening right now, but a trap fired within the last ~25 minutes — the same pattern that just burned buyers. High probability this spike also gets sold.')+
+    _ppTipDo('Stand down. If the spike HOLDS its level for 15 minutes, it graduates into a real move and this call will flip to SCALP/RIDE — enter then, not now.'),
+  STAY_OUT:
+    _ppTipHead('🔴 STAY OUT — DECAY','Both CE and PE are bleeding (theta/IV crush) and there is no burst to override it. Every buy-side position loses value by the minute.')+
+    _ppTipDo('No premium buying. Wait for the straddle to stop falling and a window to turn SLOW+. Sellers own this stretch.'),
+  WAIT:
+    _ppTipHead('⚪ WAIT — NO EDGE','Nothing qualifies: no burst, no steady trend, no decay bad enough to flag — just noise. The engine has no positive-expectancy instruction.')+
+    _ppTipDo('Do nothing. This is a position too. Re-check when this line changes color — it re-evaluates every 2 seconds.')
+};
+
+function _ppTipHtml(key){
+  if(!key) return '';
+  if(key.startsWith('beh:')) return _ppBehTips[key.slice(4)] || '';
+  if(key.startsWith('dec:')) return _ppDecTips[key.slice(4)] || _ppTips['final-call'] || '';
+  return _ppTips[key] || '';
+}
+
+(function(){
+  function tip(){ return $('pp-tooltip'); }
+  function pos(e){
+    const t = tip(); if(!t || t.style.display === 'none') return;
+    const pad=12, W=t.offsetWidth||340, H=t.offsetHeight||180;
+    let x=e.clientX+16, y=e.clientY+16;
+    if(x+W > window.innerWidth-pad)  x=e.clientX-W-8;
+    if(y+H > window.innerHeight-pad) y=e.clientY-H-8;
+    if(y<pad) y=pad;
+    t.style.left=x+'px'; t.style.top=y+'px';
+  }
+  // Delegated — Premium Pulse cards re-render every 20s, so listeners can't
+  // be bound per-element like the VIX tab's static cards.
+  document.addEventListener('mouseover', e=>{
+    const t = tip(); if(!t) return;
+    const el = (e.target && e.target.closest) ? e.target.closest('[data-pptip]') : null;
+    if(!el || !el.closest('#tab-pulse')){ t.style.display='none'; return; }
+    const html = _ppTipHtml(el.dataset.pptip);
+    if(!html){ t.style.display='none'; return; }
+    t.innerHTML = html; t.style.display='block'; pos(e);
+  });
+  document.addEventListener('mousemove', pos);
+})();
 </script>
 
 </body>
@@ -13438,6 +16386,35 @@ class Handler(BaseHTTPRequestHandler):
             idx = qs.get("index",["NIFTY"])[0].upper()
             exp = qs.get("expiry",[""])[0]
             self._json({"lot_size": _lot_size_from_csv(idx, exp)})
+
+        elif parsed.path == '/api/autofit':
+            with _autofit_lock:
+                cur  = _autofit.get("current")
+                hist = list(_autofit.get("history") or [])
+                nxt  = _autofit.get("next_ts") or 0
+            self._json({
+                "current": cur, "history": hist,
+                "interval_sec": AUTOFIT_INTERVAL,
+                "next_in_sec": max(0, int(nxt - time.time())) if nxt else None,
+                "thresholds": AUTOFIT_TH,
+                "cooloff_samples": AUTOFIT_RED_COOLOFF,
+            })
+
+        elif parsed.path == '/api/release_notes':
+            self._json(_load_release_notes())
+
+        elif parsed.path == '/api/momentum/config':
+            # Current override contents — used to hydrate the AUTO panel inputs
+            # on page load so a reload does not clobber a running bot's settings
+            ov = {}
+            try:
+                ov_path = os.path.join(BASE, "momentum_config_override.json")
+                if os.path.exists(ov_path):
+                    with open(ov_path) as _f:
+                        ov = json.load(_f)
+            except Exception:
+                ov = {}
+            self._json(ov if isinstance(ov, dict) else {})
 
         elif parsed.path == '/api/momentum_bot_logs':
             try:
@@ -13755,8 +16732,65 @@ class Handler(BaseHTTPRequestHandler):
             idx = qs.get("index",["NIFTY"])[0].upper()
             self._json({"expiries": fetch_expiries(idx)})
 
+        elif parsed.path == '/api/regime_history':
+            # Non-blocking: the build takes ~20s (rate-limit-paced option fetches),
+            # so serve the cache and refresh in the background; the page re-polls.
+            try:
+                with _regime_hist_lock:
+                    fresh  = bool(_regime_hist_cache) and \
+                             (time.time() - _regime_hist_cache.get("ts", 0)) < _REGIME_HIST_TTL
+                    cached = dict(_regime_hist_cache) if _regime_hist_cache else {"days": []}
+                if not fresh:
+                    _build_regime_history_async()
+                    cached["building"] = True
+                self._json(cached)
+            except Exception as e:
+                self._json({"days": [], "error": str(e)})
+
         elif parsed.path == '/api/indices':
             self._json(read_market_indices())
+
+        elif parsed.path == '/api/premium_pulse':
+            idx = qs.get("index", ["NIFTY"])[0].upper()
+            if idx not in _PULSE_INDICES: idx = "NIFTY"
+            try:
+                self._json(_pulse_compute(idx))
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+
+        elif parsed.path == '/api/premium_pulse_decision':
+            # Lightweight Final Call + momo feed — polled every 3s by the Premium Pulse tab
+            idx = qs.get("index", ["NIFTY"])[0].upper()
+            if idx not in _PULSE_INDICES: idx = "NIFTY"
+            try:
+                with _pulse_lock:
+                    spans = list((_pulse_state.get(idx) or {}).get("decisions", []))
+                self._json({"ok": True, "index": idx,
+                            "ts": datetime.now().strftime("%H:%M:%S"),
+                            "market_open": _pulse_market_open(),
+                            "decision": _pulse_latest_decision(spans),
+                            "history": _pulse_decision_view(spans),
+                            "momo": _pulse_momo(_pulse_core(idx))})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+
+        elif parsed.path == '/api/premium_pulse_chart':
+            # Chart-only feed — polled every 3s for a near-live day chart
+            idx = qs.get("index", ["NIFTY"])[0].upper()
+            if idx not in _PULSE_INDICES: idx = "NIFTY"
+            try:
+                with _pulse_lock:
+                    st = _pulse_state.get(idx) or {}
+                    ce_s = list((st.get("series") or {}).get("CE", []))
+                    pe_s = list((st.get("series") or {}).get("PE", []))
+                if len(ce_s) < 2 or len(pe_s) < 2:
+                    self._json({"ok": False, "error": "collecting samples"})
+                else:
+                    self._json({"ok": True, "ts": datetime.now().strftime("%H:%M:%S"),
+                                "chart": _pulse_chart_series(ce_s, pe_s),
+                                "ce_ltp": ce_s[-1][1], "pe_ltp": pe_s[-1][1]})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
 
         elif parsed.path == '/api/trade/chain_quotes':
             from concurrent.futures import ThreadPoolExecutor
@@ -14008,6 +17042,28 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as ex:
                 self._json({"ok":False,"error":str(ex)},500)
 
+        elif path == '/api/stop_prod10':
+            try:
+                import subprocess as _sp
+                _script = "PROD10FEB_ManualBOT_groww_option_trading_final_bot.py"
+                _res = _sp.run(["pkill", "-INT", "-f", _script], capture_output=True)
+                if os.path.exists(PROD10_BRIDGE_FILE):
+                    os.remove(PROD10_BRIDGE_FILE)
+                # Age the latest log file past the 90s staleness threshold so
+                # /api/prod10_logs reports offline immediately instead of after 90s.
+                try:
+                    import glob as _glob
+                    _files = sorted(_glob.glob(os.path.join(BASE, "logs", "groww_bot", "Groww_Bot_*.log")))
+                    if _files:
+                        _old = time.time() - 120
+                        os.utime(_files[-1], (_old, _old))
+                except Exception:
+                    pass
+                # pkill exit code 1 = no matching process (already stopped)
+                self._json({"ok": True, "was_running": _res.returncode == 0})
+            except Exception as ex:
+                self._json({"ok": False, "error": str(ex)}, 500)
+
         elif path == '/api/prod10_auto':
             paper = bool(body.get("paper", False))
             try:
@@ -14092,6 +17148,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/engine/stop':
             self._json(_engine_stop())
 
+        elif path == '/api/release_notes':
+            self._json(_release_notes_action(body))
+
         elif path == '/api/momentum/config':
             # Live config update — merges into existing override file so running bot
             # picks it up on next scan (bot calls _reload_override() each cycle)
@@ -14101,10 +17160,15 @@ class Handler(BaseHTTPRequestHandler):
                 "atr_source": str,
                 "min_score_filter": bool,
                 "velocity_filter":  bool,
+                "place_target_order": bool,
                 "min_premium": float, "max_premium": float,
                 "lots": int, "atm_range": int,
                 "scan_seconds": int, "poll_seconds": int,
                 "velocity_pct": float, "consistency_pct": float,
+                "TRAIL_START_PROFIT": float,
+                "HARD_SL_POINTS": float, "HARD_SL_ATR_MULTIPLIER": float,
+                "HARD_SL_FIXED": bool, "HARD_SL_FIXED_POINTS": float,
+                "cooldown_sec": int, "no_signal_wait_sec": int,
                 "_vix_config_note": str,
             }
             ov_path = os.path.join(BASE, "momentum_config_override.json")
@@ -14208,6 +17272,8 @@ def main():
     threading.Thread(target=_idx_refresh_loop, daemon=True).start()
     _load_vix_cache()
     threading.Thread(target=_vix_fetch_loop, daemon=True).start()
+    threading.Thread(target=_pulse_sampler_loop, daemon=True).start()
+    threading.Thread(target=_autofit_loop, daemon=True).start()
     _ensure_control_panel()
     class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
