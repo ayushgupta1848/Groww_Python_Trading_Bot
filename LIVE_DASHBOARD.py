@@ -75,7 +75,7 @@ _PY_BIN = sys.executable   # same Python that runs the dashboard — guaranteed 
 #  Seeded once into release_notes.json; notes added from the UI are appended
 #  to that file, so they survive a dashboard restart.
 # ─────────────────────────────────────────────────────────────
-APP_VERSION        = "1.0.0"
+APP_VERSION        = "1.0.1"
 RELEASE_NOTES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "release_notes.json")
 _rn_lock = threading.Lock()
 
@@ -83,7 +83,31 @@ _DEFAULT_RELEASE_NOTES = {
     "current_version": APP_VERSION,
     "releases": [
         {
-            "version": APP_VERSION,
+            "version": "1.0.1",
+            "date": "2026-09-11",
+            "title": "Auto Signal page, fixed hard SL and a per-bot control bar",
+            "sections": [
+                {"heading": "🎯 Auto Signal — new tab", "items": [
+                    "AUTO-FIT regime light for the Momentum Auto Bot: does the current tape match what the scalp model needs. Sampled every 3 minutes during market hours and kept for the whole day.",
+                    "Six inputs — volatility expansion and shock bar off the NIFTY 1-minute tape, Premium Pulse swing, ATM option ATR ÷ target, hard SLs in the last 30 minutes, and giveback from the day's peak P&L.",
+                    "ATR ÷ target is tagged as a setup input and caps the light at AMBER, so a wrong target/ATR geometry cannot pin the light RED all day and destroy its timing value.",
+                    "Page shows the live state with a recommended action, per-component cards with their thresholds, the day's timeline as a colour strip, a state-change table and a full sample log. History survives a dashboard restart.",
+                    "Advisory only — no bot reads it. Replayed on 2026-09-11 it turned RED at 13:42, twelve minutes before that day's ₹67k loss cluster, with only 5 state changes across the session.",
+                ]},
+                {"heading": "🛡 Risk controls", "items": [
+                    "HARD SL toggle: type the stop in points (e.g. 8) and every Auto trade uses exactly that stop, skipping the ATR machinery entirely.",
+                    "HARD SL and ATR SL are now mutually exclusive — turning the fixed stop on forces ATR SL off and disables ATR SRC, SL MULT and SL FLOOR.",
+                    "Stop points are typed inline on the panel instead of through a browser popup, and apply live to a running bot.",
+                ]},
+                {"heading": "🎛 Trade Board layout", "items": [
+                    "PROD10 and the Momentum Auto Bot each own a labelled block with a coloured rail, so it is obvious which controls drive which bot.",
+                    "The Auto Bot's controls are split into SETUP, RISK and FILTERS rows that wrap instead of hiding behind a horizontal scrollbar.",
+                ]},
+            ],
+            "notes": [],
+        },
+        {
+            "version": "1.0.0",
             "date": "2026-09-11",
             "title": "Trading cockpit — dashboard, bots and auto-execution",
             "sections": [
@@ -126,7 +150,7 @@ def _load_release_notes() -> dict:
                 with open(RELEASE_NOTES_PATH) as f:
                     doc = json.load(f)
                 if isinstance(doc, dict) and doc.get("releases"):
-                    return doc
+                    return _merge_seed_releases(doc)
         except Exception as e:
             print(f"[RELEASE NOTES] read error ({e}) — falling back to defaults")
         doc = json.loads(json.dumps(_DEFAULT_RELEASE_NOTES))
@@ -136,6 +160,39 @@ def _load_release_notes() -> dict:
         except Exception as e:
             print(f"[RELEASE NOTES] seed write failed: {e}")
         return doc
+
+
+def _vkey(v) -> tuple:
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except Exception:
+        return (0,)
+
+
+def _merge_seed_releases(doc: dict) -> dict:
+    """Add releases shipped in a new build to the user's existing release_notes.json.
+
+    Their own notes are never touched — only versions the file has never seen are
+    added, and current_version moves forward to APP_VERSION when it is newer."""
+    have = {str(r.get("version")) for r in doc.get("releases", [])}
+    added = [r for r in _DEFAULT_RELEASE_NOTES["releases"] if str(r["version"]) not in have]
+    changed = False
+    if added:
+        doc["releases"] = json.loads(json.dumps(added)) + doc.get("releases", [])
+        doc["releases"].sort(key=lambda r: _vkey(r.get("version")), reverse=True)
+        changed = True
+    if _vkey(doc.get("current_version")) < _vkey(APP_VERSION):
+        doc["current_version"] = APP_VERSION
+        changed = True
+    if changed:
+        try:
+            with open(RELEASE_NOTES_PATH, "w") as f:
+                json.dump(doc, f, indent=2)
+            if added:
+                print(f"[RELEASE NOTES] added {', '.join('v' + str(r['version']) for r in added)}")
+        except Exception as e:
+            print(f"[RELEASE NOTES] merge write failed: {e}")
+    return doc
 
 
 def _save_release_notes(doc: dict) -> tuple[bool, str]:
