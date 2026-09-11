@@ -5144,6 +5144,20 @@ input[type=range]::-webkit-slider-thumb{
 .tb-cbar-row::-webkit-scrollbar{height:3px;}
 .tb-rowtag{font-size:9px;font-weight:800;letter-spacing:1px;white-space:nowrap;min-width:64px;
            align-self:center;}
+/* Each bot owns a block, so it is obvious which controls drive which bot */
+.tb-grp{border-left:4px solid var(--bdr);margin:0;}
+.tb-grp+.tb-grp{border-top:2px solid var(--bdr);}
+.tb-grp.p10{border-left-color:var(--info);background:linear-gradient(90deg,rgba(56,189,248,.05),transparent 30%);}
+.tb-grp.auto{border-left-color:var(--accent);background:linear-gradient(90deg,rgba(168,85,247,.06),transparent 38%);}
+.tb-grp-hdr{display:flex;align-items:baseline;gap:9px;padding:5px 14px 2px;flex-wrap:wrap;}
+.tb-grp-name{font-size:10.5px;font-weight:900;letter-spacing:1.2px;}
+.tb-grp.p10 .tb-grp-name{color:var(--info);}
+.tb-grp.auto .tb-grp-name{color:var(--accent);}
+.tb-grp-sub{font-size:9px;color:var(--dim);letter-spacing:.3px;}
+.tb-grp .tb-cbar-row{padding-top:4px;padding-bottom:6px;}
+.tb-grp .tb-cbar-row+.tb-cbar-row{border-top:1px dashed rgba(148,163,184,.16);}
+.tb-rowtag.sub{min-width:74px;padding-left:10px;position:relative;font-size:8.5px;opacity:.95;}
+.tb-rowtag.sub::before{content:'└';position:absolute;left:0;color:var(--dim);font-weight:400;}
 .tb-sep{width:1px;background:var(--bdr);align-self:stretch;margin:0 3px;}
 .tb-inp-sm:disabled{opacity:.35;cursor:not-allowed;}
 .tb-grp-off{opacity:.38;}
@@ -6080,9 +6094,14 @@ select.tb-inp-sm{width:96px;}
   <!-- ── Config bar ── -->
   <div class="tb-cbar">
 
-    <!-- Row 1: PROD10 controls -->
-    <div class="tb-cbar-row">
-      <div style="font-size:9px;font-weight:700;color:var(--info);letter-spacing:1px;align-self:center;white-space:nowrap;min-width:48px">PROD10</div>
+    <!-- ═══ PROD10 manual bot ═══ -->
+    <div class="tb-grp p10">
+      <div class="tb-grp-hdr">
+        <span class="tb-grp-name">🚀 PROD10 — MANUAL BOT</span>
+        <span class="tb-grp-sub">click a strike in the chain to fire · these controls drive PROD10 only</span>
+      </div>
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag sub" style="color:var(--info)">SETUP</div>
 
       <div class="tb-cfg-grp" title="Index to trade — NIFTY (NSE) or SENSEX / BANKNIFTY / FINNIFTY (BSE)">
         <span class="tb-lbl-sm">INDEX</span>
@@ -6219,9 +6238,16 @@ select.tb-inp-sm{width:96px;}
       </div>
     </div>
 
-    <!-- Row 2: Momentum Auto Bot — trade setup -->
+    </div><!-- /PROD10 block -->
+
+    <!-- ═══ Momentum Auto Bot — every row below belongs to this bot ═══ -->
+    <div class="tb-grp auto">
+      <div class="tb-grp-hdr">
+        <span class="tb-grp-name">⚡ MOMENTUM AUTO BOT</span>
+        <span class="tb-grp-sub">scans and trades on its own · SETUP, RISK and FILTERS below apply to this bot only — not to PROD10</span>
+      </div>
     <div class="tb-cbar-row wrap">
-      <div class="tb-rowtag" style="color:#a855f7">⚡ AUTO</div>
+      <div class="tb-rowtag sub" style="color:#a855f7">SETUP</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm">INDEX</span>
         <select id="mb-index" class="tb-inp-sm" onchange="mbLoadExpiries()">
           <option>NIFTY</option><option>BANKNIFTY</option><option>SENSEX</option><option>FINNIFTY</option>
@@ -6284,7 +6310,7 @@ select.tb-inp-sm{width:96px;}
 
     <!-- Row 3: Momentum Auto Bot — risk, exits and filters -->
     <div class="tb-cbar-row wrap">
-      <div class="tb-rowtag" style="color:#f87171">🛡 RISK</div>
+      <div class="tb-rowtag sub" style="color:#f87171">RISK</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#fbbf24" title="Place the target as a resting LIMIT SELL at the exchange the instant the BUY is done (PROD10 quick-mode style), instead of polling the LTP and market-selling at target. The exchange holds the target even if the bot dies or a fast tick is missed; the bot cancels it before any hard SL / trail / max-hold exit.">PLACE TGT</span>
         <button id="mb-place-tgt-btn" class="toggle-btn toggle-off" onclick="mbTogglePlaceTgt()"
           title="ON — a LIMIT SELL at entry+TARGET PTS is parked right after the BUY (exchange-side target). OFF — current behaviour: the bot polls the LTP and MARKET sells when the target is hit.">OFF</button>
@@ -6327,7 +6353,7 @@ select.tb-inp-sm{width:96px;}
 
     <!-- Row 4: Momentum Auto Bot — entry filters + capital -->
     <div class="tb-cbar-row wrap">
-      <div class="tb-rowtag" style="color:#60b8f0">🎚 FILTERS</div>
+      <div class="tb-rowtag sub" style="color:#60b8f0">FILTERS</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Choppiness detector — detects sideways market, pauses entries when HIGH">CHOP</span>
         <button id="mb-chop-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleChop()" title="Choppiness tracker ON — bot detects sideways market and pauses new entries automatically. Toggle OFF to disable.">ON</button>
       </div>
@@ -6386,7 +6412,7 @@ select.tb-inp-sm{width:96px;}
     </div>
 
     <!-- VIX Auto Config status panel — shown when VIX AUTO toggle is ON -->
-    <div id="mb-vix-status-panel" style="display:none;background:rgba(96,184,240,.07);border:1px solid rgba(96,184,240,.28);border-radius:6px;margin-top:6px;font-size:10px;font-family:'JetBrains Mono',monospace;overflow:hidden">
+    <div id="mb-vix-status-panel" style="display:none;background:rgba(96,184,240,.07);border:1px solid rgba(96,184,240,.28);border-radius:6px;margin:2px 14px 8px;font-size:10px;font-family:'JetBrains Mono',monospace;overflow:hidden">
       <!-- Clickable header row -->
       <div onclick="mbVixTogglePanel()" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(96,184,240,.15)" id="mb-vix-panel-header">
         <span style="color:#60b8f0;font-weight:700;letter-spacing:.5px">⚡ VIX AUTO CONFIG</span>
@@ -6396,6 +6422,7 @@ select.tb-inp-sm{width:96px;}
       <!-- Collapsible body -->
       <div id="mb-vix-panel-body" style="padding:10px 12px;line-height:1.5"></div>
     </div>
+    </div><!-- /AUTO block -->
 
   </div>
 
