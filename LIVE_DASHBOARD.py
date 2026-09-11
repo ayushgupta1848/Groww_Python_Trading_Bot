@@ -5140,7 +5140,13 @@ input[type=range]::-webkit-slider-thumb{
          border-bottom:1px solid var(--bdr);}
 .tb-cbar-row{display:flex;align-items:flex-end;gap:10px;padding:6px 14px;flex-wrap:nowrap;
              overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--bdr) transparent;}
+.tb-cbar-row.wrap{flex-wrap:wrap;overflow-x:visible;row-gap:9px;column-gap:12px;padding:8px 14px;}
 .tb-cbar-row::-webkit-scrollbar{height:3px;}
+.tb-rowtag{font-size:9px;font-weight:800;letter-spacing:1px;white-space:nowrap;min-width:64px;
+           align-self:center;}
+.tb-sep{width:1px;background:var(--bdr);align-self:stretch;margin:0 3px;}
+.tb-inp-sm:disabled{opacity:.35;cursor:not-allowed;}
+.tb-grp-off{opacity:.38;}
 .tb-cbar-row::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px;}
 .mb-vel-cons-badge{display:flex;flex-direction:column;gap:2px;min-width:54px;}
 .mb-vel-cons-val{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#4ade80;}
@@ -6213,9 +6219,9 @@ select.tb-inp-sm{width:96px;}
       </div>
     </div>
 
-    <!-- Row 2: Momentum Auto Bot controls -->
-    <div class="tb-cbar-row">
-      <div style="font-size:9px;font-weight:700;color:#a855f7;letter-spacing:1px;align-self:center;white-space:nowrap;min-width:48px">⚡ AUTO</div>
+    <!-- Row 2: Momentum Auto Bot — trade setup -->
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag" style="color:#a855f7">⚡ AUTO</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm">INDEX</span>
         <select id="mb-index" class="tb-inp-sm" onchange="mbLoadExpiries()">
           <option>NIFTY</option><option>BANKNIFTY</option><option>SENSEX</option><option>FINNIFTY</option>
@@ -6270,6 +6276,15 @@ select.tb-inp-sm{width:96px;}
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Trail SL poll interval (lower = less exit slippage)">POLL SEC</span>
         <input type="number" id="mb-poll-sec" class="tb-inp-sm" value="1" min="1" max="5" title="Trail SL poll interval (seconds) — 1s = tightest exit, 3s = more slippage on SL hits" style="width:44px">
       </div>
+      <div class="tb-sep"></div>
+      <div class="tb-cfg-grp" style="justify-content:flex-end">
+        <button onclick="mbStartAutoBot()" id="mb-start-btn" class="mb-launch-btn">🚀 Auto Bot</button>
+      </div>
+    </div>
+
+    <!-- Row 3: Momentum Auto Bot — risk, exits and filters -->
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag" style="color:#f87171">🛡 RISK</div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#fbbf24" title="Place the target as a resting LIMIT SELL at the exchange the instant the BUY is done (PROD10 quick-mode style), instead of polling the LTP and market-selling at target. The exchange holds the target even if the bot dies or a fast tick is missed; the bot cancels it before any hard SL / trail / max-hold exit.">PLACE TGT</span>
         <button id="mb-place-tgt-btn" class="toggle-btn toggle-off" onclick="mbTogglePlaceTgt()"
           title="ON — a LIMIT SELL at entry+TARGET PTS is parked right after the BUY (exchange-side target). OFF — current behaviour: the bot polls the LTP and MARKET sells when the target is hit.">OFF</button>
@@ -6282,15 +6297,17 @@ select.tb-inp-sm{width:96px;}
         <input type="number" id="mb-nosig-sec" class="tb-inp-sm" value="60" min="0" max="1800" step="5" onchange="mbPushTiming(this)"
                title="Seconds to wait after a scan with no signal before re-scanning (default 60). Applies live to a wait already counting down." style="width:52px">
       </div>
-      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Choppiness detector — detects sideways market, pauses entries when HIGH">CHOP</span>
-        <button id="mb-chop-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleChop()" title="Choppiness tracker ON — bot detects sideways market and pauses new entries automatically. Toggle OFF to disable.">ON</button>
-      </div>
-      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Stop after 2 consecutive Hard SLs — circuit breaker pauses entries for 30 min">CONS SL</span>
-        <button id="mb-cons-sl-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleConsSL()" title="Circuit breaker: pause entries for 30 min after N consecutive Hard SLs. Recommended ON.">ON</button>
-      </div>
-      <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#f87171" title="Fixed hard SL in premium points. Turn ON and enter the points (e.g. 8) — every trade then uses exactly that stop and all ATR logic is skipped. Overrides ATR SL.">HARD SL</span>
-        <button id="mb-hard-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleHardSL()"
-          title="ON — asks for the stop in points and applies exactly that to every trade (ATR ignored). OFF — ATR SL / SL FLOOR decide.">OFF</button>
+      <div class="tb-sep"></div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#f87171" title="Fixed hard SL in premium points — every trade uses exactly this stop and all ATR logic is skipped. Mutually exclusive with ATR SL.">HARD SL</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          <button id="mb-hard-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleHardSL()"
+            title="ON — a fixed points stop on every trade (ATR ignored). OFF — ATR SL / SL FLOOR decide.">OFF</button>
+          <input type="number" id="mb-hard-sl-pts" class="tb-inp-sm" value="8" min="0.5" max="100" step="0.5"
+                 onchange="mbHardSLPtsChanged()" disabled
+                 title="Hard SL in premium points, e.g. 8 — used for every trade while HARD SL is ON."
+                 style="width:46px">
+          <span style="font-size:9px;color:var(--dim)">pts</span>
+        </div>
       </div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR-based Hard SL — dynamic SL based on ATR × multiplier. Ignored while HARD SL is ON.">ATR SL</span>
         <button id="mb-atr-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleAtrSL()" title="Dynamic Hard SL based on ATR × multiplier. OFF = fixed 8-pt Hard SL.">OFF</button>
@@ -6306,6 +6323,18 @@ select.tb-inp-sm{width:96px;}
         <input type="number" id="mb-sl-floor" class="tb-inp-sm" value="8" min="1" max="100" step="0.5" onchange="mbPushTiming(this)"
                title="Fixed hard SL in points when ATR SL is OFF; floor under the ATR SL when ON. Applies from the next entry." style="width:46px">
       </div>
+    </div>
+
+    <!-- Row 4: Momentum Auto Bot — entry filters + capital -->
+    <div class="tb-cbar-row wrap">
+      <div class="tb-rowtag" style="color:#60b8f0">🎚 FILTERS</div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Choppiness detector — detects sideways market, pauses entries when HIGH">CHOP</span>
+        <button id="mb-chop-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleChop()" title="Choppiness tracker ON — bot detects sideways market and pauses new entries automatically. Toggle OFF to disable.">ON</button>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Stop after 2 consecutive Hard SLs — circuit breaker pauses entries for 30 min">CONS SL</span>
+        <button id="mb-cons-sl-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleConsSL()" title="Circuit breaker: pause entries for 30 min after N consecutive Hard SLs. Recommended ON.">ON</button>
+      </div>
+      <div class="tb-sep"></div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Min score filter — ON requires winning side score ≥0.275; OFF picks highest positive side regardless">MIN SCORE</span>
         <button id="mb-min-score-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleMinScore()" title="Score filter ON — winning side needs net score ≥ 0.275 (velocity × consistency). OFF = pick highest positive score side without a floor.">ON</button>
       </div>
@@ -6330,10 +6359,7 @@ select.tb-inp-sm{width:96px;}
           <button id="mb-vix-refresh-btn" onclick="mbVixRefreshConfig()" title="Refresh VIX and recompute config — use after every 3–4 trades" style="display:none;font-size:11px;padding:2px 8px;border-radius:12px;cursor:pointer;border:1px solid #60b8f0;background:rgba(96,184,240,.15);color:#60b8f0;font-weight:700">↻</button>
         </div>
       </div>
-      <div class="tb-cfg-grp" style="justify-content:center">
-        <button onclick="mbStartAutoBot()" id="mb-start-btn" class="mb-launch-btn">🚀 Auto Bot</button>
-      </div>
-      <div style="width:1px;background:var(--bdr);align-self:stretch;margin:0 4px"></div>
+      <div class="tb-sep"></div>
       <!-- Capital calculator -->
       <div class="tb-cfg-grp">
         <span class="tb-lbl-sm" style="color:#f59e0b">CAPITAL CALC</span>
@@ -11752,54 +11778,84 @@ function _mbSyncAtrSrcBtn(){
 }
 
 function mbToggleAtrSL(){
+  if(_mbHardSL){            // fixed stop owns the SL — don't allow a silent double-ON
+    alert(`HARD SL is ON — the stop is a fixed points value.
+
+Turn HARD SL off first to use an ATR-based stop.`);
+    return;
+  }
   _mbAtrSL=!_mbAtrSL;
-  const btn=$('mb-atr-sl-btn');
-  btn.textContent=_mbAtrSL?'ON':'OFF';
-  btn.className=`toggle-btn ${_mbAtrSL?'toggle-on':'toggle-off'}`;
-  btn.style.borderColor='#4ade80';
-  btn.style.background=_mbAtrSL?'rgba(74,222,128,.15)':'';
-  btn.style.color=_mbAtrSL?'#4ade80':'';
-  _mbSyncAtrSrcBtn();
+  _mbPaintSLMode();
   _mbPushConfig();
 }
 
 function mbToggleHardSL(){
-  if(!_mbHardSL){
-    // Turning ON — ask for the stop in points
-    const v = prompt('Hard SL in premium points (every trade uses exactly this, ATR is ignored):', _mbHardSLPts);
-    if(v === null) return;                       // cancelled — stay OFF
-    const pts = parseFloat(v);
-    if(!Number.isFinite(pts) || pts <= 0){ alert('Enter a positive number of points, e.g. 8'); return; }
-    _mbHardSLPts = pts;
-    _mbHardSL = true;
-  } else {
-    _mbHardSL = false;
+  _mbHardSL = !_mbHardSL;
+  if(_mbHardSL){
+    _mbHardSLPts = _mbReadHardSLPts();
+    _mbAtrSL = false;              // mutually exclusive — a fixed stop ignores ATR entirely
   }
-  _mbPaintHardSL();
-  _mbSyncAtrSrcBtn();
+  _mbPaintSLMode();
   _mbPushConfig();
 }
 
-function _mbPaintHardSL(){
-  const btn=$('mb-hard-sl-btn');
-  if(btn){
-    btn.textContent = _mbHardSL ? `ON · ${_mbHardSLPts} pts` : 'OFF';
-    btn.className   = `toggle-btn ${_mbHardSL?'toggle-on':'toggle-off'}`;
-    btn.style.borderColor=_mbHardSL?'#f87171':'';
-    btn.style.background =_mbHardSL?'rgba(248,113,113,.15)':'';
-    btn.style.color      =_mbHardSL?'#f87171':'';
-    btn.title = _mbHardSL
+function mbHardSLPtsChanged(){
+  _mbHardSLPts = _mbReadHardSLPts();
+  _mbPaintSLMode();
+  if(_mbHardSL) _mbPushConfig();   // live-apply from the next entry
+}
+
+function _mbReadHardSLPts(){
+  const el=$('mb-hard-sl-pts');
+  const v=el ? parseFloat(el.value) : NaN;
+  return (Number.isFinite(v) && v > 0) ? v : 8;
+}
+
+function _mbPaintSLMode(){
+  // One stop mode at a time: HARD SL (fixed points) XOR ATR SL (ATR × mult, floored).
+  const hard=_mbHardSL;
+  const hb=$('mb-hard-sl-btn');
+  if(hb){
+    hb.textContent = hard ? 'ON' : 'OFF';
+    hb.className   = `toggle-btn ${hard?'toggle-on':'toggle-off'}`;
+    hb.style.borderColor=hard?'#f87171':'';
+    hb.style.background =hard?'rgba(248,113,113,.15)':'';
+    hb.style.color      =hard?'#f87171':'';
+    hb.title = hard
       ? `Every trade uses a ${_mbHardSLPts}-point hard SL — ATR SL, SL MULT and SL FLOOR are ignored. Click to turn OFF.`
-      : 'OFF — ATR SL / SL FLOOR decide the stop. Click to set an exact points stop.';
+      : 'OFF — ATR SL / SL FLOOR decide the stop. Click for a fixed points stop.';
   }
-  // ATR SL button reads as overridden while a fixed stop is active
-  const atrBtn=$('mb-atr-sl-btn');
-  if(atrBtn){
-    atrBtn.style.opacity = _mbHardSL ? '0.4' : '1';
-    atrBtn.title = _mbHardSL
-      ? 'Overridden — HARD SL is ON, so the stop is a fixed points value and ATR is not used.'
+  const pts=$('mb-hard-sl-pts');
+  if(pts){
+    pts.disabled = !hard;
+    pts.value    = _mbHardSLPts;
+    pts.style.borderColor = hard ? '#f87171' : '';
+    pts.style.color       = hard ? '#f87171' : '';
+  }
+  // ATR SL button — forced OFF and dimmed while a fixed stop is active
+  const ab=$('mb-atr-sl-btn');
+  if(ab){
+    ab.textContent = _mbAtrSL ? 'ON' : 'OFF';
+    ab.className   = `toggle-btn ${_mbAtrSL?'toggle-on':'toggle-off'}`;
+    ab.style.borderColor = _mbAtrSL ? '#4ade80' : '';
+    ab.style.background  = _mbAtrSL ? 'rgba(74,222,128,.15)' : '';
+    ab.style.color       = _mbAtrSL ? '#4ade80' : '';
+    ab.style.opacity     = hard ? '0.35' : '1';
+    ab.style.cursor      = hard ? 'not-allowed' : 'pointer';
+    ab.title = hard
+      ? 'Disabled — HARD SL is ON, so the stop is a fixed points value. Turn HARD SL off to use ATR.'
       : 'Dynamic Hard SL based on ATR × multiplier. OFF = fixed SL FLOOR points.';
   }
+  // ATR-only inputs follow the ATR mode
+  ['mb-sl-mult','mb-sl-floor'].forEach(id=>{
+    const el=$(id); if(!el) return;
+    el.disabled = hard;
+    const grp = el.closest('.tb-cfg-grp');
+    if(grp) grp.classList.toggle('tb-grp-off', hard);
+  });
+  const srcGrp = $('mb-atr-src-btn') ? $('mb-atr-src-btn').closest('.tb-cfg-grp') : null;
+  if(srcGrp) srcGrp.classList.toggle('tb-grp-off', hard);
+  _mbSyncAtrSrcBtn();
 }
 
 function mbTogglePlaceTgt(){
@@ -11819,7 +11875,7 @@ function _mbPaintPlaceTgt(){
 }
 
 function mbToggleAtrSource(){
-  if(!_mbAtrSL) return;  // only interactive when ATR SL is ON
+  if(_mbHardSL || !_mbAtrSL) return;  // only interactive when ATR SL owns the stop
   _mbAtrSource = (_mbAtrSource === 'candle') ? 'scan' : 'candle';
   const btn=$('mb-atr-src-btn');
   const isCandle = _mbAtrSource === 'candle';
@@ -12106,11 +12162,15 @@ async function mbHydrateTiming(){
       if(d.exit_mode && $('mb-exit-mode')) $('mb-exit-mode').value = d.exit_mode;
       if(d.place_target_order != null){ _mbPlaceTgt = !!d.place_target_order; _mbPaintPlaceTgt(); }
       if(d.HARD_SL_FIXED_POINTS != null) _mbHardSLPts = d.HARD_SL_FIXED_POINTS;
-      if(d.HARD_SL_FIXED != null){ _mbHardSL = !!d.HARD_SL_FIXED; }
-      _mbPaintHardSL();
+      if(d.HARD_SL_FIXED != null) _mbHardSL = !!d.HARD_SL_FIXED;
+      if(d.HARD_SL_ATR_BASED != null) _mbAtrSL = !!d.HARD_SL_ATR_BASED;
+      if(_mbHardSL) _mbAtrSL = false;     // bot resolves it this way too
+      if(d.atr_source) _mbAtrSource = d.atr_source;
+      _mbPaintSLMode();
     }
   }catch(e){}
   mbUpdateTargetLabel();
+  _mbPaintSLMode();          // paint the stop-mode controls even if the fetch failed
 }
 
 async function mbPushTiming(el){
@@ -12141,13 +12201,13 @@ function _mbPushConfig(){
       validate_orders:    _mbValidate,
       choppiness_enabled: _mbChopEnabled,
       consec_sl_brake:    _mbConsSL,
-      HARD_SL_ATR_BASED:  _mbAtrSL,
       atr_source:         _mbAtrSource,
       min_score_filter:   _mbMinScoreFilter,
       velocity_filter:    _mbVelFilter,
       place_target_order: _mbPlaceTgt,
       HARD_SL_FIXED:        _mbHardSL,
-      HARD_SL_FIXED_POINTS: _mbHardSLPts
+      HARD_SL_FIXED_POINTS: _mbHardSLPts,
+      HARD_SL_ATR_BASED:    _mbHardSL ? false : _mbAtrSL
     }, _mbTimingCfg()))
   }).catch(()=>{});
 }
@@ -12483,7 +12543,7 @@ async function mbStartAutoBot(){
         HARD_SL_POINTS:         slFloor,
         choppiness_enabled: _mbChopEnabled,
         consec_sl_brake: _mbConsSL,
-        HARD_SL_ATR_BASED: _mbAtrSL,
+        HARD_SL_ATR_BASED: _mbHardSL ? false : _mbAtrSL,
         atr_source: _mbAtrSource,
         min_score_filter: _mbMinScoreFilter,
         velocity_filter:  _mbVelFilter,
