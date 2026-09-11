@@ -646,7 +646,7 @@ Auth `groww_token.get_access_token` → `GrowwAPI`. Alerts via `whatsapp_gateway
 | Order create | `groww.place_order(trading_symbol, quantity, validity=VALIDITY_DAY, exchange=EXCHANGE_NSE, segment=SEGMENT_FNO, product=PRODUCT_MIS, order_type=ORDER_TYPE_MARKET, transaction_type=BUY\|SELL, price=0)` |
 | Order status | `GET https://api.groww.in/v1/order/status/{order_id}?segment=FNO` → `payload.order_status` |
 | Executed price | `GET https://api.groww.in/v1/order/trades/{order_id}?segment=FNO&page=0&page_size=50` → `payload.trade_list`, qty-weighted avg, **retry ×4 at 500 ms** |
-| ATR candles | `groww.get_historical_candles(segment=SEGMENT_FNO, candle_interval="1minute")`, last 60 min |
+| ATR candles | `groww.get_historical_candles(groww_symbol=instrument["groww_symbol"], segment=SEGMENT_FNO, candle_interval="5minute")`, last 150 min; 1-min/60-min fallback |
 
 Note the LTP URL hardcodes the `NSE_` prefix — SENSEX options would need `BSE_`. Instruments loaded from local `instrument.csv` only (never downloaded here), filtered to `underlying_symbol == index`, `expiry_date == expiry`, `ATM ± 20×step`. Strike step auto-resolved from `_INDEX_STRIKE_STEP` (NIFTY 50, BANKNIFTY 100, FINNIFTY 50, SENSEX 100, BANKEX 100), overwriting `CONFIG["strike_step"]`.
 
@@ -698,12 +698,33 @@ level: >=3 HIGH  |  >=1 MEDIUM  |  else LOW
 qty = lots × instrument.lot_size
 Hard SL:
   HARD_SL_ATR_BASED=False (default) → HARD_SL_POINTS = 8.0 pts
-  True + atr_source="candle" → 14-period EMA-of-TR from 1-min candles × 1.5   (no floor)
-                               fetched in a BACKGROUND THREAD started right after
-                               BUY submit (overlaps validation), 6 s timeout, 4 s get
+  True + atr_source="candle" → PROD10 mechanism: 14-period EMA-of-TR from 5-min
+                               candles over a 150-min lookback (~30 candles) × 1.5,
+                               FLOORED at HARD_SL_POINTS (SL is never tighter than
+                               the fixed fallback — same rule as PROD10 quick mode).
+                               Falls back to 1-min/60-min candles when the 5-min
+                               window has <20 candles (session open, illiquid strike).
+                               Fetched in a BACKGROUND THREAD started BEFORE the BUY
+                               is submitted (runs in paper/mock too, so a simulated
+                               trade gets the SL a live one would have), 8 s worker
+                               join, 10 s queue get.
   True + atr_source="scan"   → max(3.0, scan_atr × 1.5)
-  fallback on failure        → HARD_SL_POINTS
+  fallback on failure        → HARD_SL_POINTS, and the printed line carries the
+                               reason (bad symbol / candle count / exception / timeout)
 hard_sl = avg_price - hard_sl_pts
+```
+Order helpers: `_place_market_order` / `_place_limit_order` (both exchange-aware via
+`_exchange_const()` — BSE for SENSEX, NSE otherwise; the market helper hardcoded NSE
+until 2026-09-11), `_cancel_order` (POST `/v1/order/cancel`, accepts
+`CANCELLED`/`CANCELLATION_REQUESTED`), `_round_5p` (5-paise tick rounding for limits).
+
+**Symbol form matters.** `get_historical_candles` accepts only the `Exchange-TradingSymbol`
+form from the CSV column `groww_symbol` (`NSE-NIFTY-15Sep26-23300-CE`). Passing
+`internal_trading_symbol` (`NIFTY2691523300CE`) is rejected with *"groww_symbol must follow
+the pattern 'Exchange-TradingSymbol'"* — which is why hist ATR silently degraded to the
+fixed 8 pts on every trade until 2026-09-11. `_hist_atr_symbol()` resolves it, preferring
+`groww_symbol` and synthesising `<EXCHANGE>-<trading_symbol>` only if that column is missing.
+```
 
 ATR maths: TR_i = max(h_i-l_i, |h_i-c_{i-1}|, |l_i-c_{i-1}|)
            EMA(period=14): seed = mean(first 14), k = 2/15, ema = v*k + ema*(1-k)
@@ -711,7 +732,29 @@ ATR maths: TR_i = max(h_i-l_i, |h_i-c_{i-1}|, |l_i-c_{i-1}|)
 Trail: step = TRAIL_STEP 0.75 (or scan_atr × TRAIL_SL_ATR_MULTIPLIER if TRAIL_SL_ATR_BASED)
        arms once highest_price >= entry + TRAIL_START_PROFIT (1.0)
        trail_exit = highest_price - step ; exit when ltp <= trail_exit
+Resting target order (`place_target_order`, dashboard toggle **PLACE TGT**, default off):
+```
+ON  → right after the BUY, a LIMIT SELL for the full qty is parked at
+      _round_5p(avg_price + TRAIL_START_PROFIT) via _place_limit_order()
+      (PROD10 quick-mode behaviour: the exchange holds the target).
+      • fill detection: _get_order_status() polled every 3 s, and immediately
+        whenever ltp >= tgt_price; EXECUTED/COMPLETED/DELIVERY_AWAITED → exit at
+        the fill price from _get_executed_price(), no market SELL is sent
+      • CANCELLED/FAILED/REJECTED → tgt_alive=False, bot reverts to market exit
+      • ltp past target but order still open → warning every 20 s, keeps waiting
+      • the "quick target" market-sell branch is suppressed while tgt_alive
+      • a UI target change cancels and re-places the resting order at the new price
+      • ANY other exit (hard SL / trail / max hold) cancels it first; if the status
+        check shows it filled meanwhile, that fill becomes the exit instead.
+        Cancel is retried once; if it still fails the market SELL goes out anyway
+        (PROD10 rule — an unprotected long past its SL beats a possible oversell)
+        with a Telegram warning naming the order id
+OFF → unchanged: poll the LTP and MARKET sell when the target is hit
+paper/mock → the resting order is simulated; it "fills" at tgt_price the moment
+      the LTP touches it, which is what a real resting limit would do
+```
 Exits (checked in order each poll_seconds=1):
+  resting target order filled                     → 🎯 Target order FILLED (wins over all)
   ltp <= hard_sl                                  → 🛑 HARD SL
   elapsed >= max_hold_min(30)*60                  → ⏰ Max hold time
   exit_mode=="quick" and ltp >= entry + 1.0       → 🎯 Quick target hit
@@ -772,6 +815,8 @@ Full `CONFIG` (all defaults):
   "exit_mode": "manual",  "min_premium": 50.0,  "max_premium": 200.0,  "atm_range": 3,
   "velocity_pct": 0.5,  "consistency_pct": 55.0,  "validate_orders": true,
   "scan_seconds": 10,  "poll_seconds": 1,
+  "TRAIL_START_PROFIT": 1.0,  "cooldown_sec": 120,  "no_signal_wait_sec": 60,
+  "HARD_SL_POINTS": 8.0,  "place_target_order": false,
   "consec_sl_brake": true,  "consec_sl_pause_min": 30,
   "HARD_SL_ATR_BASED": false,  "HARD_SL_ATR_MULTIPLIER": 1.5,  "atr_source": "candle",
   "min_score_filter": true,  "velocity_filter": true,
@@ -783,10 +828,17 @@ Full `CONFIG` (all defaults):
 ```
 `_vix_config_note` is a non-config passthrough: printed as `[VIX AUTO CONFIG] {note}` whenever its value changes (deduped via `_last_vix_note`). Casts are `bool(...)` — so **any non-empty JSON string coerces to `True`**; the dashboard must write real JSON booleans.
 
-Careful on rebuild: `_OVERRIDE_CAST` lacks `HARD_SL_POINTS`, `TRAIL_STEP`, `TRAIL_START_PROFIT`, `max_hold_min`, `cooldown_sec`, `use_oi_filter` — those are not remotely tunable today.
+`HARD_SL_POINTS` (SL FLOOR), `HARD_SL_ATR_MULTIPLIER` (SL MULT) and `place_target_order` (PLACE TGT) are dashboard controls too, but are read at entry, so a change applies from the **next** trade.
+
+`TRAIL_START_PROFIT` (quick-mode target / trail activation point), `cooldown_sec` (post-trade wait) and `no_signal_wait_sec` are tunable **while the bot runs**, from the AUTO row inputs TARGET PTS, COOLDOWN S and NO-SIG S:
+* the cooldown branch of the main loop re-reads the override on every 2 s tick and recomputes the deadline as `last_trade_end + cooldown_sec`, so a change re-times a countdown already in progress (and resumes immediately if the new deadline is already past);
+* the no-signal countdown re-reads it every second and shifts `wait_end` by the delta;
+* inside an open trade, `_reload_live_target()` re-reads **only** `TRAIL_START_PROFIT` every 3 s — deliberately narrow, so `lots`/`index`/`exit_mode` cannot change under a live position — and both the quick-mode target check and the trail activation point pick up the new value on the next poll.
+
+Careful on rebuild: `_OVERRIDE_CAST` still lacks `HARD_SL_POINTS`, `TRAIL_STEP`, `max_hold_min`, `use_oi_filter` — those are not remotely tunable today.
 
 ### 7. Phantom 09:00 candle
-**Not applicable / not present.** This bot never reads index candles. Its only candle usage is 60 min of **1-minute FNO option** candles for the ATR (and only when `HARD_SL_ATR_BASED=True` with `atr_source="candle"`), and the phantom bar is an index-feed artifact. Everything else is live LTP polling. If the phantom-bar defect ever appears on the option feed it would inflate one TR term and thus the hard SL; a `filter_spikes` pass in `_fetch_real_atr` before `_real_atr_from_candles` would be cheap insurance.
+**Not applicable / not present.** This bot never reads index candles. Its only candle usage is 150 min of **5-minute FNO option** candles for the ATR (1-min/60-min as fallback) (and only when `HARD_SL_ATR_BASED=True` with `atr_source="candle"`), and the phantom bar is an index-feed artifact. Everything else is live LTP polling. If the phantom-bar defect ever appears on the option feed it would inflate one TR term and thus the hard SL; a `filter_spikes` pass in `_fetch_real_atr` before `_real_atr_from_candles` would be cheap insurance.
 
 ---
 

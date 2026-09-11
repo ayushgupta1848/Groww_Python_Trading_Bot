@@ -28,3 +28,7 @@ logs/chart_level/
 # PROD10 bridge runtime files
 .prod10_bridge.lock
 .prod10_bridge_cmd.json.claimed.*
+
+# Release notes are runtime state — the v1.0.0 seed lives in LIVE_DASHBOARD._DEFAULT_RELEASE_NOTES
+release_notes.json
+release_notes.json.tmp
