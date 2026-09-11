@@ -697,6 +697,9 @@ level: >=3 HIGH  |  >=1 MEDIUM  |  else LOW
 ```
 qty = lots × instrument.lot_size
 Hard SL:
+  HARD_SL_FIXED=True (dashboard "HARD SL" toggle) → hard SL is exactly
+      HARD_SL_FIXED_POINTS for every trade; overrides everything below and skips
+      the ATR fetch entirely (no candle call is even made)
   HARD_SL_ATR_BASED=False (default) → HARD_SL_POINTS = 8.0 pts
   True + atr_source="candle" → PROD10 mechanism: 14-period EMA-of-TR from 5-min
                                candles over a 150-min lookback (~30 candles) × 1.5,
@@ -817,6 +820,7 @@ Full `CONFIG` (all defaults):
   "scan_seconds": 10,  "poll_seconds": 1,
   "TRAIL_START_PROFIT": 1.0,  "cooldown_sec": 120,  "no_signal_wait_sec": 60,
   "HARD_SL_POINTS": 8.0,  "place_target_order": false,
+  "HARD_SL_FIXED": false,  "HARD_SL_FIXED_POINTS": 8.0,
   "consec_sl_brake": true,  "consec_sl_pause_min": 30,
   "HARD_SL_ATR_BASED": false,  "HARD_SL_ATR_MULTIPLIER": 1.5,  "atr_source": "candle",
   "min_score_filter": true,  "velocity_filter": true,
@@ -828,7 +832,7 @@ Full `CONFIG` (all defaults):
 ```
 `_vix_config_note` is a non-config passthrough: printed as `[VIX AUTO CONFIG] {note}` whenever its value changes (deduped via `_last_vix_note`). Casts are `bool(...)` — so **any non-empty JSON string coerces to `True`**; the dashboard must write real JSON booleans.
 
-`HARD_SL_POINTS` (SL FLOOR), `HARD_SL_ATR_MULTIPLIER` (SL MULT) and `place_target_order` (PLACE TGT) are dashboard controls too, but are read at entry, so a change applies from the **next** trade.
+`HARD_SL_POINTS` (SL FLOOR), `HARD_SL_ATR_MULTIPLIER` (SL MULT), `place_target_order` (PLACE TGT) and `HARD_SL_FIXED`/`HARD_SL_FIXED_POINTS` (HARD SL) are dashboard controls too, but are read at entry, so a change applies from the **next** trade.
 
 `TRAIL_START_PROFIT` (quick-mode target / trail activation point), `cooldown_sec` (post-trade wait) and `no_signal_wait_sec` are tunable **while the bot runs**, from the AUTO row inputs TARGET PTS, COOLDOWN S and NO-SIG S:
 * the cooldown branch of the main loop re-reads the override on every 2 s tick and recomputes the deadline as `last_trade_end + cooldown_sec`, so a change re-times a countdown already in progress (and resumes immediately if the new deadline is already past);

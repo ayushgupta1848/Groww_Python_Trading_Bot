@@ -34,6 +34,9 @@ HARD_SL_POINTS      — premium points hard SL below entry (8 pts).  Doubles as 
                       floor when HARD_SL_ATR_BASED is on (PROD10 rule).  Live-tunable
                       from the dashboard (SL FLOOR) — applies from the next entry.
 HARD_SL_ATR_MULTIPLIER — ATR × this = raw ATR SL (1.5).  Live-tunable (SL MULT).
+HARD_SL_FIXED       — dashboard "HARD SL" toggle.  When ON the hard SL is exactly
+                      HARD_SL_FIXED_POINTS for every trade and all ATR logic is
+                      skipped — this overrides HARD_SL_ATR_BASED.
 TRAIL_START_PROFIT  — quick mode: exit target in points; manual mode: profit at
                       which the trail starts (1).  Live-tunable from the dashboard
                       (TARGET PTS) — applies even to an already-open trade.
@@ -151,6 +154,13 @@ CONFIG = {
     "cooldown_sec":          120,    # wait after a trade before scanning again (2 min) [UI-tunable live]
     "no_signal_wait_sec":     60,    # wait after no-signal scan before restarting (1 min) [UI-tunable live]
 
+    # --- fixed hard SL (UI toggle "HARD SL") ---
+    # True  → hard SL is exactly HARD_SL_FIXED_POINTS for every trade; the ATR
+    #         machinery is skipped entirely (no candle fetch, no floor logic)
+    # False → HARD_SL_ATR_BASED / HARD_SL_POINTS decide, as before
+    "HARD_SL_FIXED":         False,
+    "HARD_SL_FIXED_POINTS":    8.0,
+
     # --- safety ---
     "max_trades_day":     5,
     "validate_orders":    True,  # True = live, False = test/simulate
@@ -217,6 +227,8 @@ _OVERRIDE_CAST = {
     "HARD_SL_ATR_BASED":      bool,
     "HARD_SL_ATR_MULTIPLIER": float,
     "HARD_SL_POINTS":         float,   # fixed SL, and the floor when ATR-based
+    "HARD_SL_FIXED":          bool,    # UI "HARD SL" toggle — exact points, ATR ignored
+    "HARD_SL_FIXED_POINTS":   float,
     "atr_source":             str,
     "min_score_filter":           bool,
     "velocity_filter":            bool,
@@ -1191,7 +1203,8 @@ def execute_trade(instrument, signal: dict) -> bool:
     # Start the hist-ATR fetch before the order goes out so it overlaps with
     # order placement + BUY validation.  Runs in paper/mock too, so a simulated
     # trade carries the same hard SL a live one would have got.
-    if cfg.get("HARD_SL_ATR_BASED") and cfg.get("atr_source", "candle") == "candle":
+    if (cfg.get("HARD_SL_ATR_BASED") and not cfg.get("HARD_SL_FIXED")
+            and cfg.get("atr_source", "candle") == "candle"):
         import queue as _q
         _atr_queue = _q.Queue()
         threading.Thread(
@@ -1234,9 +1247,12 @@ def execute_trade(instrument, signal: dict) -> bool:
     trail_start = cfg["TRAIL_START_PROFIT"]
     max_time_sec = cfg["max_hold_min"] * 60
 
-    # Hard SL: two sources selectable via atr_source config key
+    # Hard SL: fixed (UI toggle) wins; otherwise ATR-based with atr_source, else fixed pts
     fixed_sl_pts = cfg["HARD_SL_POINTS"]   # also the floor when ATR-based (PROD10 rule)
-    if cfg.get("HARD_SL_ATR_BASED"):
+    if cfg.get("HARD_SL_FIXED"):
+        hard_sl_pts = float(cfg.get("HARD_SL_FIXED_POINTS", 8.0))
+        print(f"  🛡️ FIXED Hard SL: {hard_sl_pts:.2f} pts  (HARD SL toggle ON — ATR ignored)")
+    elif cfg.get("HARD_SL_ATR_BASED"):
         mult = cfg.get("HARD_SL_ATR_MULTIPLIER", 1.5)
         atr_src = cfg.get("atr_source", "candle")
         if atr_src == "candle":
@@ -1631,7 +1647,9 @@ def main():
     print(f"  Velocity>={CONFIG['velocity_pct']}%  "
           f"Consistency>={CONFIG['consistency_pct']}%")
     _tgt_label = ("Quick target" if CONFIG.get("exit_mode") == "quick" else "Trail start")
-    print(f"  Hard SL={CONFIG['HARD_SL_POINTS']} pts  "
+    _sl_label  = (f"{CONFIG['HARD_SL_FIXED_POINTS']} pts FIXED" if CONFIG.get("HARD_SL_FIXED")
+                  else f"{CONFIG['HARD_SL_POINTS']} pts")
+    print(f"  Hard SL={_sl_label}  "
           f"{_tgt_label}=+{CONFIG['TRAIL_START_PROFIT']} pts  "
           f"Trail step={trail_mode}")
     print(f"  Max hold={CONFIG['max_hold_min']} min  "

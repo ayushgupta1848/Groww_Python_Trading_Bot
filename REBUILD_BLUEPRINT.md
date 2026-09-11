@@ -175,6 +175,7 @@ referenced spec section for the full field list.
 | `.wa_control.json` | whatsapp_gateway webhook | bots via `get_pending_command()` | 04 §2 |
 | `BOT_TUNING.json` | SIGNAL_ANALYZER | MASTER_SIGNAL_BOT (hot reload on mtime) | 03 §1/§SA |
 | `momentum_config_override.json` | dashboard | MOMENTUM_AUTO_BOT (re-read every cycle) | 03 §5 |
+| `.autofit_history.json` | dashboard (`_autofit_loop`, 3-min samples) | itself — Auto Signal tab regime light | 02 §2/§4 |
 | `release_notes.json` | dashboard (UI notes; seeded from `_DEFAULT_RELEASE_NOTES` v1.0.0) | itself — version history card on the Dashboard tab | 02 §2/§4 |
 | `trendline_config.json` | dashboard | TRENDLINE_SCANNER_BOT (read once at import!) | 03 §6 |
 | `logs/master_signal/Master_Signal_*.log` | MASTER_SIGNAL_BOT | CHART_LEVEL (≤300 s fresh), PROD10 auto (≤90 s), SIGNAL_ANALYZER, dashboard | 03 §1 |

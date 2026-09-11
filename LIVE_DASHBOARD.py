@@ -11,7 +11,7 @@ Open browser:            http://localhost:8765
 from __future__ import annotations
 import os, json, time, re as _re, threading, csv, sys
 import requests as _req
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -255,7 +255,8 @@ def _bot_start(bot_id: str, config: dict = None) -> dict:
                     "atr_source",
                     "min_score_filter", "velocity_filter",
                     "TRAIL_START_PROFIT", "cooldown_sec", "no_signal_wait_sec",
-                    "HARD_SL_POINTS", "place_target_order"}
+                    "HARD_SL_POINTS", "place_target_order",
+                    "HARD_SL_FIXED", "HARD_SL_FIXED_POINTS"}
         override = {k: v for k, v in config.items() if k in _allowed}
         if override:
             try:
@@ -3054,6 +3055,320 @@ def _fetch_live_option_ltp(strike: int, direction: str, index: str) -> float:
         break
     return 0.0
 
+# ─────────────────────────────────────────────────────────────
+#  AUTO-FIT SIGNAL — "do current conditions match what the Momentum Auto Bot
+#  needs?".  Recomputed every 3 minutes; the whole day is kept so the dedicated
+#  Auto Signal page can show the history with timestamps.
+#
+#  It is ADVISORY: nothing in the bot reads it yet.  It does not predict which
+#  trade wins — validated on 7 live sessions it only detects, within a minute or
+#  two, that the tape stopped matching the scalp model (2026-09-11: RED at 13:42,
+#  12 min before the −₹67k cluster).
+# ─────────────────────────────────────────────────────────────
+AUTOFIT_PATH     = os.path.join(BASE, ".autofit_history.json")
+AUTOFIT_INTERVAL = 180          # seconds — one sample every 3 minutes
+_autofit: dict = {"date": "", "current": None, "history": [], "next_ts": 0.0}
+_autofit_lock = threading.Lock()
+
+# Component thresholds — (amber, red).  Kept here so the UI can render them.
+AUTOFIT_TH = {
+    "expansion":  (1.35, 1.80),   # median range of last 5 × 1-min bars ÷ prior 55-bar median
+    "shock":      (2.00, 3.00),   # biggest of the last 3 bars ÷ that same baseline
+    "atr_target": (3.00, 5.00),   # option ATR ÷ target points
+    "prem_swing": (4.00, 8.00),   # |5-min premium delta| from Premium Pulse, points
+    "sl_recent":  (1, 2),         # hard-SL hits in the last 30 min
+    "giveback":   (15.0, 25.0),   # % of the day's peak P&L handed back
+}
+AUTOFIT_RED_COOLOFF = 5          # samples (5 × 3 min = 15 min) a RED stays latched
+
+
+def _fetch_index_candles(interval: str, minutes_back: int) -> list:
+    """1-min / 5-min NIFTY index candles for today, phantom 09:00 bar filtered out."""
+    token = _get_ltp_token()
+    if not token:
+        return []
+    now = datetime.now()
+    start = now - timedelta(minutes=minutes_back)
+    try:
+        r = _ltp_session.get(
+            "https://api.groww.in/v1/historical/candles",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                     "X-API-VERSION": "1.0"},
+            params={"exchange": "NSE", "segment": "CASH", "groww_symbol": "NSE-NIFTY",
+                    "start_time": start.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                    "candle_interval": interval},
+            timeout=12)
+        if r.status_code != 200:
+            return []
+        body = r.json()
+        c = body.get("candles", []) or body.get("payload", {}).get("candles", [])
+        # Groww stamps a phantom 09:00 bar with a huge wick — never let it set the baseline
+        return [x for x in c if str(x[0])[11:16] >= "09:15"]
+    except Exception:
+        return []
+
+
+def _fetch_atm_option_atr(spot: float) -> tuple:
+    """14-period EMA ATR of the ATM CE from 5-min candles (same method the bot uses
+    for its hard SL).  Returns (atr, symbol) or (None, reason)."""
+    try:
+        instruments = _load_instruments_for_ltp()
+        today = datetime.now().date()
+        expiries = sorted({
+            i["expiry_date"].strip() for i in instruments
+            if i.get("underlying_symbol", "").upper() == "NIFTY"
+            and i.get("expiry_date", "").strip()
+            and datetime.strptime(i["expiry_date"].strip(), "%Y-%m-%d").date() >= today
+        })
+        if not expiries:
+            return None, "no expiry"
+        atm = int(round(spot / 50.0) * 50)
+        row = next((i for i in instruments
+                    if i.get("underlying_symbol", "").upper() == "NIFTY"
+                    and i.get("expiry_date", "").strip() == expiries[0]
+                    and i.get("instrument_type", "").upper() == "CE"
+                    and int(float(i.get("strike_price") or 0)) == atm), None)
+        if not row:
+            return None, f"no ATM {atm}CE row"
+        sym = row.get("groww_symbol", "")          # ONLY this form is accepted by the API
+        token = _get_ltp_token()
+        now = datetime.now()
+        r = _ltp_session.get(
+            "https://api.groww.in/v1/historical/candles",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}",
+                     "X-API-VERSION": "1.0"},
+            params={"exchange": "NSE", "segment": "FNO", "groww_symbol": sym,
+                    "start_time": (now - timedelta(minutes=150)).strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                    "candle_interval": "5minute"},
+            timeout=12)
+        body = (r.json() or {}) if r.status_code == 200 else {}
+        c = body.get("candles", []) or body.get("payload", {}).get("candles", [])
+        if len(c) < 20:
+            return None, f"only {len(c)} candles"
+        hi = [x[2] for x in c]; lo = [x[3] for x in c]; cl = [x[4] for x in c]
+        trs = [max(hi[i] - lo[i], abs(hi[i] - cl[i - 1]), abs(lo[i] - cl[i - 1]))
+               for i in range(1, len(hi))]
+        if len(trs) < 15:
+            return None, "short TR series"
+        k = 2 / 15.0
+        ema = sum(trs[:14]) / 14
+        for v in trs[14:]:
+            ema = v * k + ema * (1 - k)
+        return round(ema, 2), sym
+    except Exception as e:
+        return None, f"{type(e).__name__}"
+
+
+def _autofit_bot_context() -> dict:
+    """Momentum bot's own state: target points, recent hard SLs, P&L giveback."""
+    ctx = {"target_pts": 1.5, "sl_30m": 0, "giveback_pct": 0.0,
+           "peak": 0.0, "now_pnl": 0.0, "drawdown": 0.0}
+    try:
+        ov_path = os.path.join(BASE, "momentum_config_override.json")
+        if os.path.exists(ov_path):
+            with open(ov_path) as f:
+                ctx["target_pts"] = float(json.load(f).get("TRAIL_START_PROFIT", 1.5))
+    except Exception:
+        pass
+    try:
+        path = os.path.join(BASE, "logs", "trade_history",
+                            f"{datetime.now().strftime('%Y-%m-%d')}.jsonl")
+        if os.path.exists(path):
+            cum = peak = 0.0
+            cutoff = (datetime.now() - timedelta(minutes=30)).strftime("%H:%M:%S")
+            for line in open(path):
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if r.get("bot") != "Auto" or r.get("mode") != "live":
+                    continue
+                cum += float(r.get("pnl") or 0)
+                peak = max(peak, cum)
+                if "HARD SL" in (r.get("exit_reason") or "") and (r.get("time_exit") or "") >= cutoff:
+                    ctx["sl_30m"] += 1
+            ctx["peak"] = round(peak, 2)
+            ctx["now_pnl"] = round(cum, 2)
+            ctx["drawdown"] = round(max(0.0, peak - cum), 2)
+            if peak > 0:
+                ctx["giveback_pct"] = round(max(0.0, (peak - cum) / peak * 100), 1)
+    except Exception:
+        pass
+    return ctx
+
+
+def _autofit_premium_swing() -> float:
+    """Largest |5-min premium delta| from the newest Premium Pulse verdict (points)."""
+    try:
+        with open(os.path.join(BASE, ".premium_pulse_verdicts.json")) as f:
+            doc = json.load(f)
+        if doc.get("date") != datetime.now().strftime("%Y-%m-%d"):
+            return 0.0
+        rows = (doc.get("verdicts") or {}).get("NIFTY") or []
+        if not rows:
+            return 0.0
+        last = rows[-1]
+        return round(max(abs(float(last.get("ce5") or 0)), abs(float(last.get("pe5") or 0))), 2)
+    except Exception:
+        return 0.0
+
+
+def _lvl(value, key, invert=False) -> int:
+    """0 GREEN / 1 AMBER / 2 RED against AUTOFIT_TH."""
+    if value is None:
+        return 0
+    amber, red = AUTOFIT_TH[key]
+    if invert:
+        return 2 if value <= red else 1 if value <= amber else 0
+    return 2 if value >= red else 1 if value >= amber else 0
+
+
+def _autofit_market_open(ts=None) -> bool:
+    ts = ts or datetime.now()
+    return ts.weekday() < 5 and "09:15" <= ts.strftime("%H:%M") <= "15:30"
+
+
+def _compute_autofit() -> dict:
+    """One AUTO-FIT sample. Never raises — a failed input scores GREEN and says so."""
+    ts = datetime.now()
+    comps, notes = {}, []
+
+    if not _autofit_market_open(ts):
+        return {
+            "t": ts.strftime("%H:%M:%S"), "ts": ts.strftime("%Y-%m-%d %H:%M:%S"),
+            "state": "CLOSED", "raw_state": "CLOSED", "cooling": False,
+            "headline": "Market closed — signal resumes at 09:15",
+            "action": "No live reading outside 09:15–15:30",
+            "triggers": [], "notes": [], "spot": 0, "atr": None,
+            "target_pts": _autofit_bot_context()["target_pts"], "components": {},
+        }
+
+    candles = _fetch_index_candles("1minute", 240)
+    spot = float(candles[-1][4]) if candles else 0.0
+    expansion = shock = None
+    if len(candles) >= 40:
+        import statistics as _st
+        rngs  = [float(x[2]) - float(x[3]) for x in candles]
+        base  = _st.median(rngs[-60:-5]) or 0.1      # 55-bar baseline, ending 5 bars ago
+        last5 = _st.median(rngs[-5:])
+        expansion = round(last5 / base, 2)
+        shock     = round(max(rngs[-3:]) / base, 2)
+    else:
+        notes.append(f"only {len(candles)} index candles — volatility inputs skipped")
+
+    ctx = _autofit_bot_context()
+    atr, atr_note = _fetch_atm_option_atr(spot) if spot else (None, "no spot")
+    atr_target = round(atr / ctx["target_pts"], 2) if (atr and ctx["target_pts"]) else None
+    if atr is None:
+        notes.append(f"ATM option ATR unavailable ({atr_note})")
+    swing = _autofit_premium_swing()
+
+    comps["expansion"]  = {"kind": "tape", "label": "Volatility expansion", "value": expansion,
+                           "unit": "×", "level": _lvl(expansion, "expansion"),
+                           "desc": "median range of the last 5 one-minute bars ÷ the prior 55-bar median"}
+    comps["shock"]      = {"kind": "tape", "label": "Shock bar", "value": shock, "unit": "×",
+                           "level": _lvl(shock, "shock"),
+                           "desc": "biggest of the last 3 one-minute bars ÷ the same baseline"}
+    # ATR ÷ target describes the SETUP (target vs premium noise), not the tape, so it
+    # caps the light at AMBER — otherwise a permanently-wrong geometry pins it RED all
+    # day and the light stops carrying any timing information.
+    comps["atr_target"] = {"label": "ATR ÷ target", "value": atr_target, "unit": "×",
+                           "level": _lvl(atr_target, "atr_target"), "caps_at": 1,
+                           "kind": "setup",
+                           "desc": f"ATM option ATR {atr if atr else '—'} pts ÷ target {ctx['target_pts']} pts — "
+                                   f"how deep inside the noise the target sits. Caps the light at AMBER: "
+                                   f"it is a setup property, not a regime change."}
+    comps["prem_swing"] = {"kind": "tape", "label": "Premium swing", "value": swing, "unit": "pts",
+                           "level": _lvl(swing, "prem_swing"),
+                           "desc": "largest 5-minute CE/PE premium delta from Premium Pulse"}
+    comps["sl_recent"]  = {"kind": "damage", "label": "Hard SLs (30 min)", "value": ctx["sl_30m"], "unit": "",
+                           "level": _lvl(ctx["sl_30m"], "sl_recent"),
+                           "desc": "hard-SL exits the Auto bot took in the last 30 minutes"}
+    comps["giveback"]   = {"kind": "damage", "label": "Peak giveback", "value": ctx["giveback_pct"], "unit": "%",
+                           "level": _lvl(ctx["giveback_pct"], "giveback"),
+                           "desc": f"₹{ctx['drawdown']:,.0f} given back from today's peak "
+                                   f"₹{ctx['peak']:,.0f} (now ₹{ctx['now_pnl']:,.0f})"}
+
+    worst = max(min(c["level"], c.get("caps_at", 2)) for c in comps.values())
+    raw_state = ("RED", "AMBER", "GREEN")[2 - worst]
+    triggers = [c["label"] for c in comps.values()
+                if min(c["level"], c.get("caps_at", 2)) == worst and worst > 0]
+
+    with _autofit_lock:
+        hist = _autofit.get("history") or []
+    latched = 0
+    for prev in reversed(hist[-AUTOFIT_RED_COOLOFF:]):
+        if prev.get("raw_state") == "RED":
+            latched = 1
+            break
+    state = "RED" if (raw_state == "RED" or latched) else raw_state
+    cooling = state == "RED" and raw_state != "RED"
+
+    if state == "RED":
+        headline = ("Cooling off after a shock — still RED" if cooling
+                    else "Conditions do NOT match the auto scalp model")
+        action = "Auto bot OFF — trade manually, or wait for GREEN"
+    elif state == "AMBER":
+        headline = "Conditions are drifting away from the model"
+        action = "Half size, widen the target, or hand over to manual"
+    else:
+        headline = "Conditions match what the auto scalp model needs"
+        action = "Auto bot OK at normal size"
+
+    return {
+        "t": ts.strftime("%H:%M:%S"), "ts": ts.strftime("%Y-%m-%d %H:%M:%S"),
+        "state": state, "raw_state": raw_state, "cooling": cooling,
+        "headline": headline, "action": action,
+        "triggers": triggers, "notes": notes,
+        "spot": round(spot, 2), "atr": atr, "target_pts": ctx["target_pts"],
+        "components": comps,
+    }
+
+
+def _autofit_loop():
+    """Sample every AUTOFIT_INTERVAL seconds; keep the whole day; survive restarts."""
+    global _autofit
+    try:
+        if os.path.exists(AUTOFIT_PATH):
+            with open(AUTOFIT_PATH) as f:
+                doc = json.load(f)
+            if doc.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                with _autofit_lock:
+                    _autofit.update(date=doc["date"], current=doc.get("current"),
+                                    history=doc.get("history") or [])
+                print(f"[AUTO-FIT] restored {len(_autofit['history'])} samples from today")
+    except Exception as e:
+        print(f"[AUTO-FIT] history read error: {e}")
+
+    while True:
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            with _autofit_lock:
+                if _autofit.get("date") != today:          # new session — start clean
+                    _autofit.update(date=today, current=None, history=[])
+            sample = _compute_autofit()
+            with _autofit_lock:
+                _autofit["current"] = sample
+                if sample["state"] != "CLOSED":      # history is the trading day only
+                    _autofit["history"].append(sample)
+                _autofit["history"] = _autofit["history"][-200:]     # ~10 h of 3-min samples
+                _autofit["next_ts"] = time.time() + AUTOFIT_INTERVAL
+                snapshot = {"date": _autofit["date"], "current": sample,
+                            "history": _autofit["history"]}
+            try:
+                tmp = AUTOFIT_PATH + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(snapshot, f)
+                os.replace(tmp, AUTOFIT_PATH)
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"[AUTO-FIT] sample failed: {e}")
+        time.sleep(AUTOFIT_INTERVAL)
+
+
 def _ltp_fetcher_loop() -> None:
     global _ltp_result
     while True:
@@ -4288,6 +4603,54 @@ body{background:var(--bg);color:var(--txt);font-family:'Inter','Courier New',san
 /* ── Cards ── */
 .card{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:14px;transition:border-color .3s;}
 
+/* ── Auto Signal tab (AUTO-FIT regime light) ── */
+.af-hero{display:flex;gap:18px;align-items:stretch;justify-content:space-between;flex-wrap:wrap;
+  border:1px solid var(--bdr);border-radius:12px;padding:16px 20px;background:var(--bg2);
+  border-left:6px solid var(--dim);transition:border-color .3s,background .3s;}
+.af-hero.g{border-left-color:var(--bull);background:linear-gradient(90deg,rgba(0,229,160,.10),var(--bg2) 45%);}
+.af-hero.a{border-left-color:var(--warn);background:linear-gradient(90deg,rgba(255,193,7,.10),var(--bg2) 45%);}
+.af-hero.r{border-left-color:var(--bear);background:linear-gradient(90deg,rgba(255,77,109,.12),var(--bg2) 45%);}
+.af-hero-l{flex:1;min-width:280px;}
+.af-hero-r{display:flex;flex-direction:column;gap:5px;align-items:flex-end;font-size:11px;}
+.af-state{font-size:30px;font-weight:900;letter-spacing:2px;line-height:1.1;}
+.af-headline{font-size:13px;color:var(--txt);margin-top:4px;}
+.af-action{font-size:12px;font-weight:700;margin-top:7px;}
+.af-trig{font-size:10px;color:var(--dim);margin-top:5px;font-family:'JetBrains Mono',monospace;}
+.af-meta{display:flex;gap:8px;align-items:baseline;color:var(--dim);}
+.af-meta b{color:var(--txt);font-family:'JetBrains Mono',monospace;font-size:12px;}
+.af-btn{margin-top:6px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.45);
+  color:#fbbf24;border-radius:6px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;}
+.af-btn:hover{background:rgba(251,191,36,.3);}
+.af-note{margin:12px 0 14px;padding:9px 14px;border-radius:8px;font-size:10.5px;line-height:1.6;
+  color:var(--dim);background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);}
+.af-note b{color:var(--txt);}
+.af-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;}
+.af-c{background:var(--bg2);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;border-top:3px solid var(--dim);}
+.af-c.g{border-top-color:var(--bull);} .af-c.a{border-top-color:var(--warn);} .af-c.r{border-top-color:var(--bear);}
+.af-c-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.af-c-l{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);font-weight:700;}
+.af-c-v{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:800;}
+.af-c-th{font-size:9px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:3px;}
+.af-c-d{font-size:10px;color:#8fa3bf;line-height:1.5;margin-top:6px;}
+.af-sec-h{font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--info);margin-bottom:10px;}
+.af-strip{display:flex;gap:2px;flex-wrap:wrap;align-items:flex-end;}
+.af-cell{width:9px;height:26px;border-radius:2px;background:var(--bdr);cursor:default;}
+.af-cell.g{background:var(--bull);} .af-cell.a{background:var(--warn);} .af-cell.r{background:var(--bear);}
+.af-cell.now{outline:2px solid var(--txt);outline-offset:1px;}
+.af-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:var(--dim);}
+.af-dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+.af-dot.af-g{background:var(--bull);} .af-dot.af-a{background:var(--warn);} .af-dot.af-r{background:var(--bear);}
+.af-tbl{width:100%;border-collapse:collapse;font-size:11px;font-family:'JetBrains Mono',monospace;}
+.af-tbl th{text-align:left;padding:6px 10px;color:var(--dim);font-weight:700;font-size:9.5px;
+  letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--bdr);white-space:nowrap;}
+.af-tbl td{padding:5px 10px;border-bottom:1px solid rgba(28,45,72,.5);white-space:nowrap;}
+.af-tbl tr:hover td{background:rgba(56,189,248,.05);}
+.af-empty{color:var(--dim);font-style:italic;font-family:'Inter',sans-serif;}
+.af-pill{font-weight:800;font-size:10px;letter-spacing:.5px;padding:1px 7px;border-radius:9px;}
+.af-pill.g{color:var(--bull);background:rgba(0,229,160,.14);}
+.af-pill.a{color:var(--warn);background:rgba(255,193,7,.14);}
+.af-pill.r{color:var(--bear);background:rgba(255,77,109,.14);}
+
 /* ── Release notes (version history) ── */
 .rn-card{grid-column:1/-1;background:linear-gradient(180deg,rgba(168,85,247,.07),var(--bg2) 60%);
   border:1px solid rgba(168,85,247,.32);border-radius:12px;margin-bottom:14px;overflow:hidden;}
@@ -5160,6 +5523,7 @@ select.tb-inp-sm{width:96px;}
   <button class="tab-btn active" onclick="switchTab('dashboard',this)">📡 Live Dashboard</button>
   <button class="tab-btn" onclick="switchTab('oi',this);initOITab()">🔬 OI Intelligence</button>
   <button class="tab-btn" onclick="switchTab('trade',this);initTradeTab()">🚀 Trade Board</button>
+  <button class="tab-btn" id="autofit-tab-btn" onclick="switchTab('autofit',this);initAutoFitTab()" style="color:#fbbf24">🎯 Auto Signal</button>
   <button class="tab-btn" onclick="switchTab('pnl',this);loadTradeHistory()">💹 PnL Status</button>
   <button class="tab-btn" onclick="switchTab('perf',this);initPerfTab()">📈 Performance</button>
   <button class="tab-btn" onclick="switchTab('bots',this);initBotsTab()">🤖 Bot Control</button>
@@ -5297,6 +5661,69 @@ select.tb-inp-sm{width:96px;}
 </div><!-- end #tab-dashboard -->
 
 <!-- PnL Status tab -->
+<!-- Auto Signal tab — AUTO-FIT regime light for the Momentum Auto Bot -->
+<div id="tab-autofit" class="tab-pane">
+<div class="main" style="display:block">
+
+  <div class="af-hero" id="af-hero">
+    <div class="af-hero-l">
+      <div class="af-state" id="af-state">—</div>
+      <div class="af-headline" id="af-headline">loading…</div>
+      <div class="af-action" id="af-action"></div>
+      <div class="af-trig" id="af-trig"></div>
+    </div>
+    <div class="af-hero-r">
+      <div class="af-meta"><span>NIFTY</span><b id="af-spot">—</b></div>
+      <div class="af-meta"><span>ATM ATR ÷ target</span><b id="af-ratio">—</b></div>
+      <div class="af-meta"><span>Sampled</span><b id="af-last">—</b></div>
+      <div class="af-meta"><span>Next in</span><b id="af-next">—</b></div>
+      <button class="af-btn" onclick="afLoad(true)" title="Fetch the newest sample now (the engine itself samples every 3 minutes)">↻ Refresh view</button>
+    </div>
+  </div>
+
+  <div class="af-note">
+    Advisory only — the bot does not read this signal yet. It does not predict which trade wins;
+    on 7 live sessions it detects <b>within a minute or two</b> that the tape stopped matching the
+    scalp model. On 2026-09-11 it turned RED at 13:42, twelve minutes before the −₹67k loss cluster.
+  </div>
+
+  <div class="af-grid" id="af-comps"></div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="af-sec-h">📊 Today's signal timeline <span id="af-tl-sub" style="color:var(--dim);font-weight:400;font-size:10px"></span></div>
+    <div class="af-strip" id="af-strip"></div>
+    <div class="af-legend">
+      <span><i class="af-dot af-g"></i> GREEN — auto bot OK at normal size</span>
+      <span><i class="af-dot af-a"></i> AMBER — half size / widen target / prefer manual</span>
+      <span><i class="af-dot af-r"></i> RED — auto off, manual only</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="af-sec-h">🕐 State changes today</div>
+    <div style="overflow-x:auto">
+      <table class="af-tbl" id="af-changes"><thead><tr>
+        <th>Time</th><th>Change</th><th>Held for</th><th>Triggered by</th>
+      </tr></thead><tbody><tr><td colspan="4" class="af-empty">No samples yet today.</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="af-sec-h" style="cursor:pointer" onclick="afToggleLog()">
+      📋 All samples <span id="af-log-chev" style="color:var(--dim);font-size:11px">▼</span>
+      <span style="color:var(--dim);font-weight:400;font-size:10px">— one every 3 minutes, newest first</span>
+    </div>
+    <div id="af-log-wrap" style="display:none;overflow-x:auto">
+      <table class="af-tbl" id="af-log"><thead><tr>
+        <th>Time</th><th>State</th><th>Expansion</th><th>Shock</th><th>ATR÷tgt</th>
+        <th>Swing</th><th>SL 30m</th><th>Giveback</th><th>Spot</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+</div>
+</div>
+
 <div id="tab-pnl" class="tab-pane">
 <div id="tab-pnl-inner">
 
@@ -5861,7 +6288,11 @@ select.tb-inp-sm{width:96px;}
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="Stop after 2 consecutive Hard SLs — circuit breaker pauses entries for 30 min">CONS SL</span>
         <button id="mb-cons-sl-btn" class="toggle-btn toggle-on" style="font-size:10px;padding:3px 9px;border-color:#4ade80;background:rgba(74,222,128,.15);color:#4ade80" onclick="mbToggleConsSL()" title="Circuit breaker: pause entries for 30 min after N consecutive Hard SLs. Recommended ON.">ON</button>
       </div>
-      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR-based Hard SL — dynamic SL based on ATR × multiplier">ATR SL</span>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" style="color:#f87171" title="Fixed hard SL in premium points. Turn ON and enter the points (e.g. 8) — every trade then uses exactly that stop and all ATR logic is skipped. Overrides ATR SL.">HARD SL</span>
+        <button id="mb-hard-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleHardSL()"
+          title="ON — asks for the stop in points and applies exactly that to every trade (ATR ignored). OFF — ATR SL / SL FLOOR decide.">OFF</button>
+      </div>
+      <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR-based Hard SL — dynamic SL based on ATR × multiplier. Ignored while HARD SL is ON.">ATR SL</span>
         <button id="mb-atr-sl-btn" class="toggle-btn toggle-off" onclick="mbToggleAtrSL()" title="Dynamic Hard SL based on ATR × multiplier. OFF = fixed 8-pt Hard SL.">OFF</button>
       </div>
       <div class="tb-cfg-grp"><span class="tb-lbl-sm" title="ATR source (only active when ATR SL is ON) — HIST ATR: 14-period EMA ATR from 60 min of 1-min historical candles, accurate real volatility, no 3-pt floor (PROD10 style). TICK RNG: live high-low range from 15–25 sec tick scan window × multiplier, fast but shallow, minimum 3-pt floor.">ATR SRC</span>
@@ -8430,6 +8861,137 @@ function loadSavedColors(){
     }
   });
 }
+/* ── Auto Signal tab (AUTO-FIT regime light) ── */
+let _afTimer=null, _afCountdown=null, _afNextIn=null, _afLogOpen=false, _afDoc=null;
+const _AF_CLS={GREEN:'g', AMBER:'a', RED:'r', CLOSED:''};
+
+function initAutoFitTab(){
+  afLoad();
+  if(_afTimer) clearInterval(_afTimer);
+  _afTimer = setInterval(afLoad, 20000);          // view refresh; engine samples every 3 min
+  if(_afCountdown) clearInterval(_afCountdown);
+  _afCountdown = setInterval(()=>{
+    if(_afNextIn == null) return;
+    _afNextIn = Math.max(0, _afNextIn - 1);
+    const el=$('af-next');
+    if(el) el.textContent = _afNextIn ? `${Math.floor(_afNextIn/60)}m ${String(_afNextIn%60).padStart(2,'0')}s` : 'due now';
+  }, 1000);
+}
+
+function afToggleLog(){
+  _afLogOpen = !_afLogOpen;
+  const w=$('af-log-wrap'), c=$('af-log-chev');
+  if(w) w.style.display = _afLogOpen ? '' : 'none';
+  if(c) c.textContent = _afLogOpen ? '▲' : '▼';
+}
+
+async function afLoad(manual){
+  try{
+    const r = await fetch('/api/autofit');
+    _afDoc = await r.json();
+    _afNextIn = _afDoc.next_in_sec;
+    afRender();
+  }catch(e){
+    const h=$('af-headline'); if(h) h.textContent='Could not load signal: '+e.message;
+  }
+}
+
+function afFmt(v, unit){
+  if(v === null || v === undefined) return '—';
+  return (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : v) + (unit ? ' '+unit : '');
+}
+
+function afRender(){
+  const d=_afDoc||{}, cur=d.current, hist=d.history||[], th=d.thresholds||{};
+  const hero=$('af-hero');
+  if(!cur){
+    if(hero) hero.className='af-hero';
+    setText('af-state','—'); setText('af-headline','Waiting for the first sample (one every 3 minutes)…');
+    return;
+  }
+  const cls=_AF_CLS[cur.state]||'';
+  if(hero) hero.className='af-hero '+cls;
+  const stEl=$('af-state');
+  if(stEl){
+    stEl.textContent = cur.state + (cur.cooling ? '  · cooling off' : '');
+    stEl.style.color = cls==='g'?'var(--bull)':cls==='a'?'var(--warn)':cls==='r'?'var(--bear)':'var(--dim)';
+  }
+  setText('af-headline', cur.headline||'');
+  const act=$('af-action');
+  if(act){ act.textContent=cur.action||''; act.style.color = stEl ? stEl.style.color : ''; }
+  setText('af-trig', (cur.triggers&&cur.triggers.length ? 'triggered by: '+cur.triggers.join(', ') : '')
+                + (cur.notes&&cur.notes.length ? '   ⚠ '+cur.notes.join(' · ') : ''));
+  setText('af-spot', cur.spot ? cur.spot.toFixed(2) : '—');
+  const ratio=(cur.components&&cur.components.atr_target)?cur.components.atr_target.value:null;
+  setText('af-ratio', ratio!=null ? ratio.toFixed(2)+'×' : '—');
+  setText('af-last', cur.t||'—');
+
+  // ── component cards ──
+  const box=$('af-comps');
+  if(box){
+    const keys=['expansion','shock','atr_target','prem_swing','sl_recent','giveback'];
+    box.innerHTML = keys.filter(k=>cur.components&&cur.components[k]).map(k=>{
+      const c=cur.components[k], lv=['g','a','r'][c.level]||'g';
+      const t=th[k]||[];
+      const colour = lv==='g'?'var(--bull)':lv==='a'?'var(--warn)':'var(--bear)';
+      const kind = c.kind==='tape' ? 'tape' : c.kind==='damage' ? 'damage' : 'setup';
+      const cap  = c.caps_at===1 ? '<span class="af-pill a" style="margin-left:6px">caps at AMBER</span>' : '';
+      return `<div class="af-c ${lv}">
+        <div class="af-c-h"><span class="af-c-l">${rnEsc(c.label)} <span style="color:var(--dim);font-weight:400;text-transform:none">· ${kind}</span>${cap}</span>
+          <span class="af-c-v" style="color:${colour}">${afFmt(c.value, c.unit)}</span></div>
+        <div class="af-c-th">amber ≥ ${t[0]!=null?t[0]:'—'} · red ≥ ${t[1]!=null?t[1]:'—'}</div>
+        <div class="af-c-d">${rnEsc(c.desc||'')}</div>
+      </div>`;
+    }).join('') || '<div class="af-empty">No components — market closed.</div>';
+  }
+
+  // ── day timeline ──
+  const strip=$('af-strip');
+  if(strip){
+    strip.innerHTML = hist.map((h,i)=>{
+      const c=_AF_CLS[h.state]||'';
+      const tip=`${h.t} — ${h.state}${h.triggers&&h.triggers.length?' ('+h.triggers.join(', ')+')':''}`;
+      return `<div class="af-cell ${c}${i===hist.length-1?' now':''}" title="${rnEsc(tip)}"></div>`;
+    }).join('') || '<span class="af-empty">No samples yet today.</span>';
+    const g=hist.filter(h=>h.state==='GREEN').length, a=hist.filter(h=>h.state==='AMBER').length, r=hist.filter(h=>h.state==='RED').length;
+    setText('af-tl-sub', hist.length ? `— ${hist.length} samples · ${hist[0].t}→${hist[hist.length-1].t} · `
+        + `${g*3}m green, ${a*3}m amber, ${r*3}m red` : '');
+  }
+
+  // ── state-change table ──
+  const ch=[];
+  for(let i=0;i<hist.length;i++){
+    if(i===0 || hist[i].state!==hist[i-1].state){
+      ch.push({t:hist[i].t, from:i?hist[i-1].state:'—', to:hist[i].state,
+               trig:(hist[i].triggers||[]).join(', '), idx:i});
+    }
+  }
+  const tb=document.querySelector('#af-changes tbody');
+  if(tb){
+    tb.innerHTML = ch.length ? ch.slice().reverse().map((c,ri)=>{
+      const next = ch[ch.length-1-ri+1];
+      const held = (next ? next.idx : hist.length) - c.idx;
+      const cls=_AF_CLS[c.to]||'';
+      return `<tr><td>${rnEsc(c.t)}</td>
+        <td><span style="color:var(--dim)">${rnEsc(c.from)}</span> → <span class="af-pill ${cls}">${rnEsc(c.to)}</span></td>
+        <td>${held*3} min</td><td style="white-space:normal;color:var(--dim)">${rnEsc(c.trig||'—')}</td></tr>`;
+    }).join('') : '<tr><td colspan="4" class="af-empty">No samples yet today.</td></tr>';
+  }
+
+  // ── full sample log ──
+  const lb=document.querySelector('#af-log tbody');
+  if(lb){
+    const v=(h,k)=>{ const c=h.components&&h.components[k]; return c&&c.value!=null ? c.value : '—'; };
+    lb.innerHTML = hist.slice().reverse().map(h=>{
+      const cls=_AF_CLS[h.state]||'';
+      return `<tr><td>${rnEsc(h.t)}</td><td><span class="af-pill ${cls}">${rnEsc(h.state)}</span></td>
+        <td>${v(h,'expansion')}</td><td>${v(h,'shock')}</td><td>${v(h,'atr_target')}</td>
+        <td>${v(h,'prem_swing')}</td><td>${v(h,'sl_recent')}</td><td>${v(h,'giveback')}</td>
+        <td>${h.spot||'—'}</td></tr>`;
+    }).join('');
+  }
+}
+
 /* ── Release notes / version history ── */
 let _rnDoc = null;
 let _rnOpen = (localStorage.getItem('rnOpen') ?? '1') === '1';
@@ -10390,6 +10952,8 @@ let _mbChopEnabled=true; // Auto bot: choppiness_enabled — ON by default
 let _mbConsSL=true;      // Auto bot: consec_sl_brake — ON by default
 let _mbAtrSL=false;          // Auto bot: HARD_SL_ATR_BASED — OFF by default
 let _mbPlaceTgt=false;       // Auto bot: place_target_order — resting LIMIT SELL at target
+let _mbHardSL=false;         // Auto bot: HARD_SL_FIXED — exact-points stop, overrides ATR SL
+let _mbHardSLPts=8;          // Auto bot: HARD_SL_FIXED_POINTS
 let _mbAtrSource='candle';   // Auto bot: atr_source — "candle" (PROD10 EMA) or "scan" (window range)
 let _mbMinScoreFilter=true;  // Auto bot: min_score_filter — ON by default
 let _mbVelFilter=true;      // Auto bot: velocity_filter — ON by default
@@ -11199,6 +11763,45 @@ function mbToggleAtrSL(){
   _mbPushConfig();
 }
 
+function mbToggleHardSL(){
+  if(!_mbHardSL){
+    // Turning ON — ask for the stop in points
+    const v = prompt('Hard SL in premium points (every trade uses exactly this, ATR is ignored):', _mbHardSLPts);
+    if(v === null) return;                       // cancelled — stay OFF
+    const pts = parseFloat(v);
+    if(!Number.isFinite(pts) || pts <= 0){ alert('Enter a positive number of points, e.g. 8'); return; }
+    _mbHardSLPts = pts;
+    _mbHardSL = true;
+  } else {
+    _mbHardSL = false;
+  }
+  _mbPaintHardSL();
+  _mbSyncAtrSrcBtn();
+  _mbPushConfig();
+}
+
+function _mbPaintHardSL(){
+  const btn=$('mb-hard-sl-btn');
+  if(btn){
+    btn.textContent = _mbHardSL ? `ON · ${_mbHardSLPts} pts` : 'OFF';
+    btn.className   = `toggle-btn ${_mbHardSL?'toggle-on':'toggle-off'}`;
+    btn.style.borderColor=_mbHardSL?'#f87171':'';
+    btn.style.background =_mbHardSL?'rgba(248,113,113,.15)':'';
+    btn.style.color      =_mbHardSL?'#f87171':'';
+    btn.title = _mbHardSL
+      ? `Every trade uses a ${_mbHardSLPts}-point hard SL — ATR SL, SL MULT and SL FLOOR are ignored. Click to turn OFF.`
+      : 'OFF — ATR SL / SL FLOOR decide the stop. Click to set an exact points stop.';
+  }
+  // ATR SL button reads as overridden while a fixed stop is active
+  const atrBtn=$('mb-atr-sl-btn');
+  if(atrBtn){
+    atrBtn.style.opacity = _mbHardSL ? '0.4' : '1';
+    atrBtn.title = _mbHardSL
+      ? 'Overridden — HARD SL is ON, so the stop is a fixed points value and ATR is not used.'
+      : 'Dynamic Hard SL based on ATR × multiplier. OFF = fixed SL FLOOR points.';
+  }
+}
+
 function mbTogglePlaceTgt(){
   _mbPlaceTgt=!_mbPlaceTgt;
   _mbPaintPlaceTgt();
@@ -11502,6 +12105,9 @@ async function mbHydrateTiming(){
       if(d.HARD_SL_POINTS != null && $('mb-sl-floor'))         $('mb-sl-floor').value     = d.HARD_SL_POINTS;
       if(d.exit_mode && $('mb-exit-mode')) $('mb-exit-mode').value = d.exit_mode;
       if(d.place_target_order != null){ _mbPlaceTgt = !!d.place_target_order; _mbPaintPlaceTgt(); }
+      if(d.HARD_SL_FIXED_POINTS != null) _mbHardSLPts = d.HARD_SL_FIXED_POINTS;
+      if(d.HARD_SL_FIXED != null){ _mbHardSL = !!d.HARD_SL_FIXED; }
+      _mbPaintHardSL();
     }
   }catch(e){}
   mbUpdateTargetLabel();
@@ -11539,7 +12145,9 @@ function _mbPushConfig(){
       atr_source:         _mbAtrSource,
       min_score_filter:   _mbMinScoreFilter,
       velocity_filter:    _mbVelFilter,
-      place_target_order: _mbPlaceTgt
+      place_target_order: _mbPlaceTgt,
+      HARD_SL_FIXED:        _mbHardSL,
+      HARD_SL_FIXED_POINTS: _mbHardSLPts
     }, _mbTimingCfg()))
   }).catch(()=>{});
 }
@@ -11853,7 +12461,7 @@ async function mbStartAutoBot(){
   if(premMin >= premMax){ alert('Min premium must be less than max premium'); return; }
   const modeLabel = mode.toUpperCase();
   if(mode === 'live'){
-    if(!confirm(`Launch Momentum Auto Bot in LIVE mode?\n\nIndex: ${index}  Expiry: ${expiry}  Lots: ${lots}\nPremium: ₹${premMin}–₹${premMax}  Strikes: ±${strikes}\nTarget: +${targetPt} pts (${exitMode})${_mbPlaceTgt ? ' — LIMIT SELL parked at entry+target' : ''}  Cooldown: ${coolSec}s  No-signal: ${noSigSec}s\n\nThis will place REAL orders on Groww.\n\nProceed?`)) return;
+    if(!confirm(`Launch Momentum Auto Bot in LIVE mode?\n\nIndex: ${index}  Expiry: ${expiry}  Lots: ${lots}\nPremium: ₹${premMin}–₹${premMax}  Strikes: ±${strikes}\nTarget: +${targetPt} pts (${exitMode})${_mbPlaceTgt ? ' — LIMIT SELL parked at entry+target' : ''}${_mbHardSL ? `\nHard SL: FIXED ${_mbHardSLPts} pts (ATR ignored)` : ''}  Cooldown: ${coolSec}s  No-signal: ${noSigSec}s\n\nThis will place REAL orders on Groww.\n\nProceed?`)) return;
   }
   btn.disabled = true; btn.textContent = '⏳ Launching…';
   btn.classList.remove('running');
@@ -11879,7 +12487,9 @@ async function mbStartAutoBot(){
         atr_source: _mbAtrSource,
         min_score_filter: _mbMinScoreFilter,
         velocity_filter:  _mbVelFilter,
-        place_target_order: _mbPlaceTgt
+        place_target_order: _mbPlaceTgt,
+        HARD_SL_FIXED:        _mbHardSL,
+        HARD_SL_FIXED_POINTS: _mbHardSLPts
       }})
     });
     const d = await r.json();
@@ -15633,6 +16243,19 @@ class Handler(BaseHTTPRequestHandler):
             exp = qs.get("expiry",[""])[0]
             self._json({"lot_size": _lot_size_from_csv(idx, exp)})
 
+        elif parsed.path == '/api/autofit':
+            with _autofit_lock:
+                cur  = _autofit.get("current")
+                hist = list(_autofit.get("history") or [])
+                nxt  = _autofit.get("next_ts") or 0
+            self._json({
+                "current": cur, "history": hist,
+                "interval_sec": AUTOFIT_INTERVAL,
+                "next_in_sec": max(0, int(nxt - time.time())) if nxt else None,
+                "thresholds": AUTOFIT_TH,
+                "cooloff_samples": AUTOFIT_RED_COOLOFF,
+            })
+
         elif parsed.path == '/api/release_notes':
             self._json(_load_release_notes())
 
@@ -16400,6 +17023,7 @@ class Handler(BaseHTTPRequestHandler):
                 "velocity_pct": float, "consistency_pct": float,
                 "TRAIL_START_PROFIT": float,
                 "HARD_SL_POINTS": float, "HARD_SL_ATR_MULTIPLIER": float,
+                "HARD_SL_FIXED": bool, "HARD_SL_FIXED_POINTS": float,
                 "cooldown_sec": int, "no_signal_wait_sec": int,
                 "_vix_config_note": str,
             }
@@ -16505,6 +17129,7 @@ def main():
     _load_vix_cache()
     threading.Thread(target=_vix_fetch_loop, daemon=True).start()
     threading.Thread(target=_pulse_sampler_loop, daemon=True).start()
+    threading.Thread(target=_autofit_loop, daemon=True).start()
     _ensure_control_panel()
     class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True

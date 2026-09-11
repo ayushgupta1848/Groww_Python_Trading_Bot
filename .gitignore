@@ -32,3 +32,7 @@ logs/chart_level/
 # Release notes are runtime state — the v1.0.0 seed lives in LIVE_DASHBOARD._DEFAULT_RELEASE_NOTES
 release_notes.json
 release_notes.json.tmp
+
+# AUTO-FIT signal history — runtime state, rebuilt every session
+.autofit_history.json
+.autofit_history.json.tmp
